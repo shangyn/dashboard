@@ -200,7 +200,7 @@ async function handleChangePassword() {
 
 <style>
 /* 修改密码弹窗 — 全局样式 */
-.pwd-dialog .el-dialog {
+.pwd-dialog.el-dialog {
   border-radius: 25px;
   overflow: hidden;
 }
@@ -250,16 +250,17 @@ async function handleChangePassword() {
 }
 .dialog-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 12px;
   padding: 8px 28px 28px;
 }
 .cancel-btn {
+  width: 45%;
   background: #e8e8e8;
   border-color: #e8e8e8;
   color: #666;
   font-size: 13px;
-  padding: 10px 28px;
+  padding: 10px 0;
 }
 .cancel-btn:hover {
   background: #d8d8d8;
@@ -267,11 +268,12 @@ async function handleChangePassword() {
   color: #333;
 }
 .confirm-btn {
+  width: 45%;
   background: linear-gradient(135deg, #1a73e8, #0d47a1) !important;
   border: none !important;
   color: #fff !important;
   font-size: 13px;
-  padding: 10px 28px;
+  padding: 10px 0;
 }
 .confirm-btn:hover {
   opacity: 0.9;
