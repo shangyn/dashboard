@@ -59,7 +59,6 @@ function goDashboard(module) {
 <style scoped>
 .home-page {
   padding: 28px 0 48px;
-  min-height: 100%;
   background: #f8fafc;
 }
 

@@ -126,6 +126,8 @@ async function handleChangePassword() {
   max-width: 1920px;
   margin: 0 auto;
   width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 .user-main--full {
   background: #f8fafc;
