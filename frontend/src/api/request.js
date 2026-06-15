@@ -34,7 +34,11 @@ request.interceptors.response.use(
       if (status === 401) {
         localStorage.removeItem('token')
         localStorage.removeItem('userInfo')
-        window.location.href = '/login'
+        const msg = error.response.data?.msg || '登录已过期，请重新登录'
+        ElMessage.error(msg)
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
       } else if (status === 403) {
         ElMessage.error('无权限访问')
       } else {

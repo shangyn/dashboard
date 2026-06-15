@@ -204,6 +204,7 @@ async function handleChangePassword() {
   border-radius: 25px;
   overflow: hidden;
   padding: 0 !important;
+  margin-top: 25vh !important;
 }
 .pwd-dialog .el-dialog__header {
   padding: 0 !important;
@@ -263,6 +264,7 @@ async function handleChangePassword() {
   color: #666;
   font-size: 13px;
   padding: 20px 0;
+  border-radius: 10px;
 }
 .cancel-btn:hover {
   background: #d8d8d8;
@@ -276,6 +278,7 @@ async function handleChangePassword() {
   color: #fff !important;
   font-size: 13px;
   padding: 20px 0;
+  border-radius: 10px;
 }
 .confirm-btn:hover {
   opacity: 0.9;

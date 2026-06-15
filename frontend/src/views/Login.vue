@@ -26,6 +26,9 @@
           </el-button>
         </el-form-item>
       </el-form>
+      <div v-if="showAdminHint" class="login-hint">
+        连续多次登录失败，可联系管理员找回密码
+      </div>
     </el-card>
   </div>
 </template>
@@ -43,6 +46,8 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const rememberMe = ref(false)
 const formRef = ref(null)
+const failedCount = ref(0)
+const showAdminHint = ref(false)
 
 const form = reactive({
   username: '',
@@ -83,7 +88,10 @@ async function handleLogin() {
     ElMessage.success('登录成功')
     router.push(authStore.isAdmin ? '/admin/dashboard' : '/home')
   } catch {
-    // 错误已在拦截器中处理
+    failedCount.value++
+    if (failedCount.value >= 3) {
+      showAdminHint.value = true
+    }
   } finally {
     loading.value = false
   }
@@ -151,5 +159,12 @@ async function handleLogin() {
   border: none;
   font-size: 15px;
   letter-spacing: 4px;
+}
+.login-hint {
+  text-align: center;
+  font-size: 12px;
+  color: #e6a23c;
+  margin-top: -12px;
+  padding-bottom: 8px;
 }
 </style>
