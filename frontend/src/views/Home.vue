@@ -1,13 +1,11 @@
 <template>
   <div class="home-page">
     <div class="home-container">
-      <!-- 欢迎区 -->
       <div class="welcome-section">
         <h2>欢迎回来，{{ authStore.userInfo?.real_name }}</h2>
         <p>请选择您要查看的看板</p>
       </div>
 
-      <!-- 模块卡片 -->
       <div class="cards-grid" v-loading="loading">
         <div
           class="module-card"
@@ -59,7 +57,11 @@ function goDashboard(module) {
 </script>
 
 <style scoped>
-.home-page { padding: 32px 0 48px; }
+.home-page {
+  padding: 28px 0 48px;
+  min-height: 100%;
+  background: #f8fafc;
+}
 
 .home-container {
   max-width: 1200px;
@@ -69,7 +71,7 @@ function goDashboard(module) {
 
 .welcome-section {
   text-align: center;
-  margin-bottom: 36px;
+  margin-bottom: 40px;
 }
 .welcome-section h2 {
   margin: 0;
@@ -85,7 +87,7 @@ function goDashboard(module) {
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 24px;
 }
 
 .module-card {
@@ -97,60 +99,56 @@ function goDashboard(module) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 28px 20px;
+  padding: 32px 24px;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   text-align: center;
 }
 .module-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 8px 30px rgba(26, 115, 232, 0.15);
 }
 
 .card-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
   background: linear-gradient(135deg, #1a73e8, #0d47a1);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   flex-shrink: 0;
 }
 
 .card-name {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   color: #1a1a2e;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   line-height: 1.3;
 }
 
 .card-desc {
-  font-size: 12px;
-  color: #999;
-  line-height: 1.6;
-  margin: 0 0 16px;
+  font-size: 13px;
+  color: #777;
+  line-height: 1.7;
+  margin: 0 0 20px;
   flex: 1;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
 }
 
 .card-link {
-  font-size: 12px;
-  color: #1a73e8;
-  border: 1px solid #1a73e8;
-  padding: 6px 20px;
+  font-size: 13px;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  padding: 8px 28px;
   border-radius: 6px;
   flex-shrink: 0;
-  transition: all 0.2s;
+  transition: background 0.2s;
 }
 .module-card:hover .card-link {
-  background: #1a73e8;
-  color: #fff;
+  background: #1557b0;
 }
 </style>

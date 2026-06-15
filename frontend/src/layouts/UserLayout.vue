@@ -3,25 +3,13 @@
     <el-header v-if="!hideHeader" class="user-header">
       <span class="header-brand">系统控制台</span>
       <div class="header-actions">
+        <span class="header-username">{{ authStore.userInfo?.real_name || '用户' }}</span>
         <el-button class="console-btn" @click="router.push('/upload-console')">
           用户控制台
         </el-button>
-        <el-icon :size="18"><Bell /></el-icon>
-        <el-dropdown trigger="click" @command="handleCommand">
-          <span class="user-info">
-            <el-avatar :size="30" class="user-avatar">
-              {{ authStore.userInfo?.real_name?.charAt(0) || '用' }}
-            </el-avatar>
-            <span>{{ authStore.userInfo?.real_name || '用户' }}</span>
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="changePassword">修改密码</el-dropdown-item>
-              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <el-button class="logout-btn" @click="handleLogout">
+          退出登录
+        </el-button>
       </div>
     </el-header>
 
@@ -50,8 +38,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Bell, ArrowDown } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { changePassword } from '../api/auth'
 
@@ -69,15 +56,9 @@ const pwdRules = {
   newPassword: [{ required: true, min: 6, message: '新密码不少于6位', trigger: 'blur' }],
 }
 
-function handleCommand(command) {
-  if (command === 'logout') {
-    authStore.logout()
-    router.push('/login')
-  } else if (command === 'changePassword') {
-    pwdForm.oldPassword = ''
-    pwdForm.newPassword = ''
-    pwdDialogVisible.value = true
-  }
+function handleLogout() {
+  authStore.logout()
+  router.push('/login')
 }
 
 async function handleChangePassword() {
@@ -99,26 +80,56 @@ async function handleChangePassword() {
   justify-content: space-between;
   background: #fff;
   border-bottom: 1px solid #eef0f2;
-  height: 50px;
+  height: 56px;
   padding: 0 24px;
   flex-shrink: 0;
 }
-.header-brand { font-weight: 600; font-size: 14px; color: #1a1a2e; }
-.header-actions { display: flex; align-items: center; gap: 16px; }
-.console-btn {
-  font-size: 12px;
+.header-brand {
+  font-weight: 700;
+  font-size: 20px;
   color: #1a73e8;
-  border-color: #1a73e8;
 }
-.user-info {
+.header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
+  gap: 12px;
+}
+.header-username {
   font-size: 13px;
   color: #555;
 }
-.user-avatar { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: #fff; font-size: 12px; }
-.user-main { background: #f0f2f5; padding: 28px 32px; flex: 1; max-width: 1920px; margin: 0 auto; width: 100%; }
-.user-main--full { background: #f0f2f5; padding: 0; flex: 1; }
+.console-btn {
+  font-size: 12px;
+  color: #fff;
+  background: #1a73e8;
+  border-color: #1a73e8;
+}
+.console-btn:hover {
+  background: #1557b0;
+  border-color: #1557b0;
+  color: #fff;
+}
+.logout-btn {
+  font-size: 12px;
+  color: #666;
+  background: #f0f0f0;
+  border-color: #e0e0e0;
+}
+.logout-btn:hover {
+  color: #333;
+  background: #e0e0e0;
+}
+.user-main {
+  background: #f8fafc;
+  padding: 28px 32px;
+  flex: 1;
+  max-width: 1920px;
+  margin: 0 auto;
+  width: 100%;
+}
+.user-main--full {
+  background: #f8fafc;
+  padding: 0;
+  flex: 1;
+}
 </style>
