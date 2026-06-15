@@ -6,7 +6,7 @@
         系统控制台
       </span>
       <div class="header-actions">
-        <span class="header-username">{{ authStore.userInfo?.real_name || '用户' }}</span>
+        <span class="header-username" @click="openPwdDialog">{{ authStore.userInfo?.real_name || '用户' }}</span>
         <el-button class="console-btn" @click="router.push('/upload-console')">
           用户控制台
         </el-button>
@@ -22,18 +22,31 @@
   </el-container>
 
   <!-- 修改密码弹窗 -->
-  <el-dialog v-model="pwdDialogVisible" title="修改密码" width="420px">
-    <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-width="80px">
-      <el-form-item label="旧密码" prop="oldPassword">
-        <el-input v-model="pwdForm.oldPassword" type="password" show-password />
+  <el-dialog v-model="pwdDialogVisible" width="460px" :show-close="false" class="pwd-dialog">
+    <template #header>
+      <div class="dialog-header">
+        <div class="dialog-header-icon"><el-icon :size="22"><Lock /></el-icon></div>
+        <span>修改密码</span>
+      </div>
+    </template>
+
+    <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-width="0" size="large">
+      <el-form-item prop="oldPassword">
+        <el-input v-model="pwdForm.oldPassword" type="password" placeholder="旧密码" show-password />
       </el-form-item>
-      <el-form-item label="新密码" prop="newPassword">
-        <el-input v-model="pwdForm.newPassword" type="password" show-password />
+      <el-form-item prop="newPassword">
+        <el-input v-model="pwdForm.newPassword" type="password" placeholder="新密码" show-password />
+      </el-form-item>
+      <el-form-item prop="confirmPassword">
+        <el-input v-model="pwdForm.confirmPassword" type="password" placeholder="确认密码" show-password />
       </el-form-item>
     </el-form>
+
     <template #footer>
-      <el-button @click="pwdDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="handleChangePassword">确认</el-button>
+      <div class="dialog-footer">
+        <el-button class="cancel-btn" @click="pwdDialogVisible = false">取消</el-button>
+        <el-button class="confirm-btn" @click="handleChangePassword">确认修改</el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -41,7 +54,8 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { changePassword } from '../api/auth'
 
@@ -53,10 +67,30 @@ const hideHeader = computed(() => route.meta.hideHeader === true)
 
 const pwdDialogVisible = ref(false)
 const pwdFormRef = ref(null)
-const pwdForm = reactive({ oldPassword: '', newPassword: '' })
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+
+const validateConfirm = (rule, value, callback) => {
+  if (value !== pwdForm.newPassword) {
+    callback(new Error('两次密码输入不一致'))
+  } else {
+    callback()
+  }
+}
+
 const pwdRules = {
   oldPassword: [{ required: true, message: '请输入旧密码', trigger: 'blur' }],
   newPassword: [{ required: true, min: 6, message: '新密码不少于6位', trigger: 'blur' }],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    { validator: validateConfirm, trigger: 'blur' },
+  ],
+}
+
+function openPwdDialog() {
+  pwdForm.oldPassword = ''
+  pwdForm.newPassword = ''
+  pwdForm.confirmPassword = ''
+  pwdDialogVisible.value = true
 }
 
 function handleLogout() {
@@ -84,7 +118,7 @@ async function handleChangePassword() {
   background: #fff;
   border-bottom: 1px solid #eef0f2;
   height: 56px;
-  padding: 0 24px;
+  padding: 0 50px;
   flex-shrink: 0;
 }
 .header-brand {
@@ -113,6 +147,11 @@ async function handleChangePassword() {
   font-size: 13px;
   color: #555;
   font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.header-username:hover {
+  color: #1a73e8;
 }
 .console-btn {
   font-size: 12px;
@@ -151,5 +190,65 @@ async function handleChangePassword() {
   padding: 0 !important;
   flex: 1;
   overflow: hidden;
+}
+</style>
+
+<style>
+/* 修改密码弹窗 — 全局样式，覆盖 Element Plus 默认 */
+.pwd-dialog .el-dialog__header {
+  padding: 0;
+  margin: 0;
+}
+.pwd-dialog .el-dialog__body {
+  padding: 32px 36px 20px;
+}
+.pwd-dialog .el-dialog__footer {
+  padding: 0 36px 28px;
+}
+.dialog-header {
+  background: linear-gradient(135deg, #1a73e8, #0d47a1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 28px;
+  border-radius: 8px 8px 0 0;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+}
+.dialog-header-icon {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.cancel-btn {
+  background: #e8e8e8;
+  border-color: #e8e8e8;
+  color: #666;
+  font-size: 13px;
+  padding: 10px 24px;
+}
+.cancel-btn:hover {
+  background: #d8d8d8;
+  border-color: #d8d8d8;
+  color: #333;
+}
+.confirm-btn {
+  background: linear-gradient(135deg, #1a73e8, #0d47a1) !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 13px;
+  padding: 10px 24px;
+}
+.confirm-btn:hover {
+  opacity: 0.9;
 }
 </style>
