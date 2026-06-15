@@ -5,6 +5,8 @@ from flask_jwt_extended import JWTManager
 from config import Config
 from models import db
 from seed import seed_database
+from users import users_bp
+from roles import roles_bp
 
 
 def create_app():
@@ -33,6 +35,8 @@ def create_app():
     # 注册蓝图
     from auth import auth_bp
     app.register_blueprint(auth_bp)
+    app.register_blueprint(users_bp)
+    app.register_blueprint(roles_bp)
 
     # 生产环境：托管前端静态文件
     @app.route('/')
