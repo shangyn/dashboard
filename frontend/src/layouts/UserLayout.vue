@@ -129,7 +129,8 @@ async function handleChangePassword() {
 }
 .user-main--full {
   background: #f8fafc;
-  padding: 0;
+  padding: 0 !important;
   flex: 1;
+  overflow: hidden;
 }
 </style>

@@ -182,5 +182,5 @@ async function handleChangePassword() {
 }
 .user-avatar { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: #fff; font-size: 12px; }
 .admin-main { background: #f0f2f5; padding: 20px; }
-.admin-main--full { background: #f0f2f5; padding: 0; }
+.admin-main--full { background: #f0f2f5; padding: 0 !important; overflow: hidden; }
 </style>

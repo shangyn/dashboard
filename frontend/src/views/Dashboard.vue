@@ -36,7 +36,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dashboard-page { height: 100vh; }
-.iframe-container { height: 100%; background: #fff; }
-.dashboard-iframe { width: 100%; height: 100%; border: none; }
+.dashboard-page { height: 100vh; margin: 0; overflow: hidden; }
+.iframe-container { width: 100%; height: 100%; background: #fff; }
+.dashboard-iframe { width: 100%; height: 100%; border: none; display: block; }
 </style>
