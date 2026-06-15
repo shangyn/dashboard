@@ -66,6 +66,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRoles, createRole, updateRole, deleteRole } from '../../api/roles'
+import { getModules } from '../../api/modules'
+import { getUploadConfigs } from '../../api/upload-config'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -85,49 +87,59 @@ const formRules = {
   role_name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
 }
 
-const permissionGroups = [
-  {
-    label: '管理类',
-    options: [
-      { value: 'dashboard', label: '首页看板' },
-      { value: 'user_manage', label: '用户管理' },
-      { value: 'role_manage', label: '角色管理' },
-      { value: 'module_manage', label: '模块管理' },
-      { value: 'upload_manage', label: '上传配置管理' },
-    ],
-  },
-  {
-    label: '看板类',
-    options: [
-      { value: 'dashboard_receivables', label: '报价统计分析看板' },
-      { value: 'dashboard_performance', label: '业绩完成情况看板' },
-      { value: 'dashboard_daily', label: '国际运营业绩日报看板' },
-      { value: 'dashboard_ledger', label: '报价执行台账看板' },
-      { value: 'dashboard_function', label: '职能工作看板' },
-      { value: 'dashboard_spare_parts', label: '国贸备件报价' },
-    ],
-  },
-  {
-    label: '上传类',
-    options: [
-      { value: 'upload_performance', label: '业绩数据上传' },
-      { value: 'upload_module_target', label: '模块业绩指标上传' },
-      { value: 'upload_payment', label: '回款数据上传' },
-      { value: 'upload_spare_parts', label: '商贸备件数据上传' },
-      { value: 'upload_trade', label: '商贸数据上传' },
-      { value: 'upload_delivery', label: '备件发货数据上传' },
-      { value: 'upload_offline_quote', label: '2026线下报价上传' },
-    ],
-  },
-]
+const permissionGroups = ref([])
 
 onMounted(() => fetchData())
 
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getRoles()
-    tableData.value = res.data || []
+    const [rolesRes, modulesRes, uploadConfigsRes] = await Promise.all([
+      getRoles(),
+      getModules().catch(() => ({ data: [] })),
+      getUploadConfigs().catch(() => ({ data: [] })),
+    ])
+    tableData.value = rolesRes.data || []
+
+    // 动态构建权限分组
+    const groups = [
+      {
+        label: '管理类（系统固定）',
+        options: [
+          { value: 'dashboard', label: '首页看板' },
+          { value: 'user_manage', label: '用户管理' },
+          { value: 'role_manage', label: '角色管理' },
+          { value: 'module_manage', label: '模块管理' },
+          { value: 'upload_manage', label: '上传配置管理' },
+        ],
+      },
+    ]
+
+    // 从模块表动态生成看板类权限
+    const modulesList = modulesRes.data || []
+    if (modulesList.length > 0) {
+      groups.push({
+        label: '看板类（模块管理 → 动态）',
+        options: modulesList.map(m => ({
+          value: m.permission,
+          label: m.name,
+        })),
+      })
+    }
+
+    // 从上传配置表动态生成上传类权限
+    const uploadList = uploadConfigsRes.data || []
+    if (uploadList.length > 0) {
+      groups.push({
+        label: '上传类（上传配置管理 → 动态）',
+        options: uploadList.map(c => ({
+          value: c.permission,
+          label: c.name,
+        })),
+      })
+    }
+
+    permissionGroups.value = groups
   } finally {
     loading.value = false
   }
