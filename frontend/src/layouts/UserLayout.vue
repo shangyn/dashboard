@@ -201,7 +201,7 @@ async function handleChangePassword() {
 <style>
 /* 修改密码弹窗 — 全局样式 */
 .pwd-dialog .el-dialog {
-  border-radius: 12px;
+  border-radius: 25px;
   overflow: hidden;
 }
 .pwd-dialog .el-dialog__header {
