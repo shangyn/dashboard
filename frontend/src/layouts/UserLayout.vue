@@ -30,17 +30,22 @@
       </div>
     </template>
 
-    <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-width="0" size="large">
-      <el-form-item prop="oldPassword">
-        <el-input v-model="pwdForm.oldPassword" type="password" placeholder="旧密码" show-password />
-      </el-form-item>
-      <el-form-item prop="newPassword">
-        <el-input v-model="pwdForm.newPassword" type="password" placeholder="新密码" show-password />
-      </el-form-item>
-      <el-form-item prop="confirmPassword">
-        <el-input v-model="pwdForm.confirmPassword" type="password" placeholder="确认密码" show-password />
-      </el-form-item>
-    </el-form>
+    <div class="dialog-body">
+      <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" size="large">
+        <el-form-item prop="oldPassword">
+          <div class="field-label">旧密码</div>
+          <el-input v-model="pwdForm.oldPassword" type="password" placeholder="请输入旧密码" show-password />
+        </el-form-item>
+        <el-form-item prop="newPassword">
+          <div class="field-label">新密码</div>
+          <el-input v-model="pwdForm.newPassword" type="password" placeholder="请输入新密码" show-password />
+        </el-form-item>
+        <el-form-item prop="confirmPassword">
+          <div class="field-label">确认密码</div>
+          <el-input v-model="pwdForm.confirmPassword" type="password" placeholder="请再次输入新密码" show-password />
+        </el-form-item>
+      </el-form>
+    </div>
 
     <template #footer>
       <div class="dialog-footer">
@@ -194,16 +199,20 @@ async function handleChangePassword() {
 </style>
 
 <style>
-/* 修改密码弹窗 — 全局样式，覆盖 Element Plus 默认 */
+/* 修改密码弹窗 — 全局样式 */
+.pwd-dialog .el-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+}
 .pwd-dialog .el-dialog__header {
   padding: 0;
   margin: 0;
 }
 .pwd-dialog .el-dialog__body {
-  padding: 32px 36px 20px;
+  padding: 0;
 }
 .pwd-dialog .el-dialog__footer {
-  padding: 0 36px 28px;
+  padding: 0;
 }
 .dialog-header {
   background: linear-gradient(135deg, #1a73e8, #0d47a1);
@@ -211,7 +220,6 @@ async function handleChangePassword() {
   align-items: center;
   gap: 10px;
   padding: 18px 28px;
-  border-radius: 8px 8px 0 0;
   color: #fff;
   font-size: 17px;
   font-weight: 600;
@@ -224,17 +232,34 @@ async function handleChangePassword() {
   align-items: center;
   justify-content: center;
 }
+.dialog-body {
+  padding: 28px 28px 8px;
+}
+.dialog-body .el-form-item {
+  display: block;
+  margin-bottom: 20px;
+}
+.dialog-body .el-form-item__content {
+  display: block;
+}
+.field-label {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  padding: 8px 28px 28px;
 }
 .cancel-btn {
   background: #e8e8e8;
   border-color: #e8e8e8;
   color: #666;
   font-size: 13px;
-  padding: 10px 24px;
+  padding: 10px 28px;
 }
 .cancel-btn:hover {
   background: #d8d8d8;
@@ -246,7 +271,7 @@ async function handleChangePassword() {
   border: none !important;
   color: #fff !important;
   font-size: 13px;
-  padding: 10px 24px;
+  padding: 10px 28px;
 }
 .confirm-btn:hover {
   opacity: 0.9;
