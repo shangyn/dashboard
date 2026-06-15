@@ -2,7 +2,7 @@
   <el-container class="user-layout">
     <el-header v-if="!hideHeader" class="user-header">
       <span class="header-brand">
-        <el-icon :size="22"><Trophy /></el-icon>
+        <el-icon :size="24"><Trophy /></el-icon>
         系统控制台
       </span>
       <div class="header-actions">
