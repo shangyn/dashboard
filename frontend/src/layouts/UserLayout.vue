@@ -92,11 +92,12 @@ async function handleChangePassword() {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 22px;
 }
 .header-username {
   font-size: 13px;
   color: #555;
+  font-weight: 700;
 }
 .console-btn {
   font-size: 12px;
@@ -111,13 +112,14 @@ async function handleChangePassword() {
 }
 .logout-btn {
   font-size: 12px;
-  color: #666;
-  background: #f0f0f0;
-  border-color: #e0e0e0;
+  color: #fff;
+  background: #e74c3c;
+  border-color: #e74c3c;
 }
 .logout-btn:hover {
-  color: #333;
-  background: #e0e0e0;
+  color: #fff;
+  background: #c0392b;
+  border-color: #c0392b;
 }
 .user-main {
   background: #f8fafc;

@@ -70,17 +70,17 @@ function goDashboard(module) {
 
 .welcome-section {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 52px;
 }
 .welcome-section h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 26px;
   color: #1a1a2e;
 }
 .welcome-section p {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   color: #888;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .cards-grid {
@@ -98,7 +98,7 @@ function goDashboard(module) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px;
+  padding: 32px 40px;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   text-align: center;
