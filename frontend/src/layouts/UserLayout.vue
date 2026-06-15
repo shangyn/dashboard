@@ -2,7 +2,7 @@
   <el-container class="user-layout">
     <el-header v-if="!hideHeader" class="user-header">
       <span class="header-brand">
-        <el-icon :size="24"><Trophy /></el-icon>
+        <span class="brand-icon"><el-icon :size="20"><Trophy /></el-icon></span>
         系统控制台
       </span>
       <div class="header-actions">
@@ -93,7 +93,16 @@ async function handleChangePassword() {
   color: #1a73e8;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+.brand-icon {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1a73e8, #0d47a1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
 }
 .header-actions {
   display: flex;
