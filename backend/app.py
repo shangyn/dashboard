@@ -7,6 +7,8 @@ from models import db
 from seed import seed_database
 from users import users_bp
 from roles import roles_bp
+from modules import modules_bp
+from upload_config import upload_config_bp
 
 
 def create_app():
@@ -37,6 +39,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(roles_bp)
+    app.register_blueprint(modules_bp)
+    app.register_blueprint(upload_config_bp)
 
     # 生产环境：托管前端静态文件
     @app.route('/')
