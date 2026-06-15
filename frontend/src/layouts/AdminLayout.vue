@@ -3,7 +3,7 @@
     <!-- 侧边栏 -->
     <el-aside v-if="!hideHeader" :width="sidebarCollapsed ? '64px' : '200px'" class="admin-aside">
       <div class="logo-area">
-        <div class="logo-icon"></div>
+        <span class="brand-icon"><el-icon :size="20"><Trophy /></el-icon></span>
         <span v-show="!sidebarCollapsed" class="logo-text">系统控制台</span>
       </div>
 
@@ -43,10 +43,6 @@
     <el-container>
       <el-header v-if="!hideHeader" class="admin-header">
         <div class="header-left">
-          <span class="header-brand">
-            <span class="brand-icon"><el-icon :size="18"><Trophy /></el-icon></span>
-            系统控制台
-          </span>
           <el-icon class="collapse-icon" @click="appStore.toggleSidebar()" :size="18">
             <Fold v-if="!sidebarCollapsed" />
             <Expand v-else />
@@ -172,15 +168,19 @@ async function handleChangePassword() {
   display: flex;
   align-items: center;
   padding: 16px;
-  gap: 8px;
+  gap: 10px;
 }
-.logo-icon {
-  width: 32px; height: 32px;
+.brand-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #1a73e8, #0d47a1);
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
   flex-shrink: 0;
 }
-.logo-text { font-weight: 600; font-size: 14px; color: #1a1a2e; white-space: nowrap; }
+.logo-text { font-weight: 700; font-size: 18px; color: #1a73e8; white-space: nowrap; }
 .admin-aside :deep(.el-menu) { border-right: none; }
 
 .admin-header {
@@ -196,23 +196,6 @@ async function handleChangePassword() {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-.header-brand {
-  font-weight: 700;
-  font-size: 20px;
-  color: #1a73e8;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.brand-icon {
-  width: 34px; height: 34px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #1a73e8, #0d47a1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
 }
 .collapse-icon { cursor: pointer; color: #888; }
 .header-right { display: flex; align-items: center; gap: 22px; }
