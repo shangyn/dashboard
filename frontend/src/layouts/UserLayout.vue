@@ -1,7 +1,10 @@
 <template>
   <el-container class="user-layout">
     <el-header v-if="!hideHeader" class="user-header">
-      <span class="header-brand">系统控制台</span>
+      <span class="header-brand">
+        <el-icon :size="22"><Trophy /></el-icon>
+        系统控制台
+      </span>
       <div class="header-actions">
         <span class="header-username">{{ authStore.userInfo?.real_name || '用户' }}</span>
         <el-button class="console-btn" @click="router.push('/upload-console')">
@@ -88,6 +91,9 @@ async function handleChangePassword() {
   font-weight: 700;
   font-size: 20px;
   color: #1a73e8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .header-actions {
   display: flex;
