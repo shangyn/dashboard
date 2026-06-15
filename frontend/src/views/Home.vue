@@ -74,11 +74,11 @@ function goDashboard(module) {
 }
 .welcome-section h2 {
   margin: 0;
-  font-size: 26px;
+  font-size: 30px;
   color: #1a1a2e;
 }
 .welcome-section p {
-  margin: 10px 0 0;
+  margin: 15px 0 0;
   color: #888;
   font-size: 16px;
 }
