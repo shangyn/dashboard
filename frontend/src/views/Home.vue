@@ -42,7 +42,11 @@
       <el-col :span="8" v-for="m in modules" :key="m.id" style="margin-bottom: 16px;">
         <div class="module-card" @click="goDashboard(m)">
           <div class="module-card-header">
-            <span class="module-dot" :style="{ background: dotColors[m.id % dotColors.length] }"></span>
+            <span class="module-icon" :style="{ background: iconBgColors[m.id % iconBgColors.length] }">
+              <el-icon :size="18">
+                <component :is="m.icon || 'Grid'" />
+              </el-icon>
+            </span>
             <span class="module-title">{{ m.name }}</span>
           </div>
           <p class="module-desc">{{ m.description }}</p>
@@ -69,7 +73,7 @@ const router = useRouter()
 
 const modules = ref([])
 const loading = ref(false)
-const dotColors = ['#1a73e8', '#4caf50', '#ff9800', '#9c27b0', '#00bcd4', '#e91e63']
+const iconBgColors = ['#e8f0fe', '#e6f7ee', '#fff3e0', '#f3e5f5', '#e0f7fa', '#fce4ec']
 
 onMounted(async () => {
   loading.value = true
@@ -110,8 +114,12 @@ function goDashboard(module) {
   display: flex; flex-direction: column;
 }
 .module-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-.module-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.module-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.module-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.module-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: #1a73e8;
+}
 .module-title { font-weight: 600; font-size: 14px; color: #1a1a2e; }
 .module-desc { font-size: 11px; color: #999; line-height: 1.6; flex: 1; margin: 0 0 14px; }
 .module-card-footer { text-align: right; }
