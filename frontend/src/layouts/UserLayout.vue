@@ -203,16 +203,18 @@ async function handleChangePassword() {
 .pwd-dialog.el-dialog {
   border-radius: 25px;
   overflow: hidden;
+  padding: 0 !important;
 }
 .pwd-dialog .el-dialog__header {
-  padding: 0;
-  margin: 0;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 .pwd-dialog .el-dialog__body {
-  padding: 0;
+  padding: 0 !important;
 }
 .pwd-dialog .el-dialog__footer {
-  padding: 0;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 .dialog-header {
   background: linear-gradient(135deg, #1a73e8, #0d47a1);
@@ -260,7 +262,7 @@ async function handleChangePassword() {
   border-color: #e8e8e8;
   color: #666;
   font-size: 13px;
-  padding: 10px 0;
+  padding: 20px 0;
 }
 .cancel-btn:hover {
   background: #d8d8d8;
@@ -273,7 +275,7 @@ async function handleChangePassword() {
   border: none !important;
   color: #fff !important;
   font-size: 13px;
-  padding: 10px 0;
+  padding: 20px 0;
 }
 .confirm-btn:hover {
   opacity: 0.9;
