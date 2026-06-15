@@ -20,7 +20,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { getMyModules } from '../api/modules'
 
-const props = defineProps({ id: String })
+const props = defineProps(['id'])
 const route = useRoute()
 const router = useRouter()
 
