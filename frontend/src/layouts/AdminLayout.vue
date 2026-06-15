@@ -1,7 +1,7 @@
 <template>
   <el-container class="admin-layout">
     <!-- 侧边栏 -->
-    <el-aside :width="sidebarCollapsed ? '64px' : '200px'" class="admin-aside">
+    <el-aside v-if="!hideHeader" :width="sidebarCollapsed ? '64px' : '200px'" class="admin-aside">
       <div class="logo-area">
         <div class="logo-icon"></div>
         <span v-show="!sidebarCollapsed" class="logo-text">系统控制台</span>
@@ -41,7 +41,7 @@
 
     <!-- 右侧 -->
     <el-container>
-      <el-header class="admin-header">
+      <el-header v-if="!hideHeader" class="admin-header">
         <div class="header-left">
           <el-icon class="collapse-icon" @click="appStore.toggleSidebar()" :size="20">
             <Fold v-if="!sidebarCollapsed" />
@@ -68,7 +68,7 @@
         </div>
       </el-header>
 
-      <el-main class="admin-main">
+      <el-main :class="hideHeader ? 'admin-main--full' : 'admin-main'">
         <router-view />
       </el-main>
     </el-container>
@@ -106,7 +106,7 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
-const activeMenu = computed(() => route.path)
+const hideHeader = computed(() => route.meta.hideHeader === true)
 
 const pwdDialogVisible = ref(false)
 const pwdFormRef = ref(null)
@@ -182,4 +182,5 @@ async function handleChangePassword() {
 }
 .user-avatar { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: #fff; font-size: 12px; }
 .admin-main { background: #f0f2f5; padding: 20px; }
+.admin-main--full { background: #f0f2f5; padding: 0; }
 </style>

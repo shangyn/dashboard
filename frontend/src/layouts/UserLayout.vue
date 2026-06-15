@@ -1,6 +1,6 @@
 <template>
   <el-container class="user-layout">
-    <el-header class="user-header">
+    <el-header v-if="!hideHeader" class="user-header">
       <span class="header-brand">系统控制台</span>
       <div class="header-actions">
         <el-button class="console-btn" @click="router.push('/upload-console')">
@@ -25,7 +25,7 @@
       </div>
     </el-header>
 
-    <el-main class="user-main">
+    <el-main :class="hideHeader ? 'user-main--full' : 'user-main'">
       <router-view />
     </el-main>
   </el-container>
@@ -48,15 +48,18 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { changePassword } from '../api/auth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+
+const hideHeader = computed(() => route.meta.hideHeader === true)
 
 const pwdDialogVisible = ref(false)
 const pwdFormRef = ref(null)
@@ -116,5 +119,6 @@ async function handleChangePassword() {
   color: #555;
 }
 .user-avatar { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: #fff; font-size: 12px; }
-.user-main { background: #f0f2f5; padding: 28px 32px; flex: 1; }
+.user-main { background: #f0f2f5; padding: 28px 32px; flex: 1; max-width: 1920px; margin: 0 auto; width: 100%; }
+.user-main--full { background: #f0f2f5; padding: 0; flex: 1; }
 </style>

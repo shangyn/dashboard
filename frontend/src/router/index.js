@@ -19,7 +19,7 @@ const routes = [
       { path: 'role-manage', component: () => import('../views/admin/RoleManage.vue') },
       { path: 'module-manage', component: () => import('../views/admin/ModuleManage.vue') },
       { path: 'upload-config-manage', component: () => import('../views/admin/UploadConfigManage.vue') },
-      { path: 'dashboard-view/:id', component: () => import('../views/Dashboard.vue'), props: true },
+      { path: 'dashboard-view/:id', component: () => import('../views/Dashboard.vue'), props: true, meta: { hideHeader: true } },
     ],
   },
   {
@@ -29,7 +29,7 @@ const routes = [
     children: [
       { path: '', redirect: '/home' },
       { path: 'home', component: () => import('../views/Home.vue') },
-      { path: 'dashboard/:id', component: () => import('../views/Dashboard.vue'), props: true },
+      { path: 'dashboard/:id', component: () => import('../views/Dashboard.vue'), props: true, meta: { hideHeader: true } },
       { path: 'upload-console', component: () => import('../views/UploadConsole.vue') },
       { path: 'upload-console/:code', component: () => import('../views/UploadConsole.vue') },
     ],

@@ -19,6 +19,7 @@ def create_app():
     # 确保上传目录存在
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(os.path.join(os.path.dirname(__file__), 'instance'), exist_ok=True)
+    os.makedirs(os.path.join(os.path.dirname(__file__), 'dashboards'), exist_ok=True)
 
     # 扩展初始化
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -43,6 +44,12 @@ def create_app():
     app.register_blueprint(modules_bp)
     app.register_blueprint(upload_config_bp)
     app.register_blueprint(upload_bp)
+
+    # 托管 dashboard HTML 文件
+    @app.route('/dashboards/<path:filename>')
+    def serve_dashboard(filename):
+        dashboards_dir = os.path.join(os.path.dirname(__file__), 'dashboards')
+        return send_from_directory(dashboards_dir, filename)
 
     # 生产环境：托管前端静态文件
     @app.route('/')

@@ -1,0 +1,103 @@
+<h2>选择管理后台的视觉风格</h2>
+<p class="subtitle">请选择最接近你参考图片风格的设计方向。你可以在浏览器中点击卡片进行选择。</p>
+
+<div class="cards" data-multiselect>
+  <div class="card" data-choice="dark-sidebar" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:200px;background:#f0f2f5;overflow:hidden;">
+        <div style="width:180px;background:#001529;color:#fff;padding:12px;font-size:12px;">
+          <div style="font-weight:bold;font-size:14px;margin-bottom:16px;color:#1890ff;">⚙ 管理系统</div>
+          <div style="background:#1890ff;padding:6px 10px;border-radius:4px;margin-bottom:6px;">📊 首页看板</div>
+          <div style="padding:6px 10px;margin-bottom:6px;opacity:0.7;">👤 用户管理</div>
+          <div style="padding:6px 10px;margin-bottom:6px;opacity:0.7;">🔒 角色管理</div>
+          <div style="padding:6px 10px;opacity:0.7;">📤 数据上传</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <div style="height:48px;background:#fff;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;font-size:11px;color:#666;">👤 管理员 ▼</div>
+          <div style="flex:1;padding:24px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;">📋 内容区域</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>经典深色侧边栏</h3>
+      <p>深色侧边栏 + 白色顶栏 + 浅灰内容区。最常见的后台管理风格，专业稳重。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="light-sidebar" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:200px;background:#f5f7fa;overflow:hidden;">
+        <div style="width:180px;background:#fff;color:#333;padding:12px;font-size:12px;border-right:1px solid #ebeef5;">
+          <div style="font-weight:bold;font-size:14px;margin-bottom:16px;color:#409eff;">⚙ 管理系统</div>
+          <div style="background:#ecf5ff;color:#409eff;padding:6px 10px;border-radius:4px;margin-bottom:6px;">📊 首页看板</div>
+          <div style="padding:6px 10px;margin-bottom:6px;color:#666;">👤 用户管理</div>
+          <div style="padding:6px 10px;margin-bottom:6px;color:#666;">🔒 角色管理</div>
+          <div style="padding:6px 10px;color:#666;">📤 数据上传</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <div style="height:48px;background:#409eff;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;font-size:11px;color:#fff;">👤 管理员 ▼</div>
+          <div style="flex:1;padding:24px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;">📋 内容区域</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>浅色侧边栏 + 蓝色顶栏</h3>
+      <p>全白侧边栏，蓝色顶栏。现代清爽风格，Element Plus 默认风格。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="dark-top" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;flex-direction:column;height:200px;background:#f0f2f5;overflow:hidden;">
+        <div style="height:48px;background:#001529;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:11px;color:#fff;">
+          <span style="font-weight:bold;font-size:13px;color:#1890ff;">⚙ 管理系统</span>
+          <span>👤 管理员 ▼</span>
+        </div>
+        <div style="display:flex;flex:1;">
+          <div style="width:180px;background:#fff;padding:12px;font-size:12px;border-right:1px solid #e8e8e8;">
+            <div style="background:#e6f7ff;color:#1890ff;padding:6px 10px;border-radius:4px;margin-bottom:6px;">📊 首页</div>
+            <div style="padding:6px 10px;margin-bottom:6px;color:#666;">👤 用户</div>
+            <div style="padding:6px 10px;margin-bottom:6px;color:#666;">🔒 角色</div>
+          </div>
+          <div style="flex:1;padding:24px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;">📋 内容区域</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>深色顶栏 + 白色侧边栏</h3>
+      <p>深色顶栏承载导航，白色侧边栏辅助。适合顶部主导航的场景。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="minimal" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:200px;background:#fafafa;overflow:hidden;">
+        <div style="width:180px;background:#fafafa;color:#333;padding:12px;font-size:12px;border-right:1px solid #f0f0f0;">
+          <div style="font-weight:bold;font-size:14px;margin-bottom:16px;">⚙ 管理系统</div>
+          <div style="background:#333;color:#fff;padding:6px 10px;border-radius:6px;margin-bottom:6px;">📊 首页</div>
+          <div style="padding:6px 10px;margin-bottom:6px;">👤 用户</div>
+          <div style="padding:6px 10px;margin-bottom:6px;">🔒 角色</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <div style="height:48px;background:#fff;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;font-size:11px;color:#666;">👤 管理员 ▼</div>
+          <div style="flex:1;padding:24px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;">📋 内容区域</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>极简风格</h3>
+      <p>大面积留白，细线条边框。适合注重内容而非导航的场景，视觉负担最小。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>关于你的参考图片</h3>
+  <p class="subtitle">我无法直接读取你上传的四张图片。请在终端中描述一下图片中的关键视觉特征：</p>
+  <ul>
+    <li>侧边栏是深色还是浅色？</li>
+    <li>主题色是什么颜色？（蓝色、绿色、其他？）</li>
+    <li>整体布局是怎样的？（侧边栏+顶栏，还是只有侧边栏？）</li>
+    <li>有没有特别的设计元素？（圆角大小、阴影、卡片风格等）</li>
+  </ul>
+</div>

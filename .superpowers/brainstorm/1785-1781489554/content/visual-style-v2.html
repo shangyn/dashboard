@@ -1,0 +1,131 @@
+<h2>现代管理后台视觉风格（升级版）</h2>
+<p class="subtitle">四套更现代、更精致的后台设计方向，点击选择你喜欢的风格</p>
+
+<div class="cards" data-multiselect>
+  <div class="card" data-choice="glass-morphism" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:220px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);padding:12px;gap:12px;overflow:hidden;">
+        <div style="width:200px;background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border-radius:16px;color:#fff;padding:16px 12px;font-size:12px;border:1px solid rgba(255,255,255,0.15);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+            <div style="width:32px;height:32px;background:rgba(255,255,255,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;">⚙</div>
+            <span style="font-weight:600;font-size:14px;">CloudAdmin</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.2);padding:8px 12px;border-radius:10px;margin-bottom:6px;font-size:11px;">📊 首页看板</div>
+          <div style="padding:8px 12px;margin-bottom:4px;font-size:11px;opacity:0.75;">👤 用户管理</div>
+          <div style="padding:8px 12px;margin-bottom:4px;font-size:11px;opacity:0.75;">🔒 角色管理</div>
+          <div style="padding:8px 12px;font-size:11px;opacity:0.75;">📤 数据上传</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:12px;">
+          <div style="background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border-radius:16px;height:44px;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;font-size:11px;color:#fff;border:1px solid rgba(255,255,255,0.15);">👤 管理员 ▼</div>
+          <div style="flex:1;background:rgba(255,255,255,0.92);border-radius:16px;padding:20px;display:flex;align-items:center;justify-content:center;color:#666;font-size:13px;">📋 内容区域</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>玻璃拟态 · Glassmorphism</h3>
+      <p>毛玻璃半透明效果 + 渐变背景。年轻化、科技感强，适合追求设计感的团队。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="modern-card" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:220px;background:#f0f2f5;padding:0;overflow:hidden;">
+        <div style="width:200px;background:#fff;color:#1a1a2e;padding:20px 14px;font-size:12px;box-shadow:2px 0 20px rgba(0,0,0,0.04);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #f0f0f0;">
+            <div style="width:34px;height:34px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;"></div>
+            <span style="font-weight:700;font-size:14px;">Admin</span>
+          </div>
+          <div style="background:linear-gradient(135deg,#667eea10,#764ba210);color:#667eea;padding:9px 12px;border-radius:8px;margin-bottom:4px;font-weight:500;font-size:11px;border-left:3px solid #667eea;">📊 首页看板</div>
+          <div style="padding:9px 12px;margin-bottom:2px;font-size:11px;color:#555;">👤 用户管理</div>
+          <div style="padding:9px 12px;margin-bottom:2px;font-size:11px;color:#555;">🔒 角色管理</div>
+          <div style="padding:9px 12px;font-size:11px;color:#555;">📤 数据上传</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <div style="background:#fff;height:50px;display:flex;align-items:center;justify-content:flex-end;padding:0 20px;font-size:11px;color:#555;box-shadow:0 1px 4px rgba(0,0,0,0.04);gap:12px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:#e8e8e8;"></div>
+            <span>管理员 ▼</span>
+          </div>
+          <div style="flex:1;padding:20px;display:flex;gap:12px;flex-wrap:wrap;align-content:flex-start;">
+            <div style="width:100px;height:80px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.04);"></div>
+            <div style="width:100px;height:80px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.04);"></div>
+            <div style="width:100px;height:80px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.04);"></div>
+            <div style="width:100px;height:80px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.04);"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>简约卡片风 · Modern Card</h3>
+      <p>纯白侧边栏 + 大圆角卡片 + 微妙阴影。当前最流行的后台设计趋势，简洁干净。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="minimal-line" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;flex-direction:column;height:220px;background:#fafbfc;overflow:hidden;">
+        <div style="background:#fff;height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:11px;border-bottom:1px solid #eee;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-weight:700;font-size:14px;color:#111;">Acme Admin</div>
+            <span style="color:#999;">|</span>
+            <span style="color:#666;font-size:11px;">企业管理系统</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="color:#333;">管理员</span>
+            <div style="width:30px;height:30px;border-radius:50%;background:#111;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;">A</div>
+          </div>
+        </div>
+        <div style="display:flex;flex:1;">
+          <div style="width:200px;background:#fff;padding:16px 0;font-size:11px;border-right:1px solid #eee;">
+            <div style="padding:8px 20px;margin:0 8px;background:#111;color:#fff;border-radius:6px;margin-bottom:4px;">📊 首页看板</div>
+            <div style="padding:8px 20px;margin:0 8px;color:#555;">👤 用户管理</div>
+            <div style="padding:8px 20px;margin:0 8px;color:#555;">🔒 角色管理</div>
+            <div style="padding:8px 20px;margin:0 8px;color:#555;">📤 数据上传</div>
+          </div>
+          <div style="flex:1;padding:20px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;">📋 内容区域</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>极简线条风 · Linear Minimal</h3>
+      <p>黑白灰主调 + 细线条分割 + 极简导航。适合严肃的企业级场景，强调内容而非装饰。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="vibrant-accent" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:220px;background:#f8f9fb;overflow:hidden;">
+        <div style="width:200px;background:#1e1e2d;color:#fff;padding:20px 0;font-size:11px;display:flex;flex-direction:column;">
+          <div style="padding:0 16px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:28px;height:28px;background:#ff6b6b;border-radius:6px;"></div>
+              <span style="font-weight:600;font-size:13px;">Zenith</span>
+            </div>
+          </div>
+          <div style="padding:10px 16px;margin:0 8px;background:rgba(255,107,107,0.2);border-radius:8px;color:#ff6b6b;margin-bottom:2px;">📊 首页看板</div>
+          <div style="padding:10px 16px;margin:0 8px;color:#aab;">👤 用户管理</div>
+          <div style="padding:10px 16px;margin:0 8px;color:#aab;">🔒 角色管理</div>
+          <div style="padding:10px 16px;margin:0 8px;color:#aab;">📤 数据上传</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <div style="background:#fff;height:50px;display:flex;align-items:center;justify-content:flex-end;padding:0 20px;font-size:11px;color:#555;gap:16px;border-bottom:1px solid #f0f0f0;">
+            <span style="color:#999;">🔔</span>
+            <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#ff6b6b,#ee5a24);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;">L</div>
+          </div>
+          <div style="flex:1;padding:24px;display:flex;gap:16px;flex-wrap:wrap;align-content:flex-start;">
+            <div style="padding:14px 18px;background:#fff;border-radius:12px;font-size:11px;color:#333;border-top:3px solid #ff6b6b;">用户总数<br><b style="font-size:18px;">1,234</b></div>
+            <div style="padding:14px 18px;background:#fff;border-radius:12px;font-size:11px;color:#333;border-top:3px solid #4ecdc4;">活跃<br><b style="font-size:18px;">89%</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>活力深色 · Vibrant Dark</h3>
+      <p>深色侧边栏 + 高饱和点缀色 + 顶部色条卡片。视觉冲击力强，深色不沉闷。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>请告诉我</h3>
+  <p class="subtitle">上面的四套风格更接近你参考图片的感觉吗？或者你也可以描述图片中的具体特征，我继续调整。</p>
+</div>

@@ -1,0 +1,10 @@
+{
+  "skills": {
+    "xlsx": {
+      "path": ".skills/xlsx"
+    },
+    "frontend-design": {
+      "path": ".skills/frontend-design"
+    }
+  }
+}

@@ -45,7 +45,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dashboard-page { height: calc(100vh - 50px - 56px); display: flex; flex-direction: column; }
+.dashboard-page { height: 100vh; display: flex; flex-direction: column; }
 .dashboard-topbar {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 12px;
