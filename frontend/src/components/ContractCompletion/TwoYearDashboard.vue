@@ -71,16 +71,12 @@
       </div>
     </div>
 
-    <!-- Section C: Chart placeholder (Task 2 will implement ECharts) -->
+    <!-- Section C: ECharts Diverging Bar Chart (only when "all regions" selected) -->
     <div class="tyd-chart-card" v-if="!selectedRegion">
       <div class="tyd-chart-title">
         📊 {{ selectedMetricLabel }} 大区增长率
       </div>
-      <div class="tyd-chart-placeholder">
-        <span v-for="item in rankingData" :key="item.region" style="display:inline-block;margin:4px 8px;font-size:11px">
-          {{ item.region }}: {{ item.growth !== null ? (item.growth > 0 ? '+' : '') + item.growth + '%' : '-' }}
-        </span>
-      </div>
+      <div ref="chartRef" class="tyd-chart-body"></div>
       <el-empty v-if="!rankingData.length" description="暂无数据" />
     </div>
 
@@ -89,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 // ── Constants ──
 const REGION_EMOJI = {
@@ -253,6 +249,110 @@ const rankingData = computed(() => {
   return list
 })
 
+// ── ECharts Diverging Bar Chart ──
+
+const chartRef = ref(null)
+let chart = null
+let echarts = null
+
+async function initChart() {
+  if (!chartRef.value) return
+  if (!echarts) {
+    const mod = await import('echarts')
+    echarts = mod.default || mod
+  }
+  if (!chart) {
+    chart = echarts.init(chartRef.value)
+  }
+  chart.setOption(buildChartOption(), true)
+}
+
+function buildChartOption() {
+  const data = [...rankingData.value].reverse()
+  if (!data.length) return {}
+
+  const names = data.map(d => (REGION_EMOJI[d.region] || '') + ' ' + d.region)
+  const values = data.map(d => d.growth ?? 0)
+  const maxAbs = Math.max(...values.map(v => Math.abs(v)), 1)
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        const p = params[0]
+        const v = p.value
+        const label = v > 0 ? `+${v}%` : v < 0 ? `${v}%` : '-'
+        return `<b>${p.name}</b><br/>增长率: ${label}`
+      },
+    },
+    grid: {
+      left: '3%', right: '8%', top: '5%', bottom: '5%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'value',
+      min: -maxAbs - 5,
+      max: maxAbs + 5,
+      axisLabel: {
+        formatter: (v) => (v > 0 ? '+' : '') + v + '%',
+        fontSize: 10,
+        color: '#888',
+      },
+      splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
+      axisLine: { lineStyle: { color: '#ccc' } },
+    },
+    yAxis: {
+      type: 'category',
+      data: names,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 11, color: '#333' },
+    },
+    series: [
+      {
+        type: 'bar',
+        data: values.map(v => ({
+          value: v,
+          itemStyle: {
+            color: v > 0 ? '#4caf50' : v < 0 ? '#ef5350' : '#bbb',
+            borderRadius: v > 0 ? [0, 4, 4, 0] : [4, 0, 0, 4],
+          },
+        })),
+        barWidth: Math.max(18, Math.min(26, 280 / data.length)),
+        label: {
+          show: true,
+          position: 'right',
+          formatter: (p) => {
+            const v = p.value
+            return v > 0 ? '+' + v + '%' : v < 0 ? v + '%' : '-'
+          },
+          fontSize: 11,
+          fontWeight: 'bold',
+          color: '#555',
+        },
+        emphasis: { itemStyle: { opacity: 0.8 } },
+      },
+    ],
+  }
+}
+
+onMounted(() => nextTick(() => initChart()))
+
+watch(
+  () => [selectedMetric.value, rankingData.value],
+  () => {
+    if (chart) {
+      chart.setOption(buildChartOption(), true)
+    }
+  },
+  { deep: true }
+)
+
+onBeforeUnmount(() => {
+  if (chart) { chart.dispose(); chart = null }
+})
+
 // ── Formatting ──
 
 function fmtNum(v) {
@@ -368,14 +468,9 @@ function cellStyle(v) {
   color: #1a1a2e;
   margin-bottom: 8px;
 }
-.tyd-chart-placeholder {
-  min-height: 60px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  color: #888;
+.tyd-chart-body {
+  width: 100%;
+  height: 360px;
 }
 
 /* ── Responsive ── */
