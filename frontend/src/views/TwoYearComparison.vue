@@ -51,6 +51,7 @@
       <!-- Table View -->
       <div v-show="view === 'table'">
         <TwoYearTable
+          ref="tableRef"
           :rows="filteredRows"
           :metricGroups="metricGroups"
           :yearPrev="yearPrev"
@@ -72,6 +73,7 @@ import TwoYearDashboard from '../components/ContractCompletion/TwoYearDashboard.
 const loading = ref(false)
 const view = ref('dashboard')
 const selectedRegion = ref(null)
+const tableRef = ref(null)
 
 const title = ref('')
 const datePrev = ref('')
@@ -115,7 +117,15 @@ async function fetchData() {
 
 function exportExcel() {
   const token = localStorage.getItem('token')
-  const url = '/api/contract-completion/two-year-comparison/export'
+  let url = '/api/contract-completion/two-year-comparison/export'
+
+  if (tableRef.value && tableRef.value.hiddenKeys) {
+    const hidden = [...tableRef.value.hiddenKeys]
+    if (hidden.length) {
+      url += '?' + hidden.map(k => 'hidden=' + encodeURIComponent(k)).join('&')
+    }
+  }
+
   fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     .then(res => res.blob())
     .then(blob => {

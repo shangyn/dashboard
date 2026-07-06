@@ -977,8 +977,10 @@ def get_two_year_comparison():
 
 # ── Excel 导出 ──────────────────────────────────────────
 
-def export_two_year_comparison_xlsx():
-    """生成带公式的两年对比表 Excel 文件，返回文件路径"""
+def export_two_year_comparison_xlsx(hidden_metric_ids=None):
+    """生成带公式的两年对比表 Excel 文件，返回文件路径
+    hidden_metric_ids: 要隐藏的指标ID列表，如 ['sign_amount', 'overseas_diff']
+    """
     import io
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
@@ -989,6 +991,11 @@ def export_two_year_comparison_xlsx():
     groups = data['metric_groups']
     year_prev = data['year_prev']
     year_curr = data['year_curr']
+
+    # Filter out hidden metric columns
+    if hidden_metric_ids:
+        hidden_set = set(hidden_metric_ids)
+        groups = [g for g in groups if g['id'] not in hidden_set]
 
     wb = Workbook()
     ws = wb.active
