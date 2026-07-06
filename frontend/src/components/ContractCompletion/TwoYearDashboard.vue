@@ -4,8 +4,10 @@
     <div class="tyd-kpi-row">
       <div
         class="tyd-kpi-card"
+        :class="{ 'tyd-kpi-card--active': selectedMetric === mk.id }"
         v-for="mk in dashboardMetricKeys"
         :key="mk.id"
+        @click="selectedMetric = mk.id"
       >
         <div class="tyd-kpi-icon">{{ mk.icon }}</div>
         <div class="tyd-kpi-label">{{ mk.label }}</div>
@@ -38,7 +40,11 @@
           <thead>
             <tr>
               <th class="tyd-hm-rowhead">{{ selectedRegion ? '模块' : '大区' }}</th>
-              <th v-for="mk in dashboardMetricKeys" :key="mk.id">
+              <th
+                v-for="mk in dashboardMetricKeys"
+                :key="mk.id"
+                :class="{ 'tyd-hm-col-active': selectedMetric === mk.id }"
+              >
                 {{ mk.label }}
               </th>
             </tr>
@@ -55,7 +61,7 @@
                 v-for="mk in dashboardMetricKeys"
                 :key="mk.id"
                 :style="cellStyle(row[mk.id])"
-                class="tyd-hm-cell"
+                :class="{ 'tyd-hm-col-active': selectedMetric === mk.id, 'tyd-hm-cell': true }"
               >
                 {{ fmtGrowth(row[mk.id]) }}
               </td>
@@ -65,46 +71,17 @@
       </div>
     </div>
 
-    <!-- Section C: Best/Worst Ranking Bars (only when "all regions" selected) -->
-    <div class="tyd-rank-row" v-if="!selectedRegion">
-      <div class="tyd-rank-card">
-        <div class="tyd-rank-title">🏆 签订额增长最快</div>
-        <div
-          class="tyd-rank-item"
-          v-for="item in topGainers"
-          :key="'gain-' + item.region"
-        >
-          <span class="tyd-rank-name">{{ item.region }}</span>
-          <span class="tyd-rank-bar-wrap">
-            <span
-              class="tyd-rank-bar tyd-rank-bar-up"
-              :style="{ width: item.barPct + '%' }"
-            >
-              {{ fmtGrowth(item.growth) }}
-            </span>
-          </span>
-        </div>
-        <div v-if="!topGainers.length" class="tyd-rank-empty">暂无数据</div>
+    <!-- Section C: Chart placeholder (Task 2 will implement ECharts) -->
+    <div class="tyd-chart-card" v-if="!selectedRegion">
+      <div class="tyd-chart-title">
+        📊 {{ selectedMetricLabel }} 大区增长率
       </div>
-      <div class="tyd-rank-card">
-        <div class="tyd-rank-title">⚠️ 签订额下降</div>
-        <div
-          class="tyd-rank-item"
-          v-for="item in topLosers"
-          :key="'lose-' + item.region"
-        >
-          <span class="tyd-rank-name">{{ item.region }}</span>
-          <span class="tyd-rank-bar-wrap">
-            <span
-              class="tyd-rank-bar tyd-rank-bar-down"
-              :style="{ width: item.barPct + '%' }"
-            >
-              {{ fmtGrowth(item.growth) }}
-            </span>
-          </span>
-        </div>
-        <div v-if="!topLosers.length" class="tyd-rank-empty">暂无下降</div>
+      <div class="tyd-chart-placeholder">
+        <span v-for="item in rankingData" :key="item.region" style="display:inline-block;margin:4px 8px;font-size:11px">
+          {{ item.region }}: {{ item.growth !== null ? (item.growth > 0 ? '+' : '') + item.growth + '%' : '-' }}
+        </span>
       </div>
+      <el-empty v-if="!rankingData.length" description="暂无数据" />
     </div>
 
     <el-empty v-if="!heatmapRows.length && !loading" description="暂无数据" />
@@ -112,7 +89,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 
 // ── Constants ──
 const REGION_EMOJI = {
@@ -137,6 +114,9 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   selectedRegion: { type: String, default: null },
 })
+
+// ── Selected metric (drives heatmap highlight + chart) ──
+const selectedMetric = ref('sign_amount')
 
 // ── Data helpers ──
 
@@ -256,31 +236,21 @@ const heatmapRows = computed(() => {
   return result
 })
 
-// ── Ranking bars (for sign_amount) ──
+// ── Ranking data for the selected metric ──
 
-const signAmountRanking = computed(() => {
+const selectedMetricLabel = computed(() => {
+  return dashboardMetricKeys.find(mk => mk.id === selectedMetric.value)?.label || ''
+})
+
+const rankingData = computed(() => {
   const list = []
   for (const region of props.regionOrder) {
     const agg = regionAggregates.value[region]
     if (!agg) continue
-    list.push({ region, growth: agg.sign_amount.growth })
+    list.push({ region, growth: agg[selectedMetric.value]?.growth ?? null })
   }
   list.sort((a, b) => (b.growth ?? -Infinity) - (a.growth ?? -Infinity))
   return list
-})
-
-const topGainers = computed(() => {
-  const positive = signAmountRanking.value.filter(r => r.growth !== null && r.growth > 0)
-  const top3 = positive.slice(0, 3)
-  const maxGrowth = top3.length ? Math.max(...top3.map(r => Math.abs(r.growth)), 1) : 1
-  return top3.map(r => ({ ...r, barPct: Math.round(Math.abs(r.growth) / maxGrowth * 100) }))
-})
-
-const topLosers = computed(() => {
-  const negative = signAmountRanking.value.filter(r => r.growth !== null && r.growth < 0)
-  const bottom3 = negative.slice(-3).reverse()
-  const maxGrowth = bottom3.length ? Math.max(...bottom3.map(r => Math.abs(r.growth)), 1) : 1
-  return bottom3.map(r => ({ ...r, barPct: Math.round(Math.abs(r.growth) / maxGrowth * 100) }))
 })
 
 // ── Formatting ──
@@ -327,6 +297,17 @@ function cellStyle(v) {
   padding: 12px 10px;
   text-align: center;
   box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  cursor: pointer;
+  transition: all .2s;
+  border: 2px solid transparent;
+}
+.tyd-kpi-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  transform: translateY(-1px);
+}
+.tyd-kpi-card--active {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,.2), 0 2px 8px rgba(0,0,0,.08);
 }
 .tyd-kpi-icon { font-size: 16px; margin-bottom: 2px; }
 .tyd-kpi-label { font-size: 10px; color: #999; margin-bottom: 4px; }
@@ -369,37 +350,33 @@ function cellStyle(v) {
 .tyd-hm-rowhead { text-align: left; padding-left: 12px; min-width: 70px; white-space: nowrap; }
 .tyd-hm-cell { text-align: center; border-radius: 4px; font-size: 12px; }
 
-/* ── Ranking Bars ── */
-.tyd-rank-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+/* heatmap column highlight */
+.tyd-hm-col-active {
+  background: #eff6ff !important;
 }
-.tyd-rank-card {
+
+/* ── Chart Card ── */
+.tyd-chart-card {
   background: #fff;
   border-radius: 12px;
-  padding: 14px;
+  padding: 16px;
   box-shadow: 0 1px 4px rgba(0,0,0,.04);
 }
-.tyd-rank-title { font-weight: 700; font-size: 13px; color: #1a1a2e; margin-bottom: 8px; }
-.tyd-rank-item { display: flex; align-items: center; margin-bottom: 6px; gap: 8px; }
-.tyd-rank-name { width: 45px; font-weight: 600; font-size: 11px; text-align: right; flex-shrink: 0; }
-.tyd-rank-bar-wrap { flex: 1; background: #eee; height: 22px; border-radius: 4px; overflow: hidden; }
-.tyd-rank-bar {
-  height: 100%;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  padding-left: 8px;
-  color: #fff;
-  font-size: 10px;
+.tyd-chart-title {
   font-weight: 700;
-  min-width: fit-content;
-  white-space: nowrap;
+  font-size: 14px;
+  color: #1a1a2e;
+  margin-bottom: 8px;
 }
-.tyd-rank-bar-up { background: #4C78A8; }
-.tyd-rank-bar-down { background: #D4645C; }
-.tyd-rank-empty { font-size: 11px; color: #aaa; padding: 8px 0; }
+.tyd-chart-placeholder {
+  min-height: 60px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  color: #888;
+}
 
 /* ── Responsive ── */
 @media (max-width: 1200px) {
@@ -407,6 +384,5 @@ function cellStyle(v) {
 }
 @media (max-width: 768px) {
   .tyd-kpi-row { grid-template-columns: repeat(2, 1fr); }
-  .tyd-rank-row { grid-template-columns: 1fr; }
 }
 </style>
