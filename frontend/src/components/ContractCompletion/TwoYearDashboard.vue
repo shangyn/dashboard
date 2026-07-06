@@ -134,8 +134,6 @@ const dashboardMetricKeys = [
 const props = defineProps({
   rows: { type: Array, default: () => [] },
   regionOrder: { type: Array, default: () => [] },
-  yearPrev: { type: Number, default: 2025 },
-  yearCurr: { type: Number, default: 2026 },
   loading: { type: Boolean, default: false },
   selectedRegion: { type: String, default: null },
 })
@@ -280,7 +278,7 @@ const topGainers = computed(() => {
 
 const topLosers = computed(() => {
   const negative = signAmountRanking.value.filter(r => r.growth !== null && r.growth < 0)
-  const bottom3 = negative.slice(0, 3)
+  const bottom3 = negative.slice(-3).reverse()
   const maxGrowth = bottom3.length ? Math.max(...bottom3.map(r => Math.abs(r.growth)), 1) : 1
   return bottom3.map(r => ({ ...r, barPct: Math.round(Math.abs(r.growth) / maxGrowth * 100) }))
 })
