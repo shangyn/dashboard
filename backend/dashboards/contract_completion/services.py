@@ -1077,6 +1077,33 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
     def _col_letter(c):
         return get_column_letter(c)
 
+    def _write_raw_value(typ, r, cp, cc, cg, row_data, prev_key, curr_key, growth_key):
+        """写入原始值（不带公式），用于列被隐藏时的回退"""
+        if typ in ('data', 'trade'):
+            pv = row_data.get(prev_key)
+            cv = row_data.get(curr_key)
+            if pv is not None:
+                ws.cell(row=r, column=cp, value=pv)
+            if cv is not None:
+                ws.cell(row=r, column=cc, value=cv)
+        elif typ == 'subtotal':
+            start_row = region_data_start.get(row_data['region'])
+            if start_row:
+                s, e = start_row, r - 1
+                ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
+                ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
+            else:
+                ws.cell(row=r, column=cp, value=row_data.get(prev_key))
+                ws.cell(row=r, column=cc, value=row_data.get(curr_key))
+        elif typ == 'grand_total':
+            st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
+            if st_rows:
+                ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
+                ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
+        if cg:
+            ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
+            ws.cell(row=r, column=cg).number_format = '0%'
+
     for row_data in rows:
         r = excel_row
         typ = row_data['type']
@@ -1104,55 +1131,60 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
 
             # === 签订额合计: =签订额+海外差额 ===
             if gid == 'sign_total':
-                # 找到签订额和海外差额的列
-                sa_cp, sa_cc, _ = group_cols['sign_amount']
-                od_cp, od_cc, _ = group_cols['overseas_diff']
-                if typ in ('data', 'trade'):
-                    ws.cell(row=r, column=cp).value = f'={_col_letter(sa_cp)}{r}+{_col_letter(od_cp)}{r}'
-                    ws.cell(row=r, column=cc).value = f'={_col_letter(sa_cc)}{r}+{_col_letter(od_cc)}{r}'
-                elif typ == 'subtotal':
-                    start_row = region_data_start.get(row_data['region'])
-                    if start_row:
-                        s, e = start_row, r - 1
-                        ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
-                        ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
-                    else:
-                        ws.cell(row=r, column=cp, value=row_data.get(prev_key))
-                        ws.cell(row=r, column=cc, value=row_data.get(curr_key))
-                elif typ == 'grand_total':
-                    st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
-                    if st_rows:
-                        ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
-                        ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
-                # 增长公式
-                if cg:
-                    ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
-                    ws.cell(row=r, column=cg).number_format = '0%'
+                # 如果签订额或海外差额被隐藏，使用原始值
+                if 'sign_amount' not in group_cols or 'overseas_diff' not in group_cols:
+                    _write_raw_value(typ, r, cp, cc, cg, row_data, prev_key, curr_key, growth_key)
+                else:
+                    sa_cp, sa_cc, _ = group_cols['sign_amount']
+                    od_cp, od_cc, _ = group_cols['overseas_diff']
+                    if typ in ('data', 'trade'):
+                        ws.cell(row=r, column=cp).value = f'={_col_letter(sa_cp)}{r}+{_col_letter(od_cp)}{r}'
+                        ws.cell(row=r, column=cc).value = f'={_col_letter(sa_cc)}{r}+{_col_letter(od_cc)}{r}'
+                    elif typ == 'subtotal':
+                        start_row = region_data_start.get(row_data['region'])
+                        if start_row:
+                            s, e = start_row, r - 1
+                            ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
+                            ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
+                        else:
+                            ws.cell(row=r, column=cp, value=row_data.get(prev_key))
+                            ws.cell(row=r, column=cc, value=row_data.get(curr_key))
+                    elif typ == 'grand_total':
+                        st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
+                        if st_rows:
+                            ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
+                            ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
+                    if cg:
+                        ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
+                        ws.cell(row=r, column=cg).number_format = '0%'
 
             # === 回款额: =回款+海外回款及其他 ===
             elif gid == 'payment_total':
-                py_cp, py_cc, _ = group_cols['payment']
-                op_cp, op_cc, _ = group_cols['overseas_payment']
-                if typ in ('data', 'trade'):
-                    ws.cell(row=r, column=cp).value = f'={_col_letter(py_cp)}{r}+{_col_letter(op_cp)}{r}'
-                    ws.cell(row=r, column=cc).value = f'={_col_letter(py_cc)}{r}+{_col_letter(op_cc)}{r}'
-                elif typ == 'subtotal':
-                    start_row = region_data_start.get(row_data['region'])
-                    if start_row:
-                        s, e = start_row, r - 1
-                        ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
-                        ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
-                    else:
-                        ws.cell(row=r, column=cp, value=row_data.get(prev_key))
-                        ws.cell(row=r, column=cc, value=row_data.get(curr_key))
-                elif typ == 'grand_total':
-                    st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
-                    if st_rows:
-                        ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
-                        ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
-                if cg:
-                    ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
-                    ws.cell(row=r, column=cg).number_format = '0%'
+                if 'payment' not in group_cols or 'overseas_payment' not in group_cols:
+                    _write_raw_value(typ, r, cp, cc, cg, row_data, prev_key, curr_key, growth_key)
+                else:
+                    py_cp, py_cc, _ = group_cols['payment']
+                    op_cp, op_cc, _ = group_cols['overseas_payment']
+                    if typ in ('data', 'trade'):
+                        ws.cell(row=r, column=cp).value = f'={_col_letter(py_cp)}{r}+{_col_letter(op_cp)}{r}'
+                        ws.cell(row=r, column=cc).value = f'={_col_letter(py_cc)}{r}+{_col_letter(op_cc)}{r}'
+                    elif typ == 'subtotal':
+                        start_row = region_data_start.get(row_data['region'])
+                        if start_row:
+                            s, e = start_row, r - 1
+                            ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
+                            ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
+                        else:
+                            ws.cell(row=r, column=cp, value=row_data.get(prev_key))
+                            ws.cell(row=r, column=cc, value=row_data.get(curr_key))
+                    elif typ == 'grand_total':
+                        st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
+                        if st_rows:
+                            ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
+                            ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
+                    if cg:
+                        ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
+                        ws.cell(row=r, column=cg).number_format = '0%'
 
             # === 普通列组 ===
             else:
