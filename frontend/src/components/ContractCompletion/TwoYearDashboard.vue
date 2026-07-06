@@ -349,6 +349,17 @@ watch(
   { deep: true }
 )
 
+// Dispose chart when switching to single-region view (v-if removes DOM)
+watch(
+  () => props.selectedRegion,
+  (region) => {
+    if (region && chart) {
+      chart.dispose()
+      chart = null
+    }
+  }
+)
+
 onBeforeUnmount(() => {
   if (chart) { chart.dispose(); chart = null }
 })
