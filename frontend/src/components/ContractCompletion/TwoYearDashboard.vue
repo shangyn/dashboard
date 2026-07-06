@@ -9,7 +9,6 @@
         :key="mk.id"
         @click="selectedMetric = mk.id"
       >
-        <div class="tyd-kpi-icon">{{ mk.icon }}</div>
         <div class="tyd-kpi-label">{{ mk.label }}</div>
         <div
           class="tyd-kpi-growth"
@@ -55,7 +54,7 @@
               :key="row.label"
             >
               <td class="tyd-hm-rowhead" style="font-weight: 600">
-                {{ row._emoji }} {{ row.label }}
+                {{ row.label }}
               </td>
               <td
                 v-for="mk in dashboardMetricKeys"
@@ -87,20 +86,14 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
-// ── Constants ──
-const REGION_EMOJI = {
-  '俄罗斯': '🇷🇺', '中亚': '🏔️', '亚洲1': '🌏', '亚洲2': '🌐',
-  '美洲': '🌎', '中东': '🌍', '非洲': '🌍', '欧洲': '🇪🇺',
-}
-
 const dashboardMetricKeys = [
-  { id: 'sign_units',      label: '签订台数', icon: '📝' },
-  { id: 'sign_amount',     label: '签订额',   icon: '📝' },
-  { id: 'schedule_units',  label: '排产台数', icon: '🏭' },
-  { id: 'schedule_amount', label: '排产额',   icon: '🏭' },
-  { id: 'ship_units',      label: '发货台数', icon: '🚚' },
-  { id: 'ship_amount',     label: '发货额',   icon: '🚚' },
-  { id: 'payment',         label: '回款',     icon: '💰' },
+  { id: 'sign_units',      label: '签订台数' },
+  { id: 'sign_amount',     label: '签订额' },
+  { id: 'schedule_units',  label: '排产台数' },
+  { id: 'schedule_amount', label: '排产额' },
+  { id: 'ship_units',      label: '发货台数' },
+  { id: 'ship_amount',     label: '发货额' },
+  { id: 'payment',         label: '回款' },
 ]
 
 // ── Props ──
@@ -194,7 +187,7 @@ const heatmapRows = computed(() => {
     for (const r of dataRows) {
       const mod = r.module || '未分类'
       if (!modMap[mod]) {
-        modMap[mod] = { _emoji: '' }
+        modMap[mod] = {}
         for (const mk of dashboardMetricKeys) {
           modMap[mod][mk.id] = { prev: 0, curr: 0 }
         }
@@ -205,7 +198,7 @@ const heatmapRows = computed(() => {
       }
     }
     const result = Object.entries(modMap).map(([mod, d]) => {
-      const row = { label: mod, _emoji: '' }
+      const row = { label: mod }
       for (const mk of dashboardMetricKeys) {
         const prev = d[mk.id].prev
         const curr = d[mk.id].curr
@@ -223,7 +216,7 @@ const heatmapRows = computed(() => {
   for (const region of props.regionOrder) {
     const agg = regionAggregates.value[region]
     if (!agg) continue
-    const row = { label: region, _emoji: REGION_EMOJI[region] || '' }
+    const row = { label: region }
     for (const mk of dashboardMetricKeys) {
       row[mk.id] = agg[mk.id].growth
     }
@@ -271,7 +264,7 @@ function buildChartOption() {
   const data = [...rankingData.value].reverse()
   if (!data.length) return {}
 
-  const names = data.map(d => (REGION_EMOJI[d.region] || '') + ' ' + d.region)
+  const names = data.map(d => d.region)
   const values = data.map(d => d.growth ?? 0)
   const maxAbs = Math.max(...values.map(v => Math.abs(v)), 1)
 
@@ -296,7 +289,7 @@ function buildChartOption() {
       max: maxAbs + 5,
       axisLabel: {
         formatter: (v) => (v > 0 ? '+' : '') + v + '%',
-        fontSize: 10,
+        fontSize: 12,
         color: '#888',
       },
       splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
@@ -307,7 +300,7 @@ function buildChartOption() {
       data: names,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { fontSize: 11, color: '#333' },
+      axisLabel: { fontSize: 13, color: '#333' },
     },
     series: [
       {
@@ -327,7 +320,7 @@ function buildChartOption() {
             const v = p.value
             return v > 0 ? '+' + v + '%' : v < 0 ? v + '%' : '-'
           },
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: 'bold',
           color: '#555',
         },
@@ -420,10 +413,9 @@ function cellStyle(v) {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59,130,246,.2), 0 2px 8px rgba(0,0,0,.08);
 }
-.tyd-kpi-icon { font-size: 16px; margin-bottom: 2px; }
 .tyd-kpi-label { font-size: 10px; color: #999; margin-bottom: 4px; }
 .tyd-kpi-growth { font-size: 24px; font-weight: 800; }
-.tyd-kpi-abs { font-size: 9px; color: #bbb; margin-top: 3px; white-space: nowrap; }
+.tyd-kpi-abs { font-size: 12px; color: #666; margin-top: 4px; white-space: nowrap; }
 
 /* ── Heatmap ── */
 .tyd-heatmap-card {
