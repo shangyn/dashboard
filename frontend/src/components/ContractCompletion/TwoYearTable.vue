@@ -17,8 +17,8 @@
       <table class="cc-table">
         <thead>
           <tr>
-            <th rowspan="2" class="fixed" style="width:140px">模块</th>
-            <th rowspan="2" class="fixed" style="width:60px">市场<br/>类别</th>
+            <th rowspan="2" class="fixed" style="width:120px">模块</th>
+            <th rowspan="2" class="fixed" style="width:44px">市场<br/>类别</th>
             <template v-for="g in visibleMetricGroups" :key="g.id">
               <th :colspan="g.has_growth ? 3 : 2">{{ g.name }}</th>
             </template>
@@ -85,8 +85,13 @@ const TOGGLE_GROUPS = [
   { id: 'payment', label: '回款/海外回款', keys: ['payment', 'overseas_payment'] },
 ]
 
-// Set of metric IDs currently hidden
-const hiddenKeys = ref(new Set())
+// Set of metric IDs currently hidden — default: hide all 额/差额 columns
+const hiddenKeys = ref(new Set([
+  'sign_amount', 'overseas_diff',
+  'schedule_amount', 'schedule_overseas_diff',
+  'ship_amount', 'ship_overseas_diff',
+  'payment', 'overseas_payment',
+]))
 
 function toggleKeys(groupKeys) {
   const s = new Set(hiddenKeys.value)
@@ -155,14 +160,16 @@ function growthStyle(row, key) {
 .table-scroll { overflow: auto; max-height: 75vh; }
 .cc-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
 .cc-table th, .cc-table td { border: 1px solid #d0d5dd; padding: 4px 6px; text-align: center; }
-.cc-table thead th { background: #eef2f7; font-weight: 600; color: #333; position: sticky; top: 0; z-index: 3; }
+.cc-table thead th { background: #eef2f7; font-weight: 600; color: #333; position: sticky; z-index: 3; }
+.cc-table thead tr:first-child th { top: 0; }
+.cc-table thead tr:last-child th { top: 24px; }
 .cc-table .sub { font-weight: 500; color: #555; font-size: 10px; }
 .cc-table .fixed { position: sticky; left: 0; z-index: 2; }
-.cc-table .module-col { min-width: 140px; text-align: left; padding-left: 8px; }
-.cc-table .cat-col { min-width: 50px; }
+.cc-table .module-col { min-width: 120px; text-align: left; padding-left: 8px; }
+.cc-table .cat-col { min-width: 44px; }
 .cc-table thead .fixed { background: #eef2f7; z-index: 4; }
 .cc-table tbody .fixed { background: #fff; }
-.cc-table .val { text-align: center; min-width: 70px; }
+.cc-table .val { text-align: center; min-width: 60px; }
 .fw-bold { font-weight: 700; }
 .row-subtotal .fixed { background: #D6E4F0; }
 .row-grand .fixed { background: #B4C6E7; }

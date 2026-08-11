@@ -12,6 +12,8 @@ from dashboards.contract_completion.services import (
     get_regions,
     get_two_year_comparison,
     export_two_year_comparison_xlsx,
+    get_annual_completion,
+    export_annual_completion_xlsx,
 )
 
 cc_bp = Blueprint('contract_completion', __name__)
@@ -109,6 +111,31 @@ def api_export_two_year():
         filepath = export_two_year_comparison_xlsx(hidden_metric_ids=hidden)
         return send_file(filepath, as_attachment=True,
                          download_name='两年对比表.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    except Exception as e:
+        return jsonify(code=500, msg=str(e), data=None), 500
+
+
+@cc_bp.route('/api/contract-completion/annual-completion', methods=['GET'])
+@jwt_required()
+def api_annual_completion():
+    """2026年合同完成情况表"""
+    try:
+        data = get_annual_completion()
+        return jsonify(code=200, msg='success', data=data), 200
+    except Exception as e:
+        return jsonify(code=500, msg=str(e), data=None), 500
+
+
+@cc_bp.route('/api/contract-completion/annual-completion/export', methods=['GET'])
+@jwt_required()
+def api_export_annual_completion():
+    """导出年度完成情况表Excel，支持 ?hide_extra=1 隐藏后8列"""
+    try:
+        hide_extra = request.args.get('hide_extra') == '1'
+        filepath = export_annual_completion_xlsx(hide_extra=hide_extra)
+        return send_file(filepath, as_attachment=True,
+                         download_name='2026年合同完成情况表.xlsx',
                          mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         return jsonify(code=500, msg=str(e), data=None), 500

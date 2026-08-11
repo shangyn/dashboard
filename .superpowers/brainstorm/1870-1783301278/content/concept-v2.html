@@ -1,0 +1,225 @@
+<h2>新方案：增长率驱动 · 灵动看板</h2>
+<p class="subtitle">7指标全覆盖 | 增长率优先 | 大区下拉筛选（默认全部）</p>
+
+<div class="mockup" style="margin-bottom:20px">
+  <div class="mockup-header">看板整体布局（默认「全部大区」视图）</div>
+  <div class="mockup-body" style="padding:16px;background:#f0f2f5">
+
+    <!-- Top bar -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#fff;border-radius:10px;margin-bottom:12px">
+      <span style="font-weight:700;font-size:15px">国贸签订、排产、发货两年对比</span>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span style="font-size:11px;color:#999">2025.01-06 vs 2026.01-06</span>
+        <select style="padding:6px 10px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;background:#fff">
+          <option>全部大区</option>
+          <option>俄罗斯</option>
+          <option>中亚</option>
+          <option>亚洲1</option>
+          <option>亚洲2</option>
+          <option>美洲</option>
+          <option>中东</option>
+          <option>非洲</option>
+          <option>欧洲</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Section A: Growth cards - 7 compact cards -->
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:12px">
+      <!-- Card 1 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">📝 签订台数</div>
+        <div style="font-size:22px;font-weight:800;color:#059669">+18%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">2,850 → 3,360</div>
+      </div>
+      <!-- Card 2 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">📝 签订额</div>
+        <div style="font-size:22px;font-weight:800;color:#059669">+18%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">10,660 → 12,580万</div>
+      </div>
+      <!-- Card 3 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">🏭 排产台数</div>
+        <div style="font-size:22px;font-weight:800;color:#059669">+14%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">1,920 → 2,190</div>
+      </div>
+      <!-- Card 4 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">🏭 排产额</div>
+        <div style="font-size:22px;font-weight:800;color:#059669">+13%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">8,280 → 9,320万</div>
+      </div>
+      <!-- Card 5 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">🚚 发货台数</div>
+        <div style="font-size:22px;font-weight:800;color:#dc2626">-4%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">1,560 → 1,498</div>
+      </div>
+      <!-- Card 6 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">🚚 发货额</div>
+        <div style="font-size:22px;font-weight:800;color:#dc2626">-3%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">7,380 → 7,150万</div>
+      </div>
+      <!-- Card 7 -->
+      <div style="background:#fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">💰 回款</div>
+        <div style="font-size:22px;font-weight:800;color:#059669">+23%</div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">5,560 → 6,820万</div>
+      </div>
+    </div>
+
+    <!-- Section B: Growth Heatmap - the core view -->
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-weight:700;font-size:14px">📊 同比增长率总览（大区 × 指标）</span>
+        <span style="font-size:10px;color:#888">🟢 增长 &nbsp; 🔴 下降 &nbsp; ⬜ 持平/无数据</span>
+      </div>
+      <table style="width:100%;font-size:11px;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #e0e0e0;font-size:11px">大区</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">签订<br>台数</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">签订<br>额</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">排产<br>台数</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">排产<br>额</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">发货<br>台数</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">发货<br>额</th>
+            <th style="padding:8px 8px;border-bottom:2px solid #e0e0e0;font-size:10px">回款</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:8px 10px;font-weight:600;border-bottom:1px solid #eee">🇷🇺 俄罗斯</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+25%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+22%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+17%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+15%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+8%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+11%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+24%</td>
+          </tr>
+          <tr style="background:#fafafa">
+            <td style="padding:8px 10px;font-weight:600;border-bottom:1px solid #eee">🏔️ 中亚</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-8%</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-5%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+3%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+7%</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-12%</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-9%</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-3%</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px;font-weight:600;border-bottom:1px solid #eee">🌏 亚洲1</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+18%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+15%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+12%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+7%</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-4%</td>
+            <td style="padding:6px;text-align:center;background:#ffcdd2;color:#b71c1c;font-weight:700;border-radius:4px">-2%</td>
+            <td style="padding:6px;text-align:center;background:#c8e6c9;color:#1b5e20;font-weight:700;border-radius:4px">+9%</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:8px;font-size:10px;color:#aaa">💡 点击任意增长率可下钻到该大区+指标的模块明细</div>
+    </div>
+
+    <!-- Section C: Mini bar charts for top/bottom regions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="background:#fff;border-radius:10px;padding:14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">🏆 签订额增长最快大区</div>
+        <div style="font-size:11px">
+          <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">
+            <span style="width:50px;font-weight:600">俄罗斯</span>
+            <span style="flex:1;background:#eee;height:20px;border-radius:4px"><span style="background:#4C78A8;height:100%;width:90%;display:block;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px;font-weight:600">+22%</span></span>
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">
+            <span style="width:50px;font-weight:600">亚洲1</span>
+            <span style="flex:1;background:#eee;height:20px;border-radius:4px"><span style="background:#54A867;height:100%;width:75%;display:block;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px;font-weight:600">+15%</span></span>
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">
+            <span style="width:50px;font-weight:600">非洲</span>
+            <span style="flex:1;background:#eee;height:20px;border-radius:4px"><span style="background:#7BA868;height:100%;width:60%;display:block;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px;font-weight:600">+12%</span></span>
+          </div>
+        </div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">⚠️ 签订额下降大区</div>
+        <div style="font-size:11px">
+          <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">
+            <span style="width:50px;font-weight:600">中亚</span>
+            <span style="flex:1;background:#eee;height:20px;border-radius:4px"><span style="background:#D4645C;height:100%;width:50%;display:block;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px;font-weight:600">-5%</span></span>
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">
+            <span style="width:50px;font-weight:600">中东</span>
+            <span style="flex:1;background:#eee;height:20px;border-radius:4px"><span style="background:#C86C8A;height:100%;width:60%;display:block;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px;font-weight:600">-8%</span></span>
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">
+            <span style="width:50px;font-weight:600">欧洲</span>
+            <span style="flex:1;background:#eee;height:20px;border-radius:4px"><span style="background:#5AA3AE;height:100%;width:30%;display:block;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px;font-weight:600">-2%</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section">
+  <h3>当选择单个大区时（如「俄罗斯」）</h3>
+  <div class="mockup">
+    <div class="mockup-header">俄罗斯 — 模块级增长率明细</div>
+    <div class="mockup-body" style="padding:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="background:#4C78A8;color:#fff;padding:2px 10px;border-radius:10px;font-size:11px">🇷🇺 俄罗斯</span>
+        <span style="font-size:11px;color:#888">签订台数 +25% · 签订额 +22% · 回款 +24%</span>
+      </div>
+      <table style="width:100%;font-size:11px;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:6px;text-align:left;border:1px solid #e0e0e0">模块</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">签订台数</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">签订额</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">排产台数</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">排产额</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">发货台数</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">发货额</th>
+            <th style="padding:6px;border:1px solid #e0e0e0">回款</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:5px">空压机</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+30%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+28%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+22%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+20%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+15%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+18%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+32%</td>
+          </tr>
+          <tr style="background:#fafafa"><td style="padding:5px">钻机</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+18%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+15%</td>
+            <td style="background:#ffcdd2;color:#b71c1c;text-align:center;font-weight:600">-5%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+8%</td>
+            <td style="background:#ffcdd2;color:#b71c1c;text-align:center;font-weight:600">-10%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+3%</td>
+            <td style="background:#c8e6c9;color:#1b5e20;text-align:center;font-weight:600">+19%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px">
+  <h3>设计要点总结</h3>
+  <table style="width:100%;font-size:12px">
+    <tr><td style="padding:4px 8px;font-weight:600;width:120px">核心视觉</td><td>增长率大数字 + 绿/红色块，绝对值退到小字辅助</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">数据完整</td><td>7指标 × 8大区 全部在一个热力图表格中呈现</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">灵动感</td><td>7张增长率卡片 → 热力图矩阵 → 排行条 → 模块下钻，有层次节奏</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">筛选交互</td><td>下拉框切换大区：全部→增长率热力图 / 单个→模块明细表</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">技术复用</td><td>左侧 看板/表格 切换保留，ECharts 可选做排行图的动效</td></tr>
+  </table>
+</div>

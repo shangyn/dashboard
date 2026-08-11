@@ -18,6 +18,8 @@
       <div class="upload-text">拖放文件到此处或点击选择</div>
       <div class="upload-hint">{{ fileTypeHint }}</div>
     </el-upload>
+    <div class="upload-time" v-if="lastUploadTime">上次上传：{{ lastUploadTime }}</div>
+    <div class="upload-time" v-else>尚未上传</div>
   </div>
 </template>
 
@@ -28,6 +30,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 
 const props = defineProps({
   config: { type: Object, required: true },
+  lastUploadTime: { type: String, default: '' },
 })
 
 const emit = defineEmits(['uploaded'])
@@ -53,8 +56,9 @@ function onSuccess(response) {
   }
 }
 
-function onError() {
-  ElMessage.error('上传失败')
+function onError(error) {
+  const msg = error?.response?.data?.msg || error?.message || '上传失败'
+  ElMessage.error(msg)
 }
 </script>
 
@@ -69,4 +73,5 @@ function onError() {
 .upload-icon { color: #c0c4cc; }
 .upload-text { font-size: 12px; color: #999; margin-top: 8px; }
 .upload-hint { font-size: 10px; color: #bbb; margin-top: 4px; }
+.upload-time { font-size: 11px; color: #999; margin-top: 8px; text-align: right; }
 </style>

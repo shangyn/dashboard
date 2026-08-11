@@ -1,5 +1,5 @@
 import os
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from config import Config
@@ -10,6 +10,8 @@ from roles import roles_bp
 from modules import modules_bp
 from upload_config import upload_config_bp
 from upload import upload_bp
+from operations import operations_bp
+from dashboards.contract_completion.blueprint import cc_bp
 
 
 def create_app():
@@ -44,6 +46,8 @@ def create_app():
     app.register_blueprint(modules_bp)
     app.register_blueprint(upload_config_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(operations_bp)
+    app.register_blueprint(cc_bp)
 
     # 托管 dashboard HTML 文件
     @app.route('/dashboards/<path:filename>')
@@ -67,6 +71,23 @@ def create_app():
             return send_from_directory(app.static_folder, path)
         return send_from_directory(app.static_folder, 'index.html')
 
+    # 全局错误处理
+    @app.errorhandler(500)
+    def internal_error(e):
+        import traceback
+        app.logger.error(f'500 error: {traceback.format_exc()}')
+        return {'error': '服务器内部错误，请联系管理员', 'detail': str(e)}, 500
+
+    @app.errorhandler(404)
+    def not_found(e):
+        # API 请求返回 JSON 错误
+        if request.path.startswith('/api/'):
+            return {'error': '资源不存在'}, 404
+        # SPA history 模式 fallback：前端路由返回 index.html
+        if os.path.isdir(app.static_folder):
+            return send_from_directory(app.static_folder, 'index.html')
+        return {'error': '资源不存在'}, 404
+
     # 初始化数据库和种子数据
     with app.app_context():
         seed_database(app)
@@ -76,4 +97,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)

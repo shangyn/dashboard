@@ -105,7 +105,7 @@ const props = defineProps({
 })
 
 // ── Selected metric (drives heatmap highlight + chart) ──
-const selectedMetric = ref('sign_amount')
+const selectedMetric = ref('sign_units')
 
 // ── Data helpers ──
 
@@ -113,53 +113,58 @@ function getRegionDataRows() {
   return props.rows.filter(r => r.type === 'data')
 }
 
-// Aggregate data rows by region
-const regionAggregates = computed(() => {
-  const map = {}
-  const dataRows = getRegionDataRows()
-  for (const r of dataRows) {
-    const region = r.region
-    if (!region) continue
-    if (!map[region]) {
-      map[region] = {}
-      for (const mk of dashboardMetricKeys) {
-        map[region][mk.id] = { prev: 0, curr: 0 }
-      }
-    }
-    for (const mk of dashboardMetricKeys) {
-      map[region][mk.id].prev += (r[mk.id + '_prev'] || 0)
-      map[region][mk.id].curr += (r[mk.id + '_curr'] || 0)
-    }
+// Amount metrics use _total fields (含海外差额), unit metrics use raw fields
+function _fieldBase(mkId) {
+  const totalMap = {
+    'sign_amount': 'sign_total',
+    'schedule_amount': 'schedule_total',
+    'ship_amount': 'ship_total',
+    'payment': 'payment_total',
   }
-  // Compute growth
-  for (const region of Object.keys(map)) {
+  return totalMap[mkId] || mkId
+}
+
+// Pre-computed rows from backend
+const grandTotalRow = computed(() => {
+  return props.rows.find(r => r.type === 'grand_total') || null
+})
+
+const subtotalRows = computed(() => {
+  return props.rows.filter(r => r.type === 'subtotal')
+})
+
+// Map: region → { metricId: growth } from subtotal rows (using _total fields for amounts)
+const subtotalGrowthMap = computed(() => {
+  const map = {}
+  for (const row of subtotalRows.value) {
+    const region = row.region
+    if (!region) continue
+    map[region] = {}
     for (const mk of dashboardMetricKeys) {
-      const d = map[region][mk.id]
-      if (d.prev === 0) {
-        d.growth = null
-      } else {
-        d.growth = Math.round((d.curr - d.prev) / d.prev * 100)
-      }
+      const fb = _fieldBase(mk.id)
+      map[region][mk.id] = row[fb + '_growth'] ?? null
     }
   }
   return map
 })
 
-// Grand totals for KPI cards
+// Grand totals for KPI cards — read from grand_total row directly (using _total fields for amounts)
 const grandPrev = computed(() => {
   const totals = {}
-  const dataRows = getRegionDataRows()
+  const row = grandTotalRow.value
   for (const mk of dashboardMetricKeys) {
-    totals[mk.id] = dataRows.reduce((sum, r) => sum + (r[mk.id + '_prev'] || 0), 0)
+    const fb = _fieldBase(mk.id)
+    totals[mk.id] = row ? (row[fb + '_prev'] || 0) : 0
   }
   return totals
 })
 
 const grandCurr = computed(() => {
   const totals = {}
-  const dataRows = getRegionDataRows()
+  const row = grandTotalRow.value
   for (const mk of dashboardMetricKeys) {
-    totals[mk.id] = dataRows.reduce((sum, r) => sum + (r[mk.id + '_curr'] || 0), 0)
+    const fb = _fieldBase(mk.id)
+    totals[mk.id] = row ? (row[fb + '_curr'] || 0) : 0
   }
   return totals
 })
@@ -193,8 +198,9 @@ const heatmapRows = computed(() => {
         }
       }
       for (const mk of dashboardMetricKeys) {
-        modMap[mod][mk.id].prev += (r[mk.id + '_prev'] || 0)
-        modMap[mod][mk.id].curr += (r[mk.id + '_curr'] || 0)
+        const fb = _fieldBase(mk.id)
+        modMap[mod][mk.id].prev += (r[fb + '_prev'] || 0)
+        modMap[mod][mk.id].curr += (r[fb + '_curr'] || 0)
       }
     }
     const result = Object.entries(modMap).map(([mod, d]) => {
@@ -211,14 +217,14 @@ const heatmapRows = computed(() => {
     return result
   }
 
-  // All regions → region-level heatmap
+  // All regions → region-level heatmap (read from subtotal rows)
   const result = []
   for (const region of props.regionOrder) {
-    const agg = regionAggregates.value[region]
-    if (!agg) continue
+    const growthMap = subtotalGrowthMap.value[region]
+    if (!growthMap) continue
     const row = { label: region }
     for (const mk of dashboardMetricKeys) {
-      row[mk.id] = agg[mk.id].growth
+      row[mk.id] = growthMap[mk.id]
     }
     result.push(row)
   }
@@ -234,9 +240,9 @@ const selectedMetricLabel = computed(() => {
 const rankingData = computed(() => {
   const list = []
   for (const region of props.regionOrder) {
-    const agg = regionAggregates.value[region]
-    if (!agg) continue
-    list.push({ region, growth: agg[selectedMetric.value]?.growth ?? null })
+    const growthMap = subtotalGrowthMap.value[region]
+    if (!growthMap) continue
+    list.push({ region, growth: growthMap[selectedMetric.value] ?? null })
   }
   list.sort((a, b) => (b.growth ?? -Infinity) - (a.growth ?? -Infinity))
   return list
@@ -342,13 +348,15 @@ watch(
   { deep: true }
 )
 
-// Dispose chart when switching to single-region view (v-if removes DOM)
+// Dispose when switching to single-region; re-init when switching back
 watch(
   () => props.selectedRegion,
   (region) => {
     if (region && chart) {
       chart.dispose()
       chart = null
+    } else if (!region) {
+      nextTick(() => initChart())
     }
   }
 )
@@ -450,7 +458,7 @@ function cellStyle(v) {
   white-space: nowrap;
 }
 .tyd-heatmap-table td { padding: 9px 8px; border-bottom: 1px solid #f0f0f0; }
-.tyd-hm-rowhead { text-align: left; padding-left: 12px; min-width: 70px; white-space: nowrap; }
+.tyd-hm-rowhead { text-align: left; padding-left: 12px; min-width: 30px; white-space: nowrap; }
 .tyd-hm-cell { text-align: center; border-radius: 4px; font-size: 12px; }
 
 /* heatmap column highlight */

@@ -19,6 +19,9 @@ const routes = [
       { path: 'role-manage', component: () => import('../views/admin/RoleManage.vue') },
       { path: 'module-manage', component: () => import('../views/admin/ModuleManage.vue') },
       { path: 'upload-config-manage', component: () => import('../views/admin/UploadConfigManage.vue') },
+      { path: 'operation-logs', component: () => import('../views/admin/OperationLogs.vue') },
+      { path: 'contract-completion', component: () => import('../views/ContractCompletion.vue') },
+      { path: 'two-year-comparison', component: () => import('../views/TwoYearComparison.vue') },
       { path: 'dashboard-view/:id', component: () => import('../views/Dashboard.vue'), props: true, meta: { hideHeader: true } },
     ],
   },
@@ -32,6 +35,8 @@ const routes = [
       { path: 'dashboard/:id', component: () => import('../views/Dashboard.vue'), props: true, meta: { hideHeader: true } },
       { path: 'upload-console', component: () => import('../views/UploadConsole.vue') },
       { path: 'upload-console/:code', component: () => import('../views/UploadConsole.vue') },
+      { path: 'contract-completion', component: () => import('../views/ContractCompletion.vue') },
+      { path: 'two-year-comparison', component: () => import('../views/TwoYearComparison.vue') },
     ],
   },
   {

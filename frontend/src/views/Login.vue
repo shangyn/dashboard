@@ -5,7 +5,7 @@
 
     <el-card class="login-card">
       <div class="login-header">
-        <h2>企业管理系统</h2>
+        <h2>数据看板</h2>
         <p>Enterprise Management</p>
       </div>
 

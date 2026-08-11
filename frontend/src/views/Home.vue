@@ -52,7 +52,12 @@ onMounted(async () => {
 })
 
 function goDashboard(module) {
-  router.push(`/dashboard/${module.id}`)
+  // Vue SPA 路由（如 /two-year-comparison）直接跳转，HTML文件走iframe
+  if (module.url && module.url.startsWith('/') && !module.url.endsWith('.html')) {
+    router.push(module.url)
+  } else {
+    router.push(`/dashboard/${module.id}`)
+  }
 }
 </script>
 
@@ -86,19 +91,18 @@ function goDashboard(module) {
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  gap: 32px;
 }
 
 .module-card {
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
-  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 40px;
+  padding: 36px 32px;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   text-align: center;
@@ -117,7 +121,7 @@ function goDashboard(module) {
   align-items: center;
   justify-content: center;
   color: #fff;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   flex-shrink: 0;
 }
 
@@ -125,7 +129,7 @@ function goDashboard(module) {
   font-size: 17px;
   font-weight: 700;
   color: #1a1a2e;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   line-height: 1.3;
 }
 
@@ -133,8 +137,14 @@ function goDashboard(module) {
   font-size: 13px;
   color: #777;
   line-height: 1.7;
-  margin: 0 0 20px;
-  flex: 1;
+  margin: 0 0 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 44px;
+  word-break: break-word;
 }
 
 .card-link {

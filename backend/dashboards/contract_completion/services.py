@@ -4,7 +4,7 @@
 指标计算、数据聚合、未匹配检测
 """
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask import current_app
 from sqlalchemy import or_
 from models import db
@@ -21,14 +21,17 @@ _two_year_fingerprint = None    # 缓存时的数据指纹
 def _get_data_fingerprint():
     """快速生成数据指纹（轻量 COUNT 查询），用于判断缓存是否失效"""
     from sqlalchemy import or_
+    from dashboards.contract_completion.models import TradeModuleData, OverseasDiff
     ledger_count = LedgerContract.query.filter(
         LedgerContract.source.in_(['ledger', 'report_a', 'report_b']),
         or_(LedgerContract.product_status == None, LedgerContract.product_status != '已作废')
     ).count()
     mapping_count = CountryMapping.query.count()
     payment_count = PaymentCollection.query.count()
-    today_str = date.today().isoformat()
-    return f"{ledger_count}|{mapping_count}|{payment_count}|{today_str}"
+    trade_count = TradeModuleData.query.count()
+    overseas_count = OverseasDiff.query.count()
+    today_str = (date.today() - timedelta(days=1)).isoformat()
+    return f"{ledger_count}|{mapping_count}|{payment_count}|{trade_count}|{overseas_count}|{today_str}"
 
 
 def invalidate_two_year_cache():
@@ -85,7 +88,8 @@ def _load_mapping():
     """加载国家映射表 → {country: {region, module, manager, salesperson}}"""
     mappings = CountryMapping.query.all()
     return {m.country: {
-        'region': m.region, 'module': m.module_name,
+        'region': '商贸合计' if m.region == '商贸配件' else m.region,
+        'module': m.module_name,
         'manager': m.module_manager, 'salesperson': m.salesperson,
     } for m in mappings}
 
@@ -124,6 +128,9 @@ def _resolve_contract(c, mapping, unmatched_list):
 
     region = cm['region']
     module = cm['module']
+    # "商贸配件"大区归一化到"商贸合计"
+    if region == '商贸配件':
+        region = '商贸合计'
     # 产品型号含"改造" → 强制模块="改造"
     if c.product_type and '改造' in str(c.product_type):
         module = '改造'
@@ -240,6 +247,10 @@ def _compute_aggregations(year, mapping, unmatched_list):
     payments = PaymentCollection.query.filter(
         PaymentCollection.payment_date >= year_start,
         PaymentCollection.payment_date <= year_end,
+        ~PaymentCollection.node_type.in_(['抵佣金', '手续费']),
+        PaymentCollection.agent_name != '新加坡分公司(关联方)',
+        ~PaymentCollection.contract_no.like('DHN%'),
+        ~PaymentCollection.contract_no.like('YBN%'),
     ).all()
 
     # 建立合同号→(region,module,sp)的快速查找
@@ -677,6 +688,19 @@ CATEGORY_MAP = {
     '商贸1': '', '商贸2': '', '商贸3': '', '配件-1': '', '配件-2': '', '改造': '',
 }
 
+# AZT合同 → 模块映射（台账中不存在的合同，回款通过此映射归入对应模块）
+AZT_MODULE_MAP = {
+    'AZT-230002T': '加勒比海',
+    'AZT-240002T': '俄罗斯（东部）',
+    'AZT-240003T': '科威特',
+    'AZT-240008T': '俄罗斯（东部）',
+    'AZT-250009T': '澳大利亚',
+    'AZT-250010T': '俄罗斯（西南）',
+    'AZT-250013T': '俄罗斯（东部）',
+    'AZT-250014T': '俄罗斯（东部）',
+    'AZT-250015T': '俄罗斯（西南）',
+}
+
 
 def _get_category(module_name):
     """获取模块的市场类别，优先精确匹配，其次模板映射"""
@@ -698,31 +722,55 @@ def get_two_year_comparison():
     if _two_year_fingerprint == fp and _two_year_cache is not None:
         return _two_year_cache
 
-    today = date.today()
-    year_curr = today.year
-    year_prev = today.year - 1
+    # 数据截止日期 = 昨天（当天数据通常尚未入库）
+    cutoff = date.today() - timedelta(days=1)
+    year_curr = cutoff.year
+    year_prev = cutoff.year - 1
 
-    # 今年范围：1月1日 ~ 6月30日（上半年）
+    # 今年范围：1月1日 ~ 昨天
     curr_start = date(year_curr, 1, 1)
-    curr_end = date(year_curr, 6, 30)
-    # 去年范围：1月1日 ~ 6月30日（上半年）
+    curr_end = cutoff
+    # 去年范围：1月1日 ~ 去年同日
     prev_start = date(year_prev, 1, 1)
-    prev_end = date(year_prev, 6, 30)
+    prev_end = date(year_prev, cutoff.month, cutoff.day)
 
     # 加载国家映射表
     mapping = _load_mapping()
     contract_map = {}  # contract_no → (region, module)
     for c in LedgerContract.query.filter(
-        LedgerContract.source == 'ledger',
-        or_(LedgerContract.product_status == None, LedgerContract.product_status != '已作废')
+        LedgerContract.source == 'ledger'
     ).all():
         if c.contract_no and c.country:
-            cm = mapping.get(c.country)
-            if cm:
-                contract_map[c.contract_no] = (cm['region'], cm['module'])
+            # 改造梯回款归入商贸合计/改造（与签约/排产/发货逻辑一致）
+            if c.product_type and '改造' in str(c.product_type):
+                contract_map[c.contract_no] = ('商贸合计', '改造')
+            else:
+                cm = mapping.get(c.country)
+                if cm:
+                    contract_map[c.contract_no] = (cm['region'], cm['module'])
+
+    # 补充 AZT 合同映射（这些合同台账中不存在，通过固定映射归入模块）
+    _azt_region_cache = {}
+    for azt_cn, azt_module in AZT_MODULE_MAP.items():
+        if azt_module not in _azt_region_cache:
+            for cm in mapping.values():
+                if cm['module'] == azt_module:
+                    _azt_region_cache[azt_module] = cm['region']
+                    break
+            else:
+                _azt_region_cache[azt_module] = None
+        region = _azt_region_cache[azt_module]
+        if region:
+            contract_map[azt_cn] = (region, azt_module)
 
     # ── 聚合：按 (region, module) 分组 ──
     agg = {}
+    # 单独追踪真正改造梯（product_type含"改造"）的台数，用于国际总计排除
+    gaizao_true_units = {
+        'sign_units_prev': 0, 'sign_units_curr': 0,
+        'schedule_units_prev': 0, 'schedule_units_curr': 0,
+        'ship_units_prev': 0, 'ship_units_curr': 0,
+    }
 
     def _new_entry(region, module):
         return {
@@ -754,6 +802,14 @@ def get_two_year_comparison():
         if key not in seen_modules:
             seen_modules.add(key)
             agg[key] = _new_entry('商贸合计', tm)
+    # 年度指标中有但映射表中没有的模块也预填充（如德国西班牙），确保即使无合同数据也展示
+    for (region, module), targets in ANNUAL_TARGETS.items():
+        if region in ('商贸配件',):
+            continue  # 商贸配件的指标映射到商贸合计
+        key = (region, module)
+        if key not in seen_modules:
+            seen_modules.add(key)
+            agg[key] = _new_entry(region, module)
 
     def _ensure(region, module):
         key = (region, module)
@@ -785,36 +841,55 @@ def get_two_year_comparison():
             continue
 
         d = _ensure(region, module)
+        # 判断是否为真正改造梯（product_type含"改造"），其台数需从国际总计中排除
+        is_true_gaizao = bool(c.product_type and '改造' in str(c.product_type))
 
         # 签订
         if c.sign_date:
             if prev_start <= c.sign_date <= prev_end:
                 d['sign_units_prev'] += c.unit_count or 0
                 d['sign_amount_prev'] += c.contract_amount_rmb or 0
+                if is_true_gaizao:
+                    gaizao_true_units['sign_units_prev'] += c.unit_count or 0
             if curr_start <= c.sign_date <= curr_end:
                 d['sign_units_curr'] += c.unit_count or 0
                 d['sign_amount_curr'] += c.contract_amount_rmb or 0
+                if is_true_gaizao:
+                    gaizao_true_units['sign_units_curr'] += c.unit_count or 0
 
         # 排产
         if c.schedule_date:
             if prev_start <= c.schedule_date <= prev_end:
                 d['schedule_units_prev'] += c.unit_count or 0
                 d['schedule_amount_prev'] += c.contract_amount_rmb or 0
+                if is_true_gaizao:
+                    gaizao_true_units['schedule_units_prev'] += c.unit_count or 0
             if curr_start <= c.schedule_date <= curr_end:
                 d['schedule_units_curr'] += c.unit_count or 0
                 d['schedule_amount_curr'] += c.contract_amount_rmb or 0
+                if is_true_gaizao:
+                    gaizao_true_units['schedule_units_curr'] += c.unit_count or 0
 
         # 发货
         if c.delivery_date:
             if prev_start <= c.delivery_date <= prev_end:
                 d['ship_units_prev'] += c.unit_count or 0
                 d['ship_amount_prev'] += c.contract_amount_rmb or 0
+                if is_true_gaizao:
+                    gaizao_true_units['ship_units_prev'] += c.unit_count or 0
             if curr_start <= c.delivery_date <= curr_end:
                 d['ship_units_curr'] += c.unit_count or 0
                 d['ship_amount_curr'] += c.contract_amount_rmb or 0
+                if is_true_gaizao:
+                    gaizao_true_units['ship_units_curr'] += c.unit_count or 0
 
-    # 回款聚合
-    payments = PaymentCollection.query.all()
+    # 回款聚合（排除：抵佣金/手续费、新加坡分公司关联方、DHN/YBN合同）
+    payments = PaymentCollection.query.filter(
+        ~PaymentCollection.node_type.in_(['抵佣金', '手续费']),
+        PaymentCollection.agent_name != '新加坡分公司(关联方)',
+        ~PaymentCollection.contract_no.like('DHN%'),
+        ~PaymentCollection.contract_no.like('YBN%'),
+    ).all()
     for p in payments:
         info = contract_map.get(p.contract_no)
         if not info:
@@ -842,12 +917,34 @@ def get_two_year_comparison():
 
     def _make_row(typ, region, module, d):
         cat = _get_category(module) if typ == 'data' else ''
-        # sign_total = sign_amount + overseas_diff (海外差额暂为0)
-        st_p = _wan(d['sign_amount_prev']) + (0)
-        st_c = _wan(d['sign_amount_curr']) + (0)
-        # payment_total = payment + overseas_payment (海外回款暂为0)
-        pt_p = _wan(d['payment_prev']) + (0)
-        pt_c = _wan(d['payment_curr']) + (0)
+
+        # 海外差值：万元单位，直接从 d 取（None → 显示为 '-'）
+        od_sign_c = d.get('overseas_diff_curr') or 0
+        od_schedule_c = d.get('schedule_overseas_diff_curr') or 0
+        od_ship_c = d.get('ship_overseas_diff_curr') or 0
+        od_payment_c = d.get('overseas_payment_curr') or 0
+        # 2025年海外差值均为 None
+        od_sign_p = d.get('overseas_diff_prev')
+        od_schedule_p = d.get('schedule_overseas_diff_prev')
+        od_ship_p = d.get('ship_overseas_diff_prev')
+        od_payment_p = d.get('overseas_payment_prev')
+
+        # 合计 = 国内额（元→万元）+ 海外差额（万元）
+        st_p = _wan(d['sign_amount_prev']) + (od_sign_p or 0)
+        st_c = _wan(d['sign_amount_curr']) + od_sign_c
+        sc_p = _wan(d['schedule_amount_prev']) + (od_schedule_p or 0)
+        sc_c = _wan(d['schedule_amount_curr']) + od_schedule_c
+        sh_p = _wan(d['ship_amount_prev']) + (od_ship_p or 0)
+        sh_c = _wan(d['ship_amount_curr']) + od_ship_c
+        pt_p = _wan(d['payment_prev']) + (od_payment_p or 0)
+        pt_c = _wan(d['payment_curr']) + od_payment_c
+
+        # 合计增长率基于合计值计算
+        def _total_growth(tp, tc):
+            if tp == 0:
+                return None
+            return round((tc - tp) / tp * 100)
+
         return {
             'type': typ,
             'region': region,
@@ -859,45 +956,83 @@ def get_two_year_comparison():
             'sign_amount_prev': _wan(d['sign_amount_prev']),
             'sign_amount_curr': _wan(d['sign_amount_curr']),
             'sign_amount_growth': _growth(d['sign_amount_prev'], d['sign_amount_curr']),
-            'overseas_diff_prev': None, 'overseas_diff_curr': None,
+            'overseas_diff_prev': od_sign_p, 'overseas_diff_curr': d.get('overseas_diff_curr'),
             'sign_total_prev': st_p,
             'sign_total_curr': st_c,
-            'sign_total_growth': _growth(d['sign_amount_prev'], d['sign_amount_curr']),
+            'sign_total_growth': _total_growth(st_p, st_c),
             'schedule_units_prev': d['schedule_units_prev'],
             'schedule_units_curr': d['schedule_units_curr'],
             'schedule_units_growth': _growth(d['schedule_units_prev'], d['schedule_units_curr']),
             'schedule_amount_prev': _wan(d['schedule_amount_prev']),
             'schedule_amount_curr': _wan(d['schedule_amount_curr']),
             'schedule_amount_growth': _growth(d['schedule_amount_prev'], d['schedule_amount_curr']),
-            # 排产海外差额（暂为0）
-            'schedule_overseas_diff_prev': None, 'schedule_overseas_diff_curr': None,
-            'schedule_total_prev': _wan(d['schedule_amount_prev']) + (0),
-            'schedule_total_curr': _wan(d['schedule_amount_curr']) + (0),
-            'schedule_total_growth': _growth(d['schedule_amount_prev'], d['schedule_amount_curr']),
+            'schedule_overseas_diff_prev': od_schedule_p, 'schedule_overseas_diff_curr': d.get('schedule_overseas_diff_curr'),
+            'schedule_total_prev': sc_p,
+            'schedule_total_curr': sc_c,
+            'schedule_total_growth': _total_growth(sc_p, sc_c),
             'ship_units_prev': d['ship_units_prev'],
             'ship_units_curr': d['ship_units_curr'],
             'ship_units_growth': _growth(d['ship_units_prev'], d['ship_units_curr']),
             'ship_amount_prev': _wan(d['ship_amount_prev']),
             'ship_amount_curr': _wan(d['ship_amount_curr']),
             'ship_amount_growth': _growth(d['ship_amount_prev'], d['ship_amount_curr']),
-            # 发货海外差额（暂为0）
-            'ship_overseas_diff_prev': None, 'ship_overseas_diff_curr': None,
-            'ship_total_prev': _wan(d['ship_amount_prev']) + (0),
-            'ship_total_curr': _wan(d['ship_amount_curr']) + (0),
-            'ship_total_growth': _growth(d['ship_amount_prev'], d['ship_amount_curr']),
+            'ship_overseas_diff_prev': od_ship_p, 'ship_overseas_diff_curr': d.get('ship_overseas_diff_curr'),
+            'ship_total_prev': sh_p,
+            'ship_total_curr': sh_c,
+            'ship_total_growth': _total_growth(sh_p, sh_c),
             'payment_prev': _wan(d['payment_prev']),
             'payment_curr': _wan(d['payment_curr']),
-            'overseas_payment_prev': None, 'overseas_payment_curr': None,
+            'overseas_payment_prev': od_payment_p, 'overseas_payment_curr': d.get('overseas_payment_curr'),
             'payment_total_prev': pt_p,
             'payment_total_curr': pt_c,
-            'payment_total_growth': _growth(d['payment_prev'], d['payment_curr']),
+            'payment_total_growth': _total_growth(pt_p, pt_c),
         }
+
+    # ── 加载海外差值数据（两年）并注入聚合 ──
+    from dashboards.contract_completion.models import OverseasDiff
+
+    def _load_overseas_lookup(year):
+        """加载指定年份的海外差值 {module_name: {sign_diff, schedule_diff, ship_diff, payment_diff}}"""
+        lookup = {}
+        for od in OverseasDiff.query.filter_by(data_year=year).all():
+            lookup[od.module_name] = {
+                'sign_diff': od.sign_diff,
+                'schedule_diff': od.schedule_diff,
+                'ship_diff': od.ship_diff,
+                'payment_diff': od.payment_diff,
+            }
+        if '印度' in lookup:
+            lookup['印度公建'] = lookup.pop('印度')
+        return lookup
+
+    overseas_prev = _load_overseas_lookup(year_prev)
+    overseas_curr = _load_overseas_lookup(year_curr)
+
+    def _round_wan(v):
+        """万元值取整（海外差值已是万元，直接 round）"""
+        if v is None:
+            return None
+        return round(v)
+
+    # 注入到聚合条目中（万元单位，不经过 _wan 转换；取整存储）
+    for key, d in agg.items():
+        region, module = key
+        od_p = overseas_prev.get(module, {})
+        od_c = overseas_curr.get(module, {})
+        d['overseas_diff_prev'] = _round_wan(od_p.get('sign_diff'))
+        d['overseas_diff_curr'] = _round_wan(od_c.get('sign_diff'))
+        d['schedule_overseas_diff_prev'] = _round_wan(od_p.get('schedule_diff'))
+        d['schedule_overseas_diff_curr'] = _round_wan(od_c.get('schedule_diff'))
+        d['ship_overseas_diff_prev'] = _round_wan(od_p.get('ship_diff'))
+        d['ship_overseas_diff_curr'] = _round_wan(od_c.get('ship_diff'))
+        d['overseas_payment_prev'] = _round_wan(od_p.get('payment_diff'))
+        d['overseas_payment_curr'] = _round_wan(od_c.get('payment_diff'))
 
     # 大区排序
     region_order = ['俄罗斯', '中亚', '亚洲1', '亚洲2', '美洲', '中东', '非洲', '欧洲']
 
     # 收集非商贸模块并按大区排序
-    normal_entries = [(k, v) for k, v in agg.items() if v['region'] not in ('商贸合计',)]
+    normal_entries = [(k, v) for k, v in agg.items() if v['region'] not in ('商贸合计', '商贸配件')]
     normal_entries.sort(key=lambda x: (
         region_order.index(x[1]['region']) if x[1]['region'] in region_order else 99,
         x[1]['module']
@@ -930,6 +1065,29 @@ def get_two_year_comparison():
         rows.append(_make_row('subtotal', current_region,
                               f'{current_region}合计', subtotals[current_region]))
 
+    # ── 注入商贸模块汇总数据（从商贸数据.xlsx上传，两年） ──
+    from dashboards.contract_completion.models import TradeModuleData
+
+    def _inject_trade_data(year, suffix):
+        """注入指定年份的商贸模块数据到聚合表
+        仅覆盖非零字段，避免配件-1/2的payment-only记录覆盖合同级签单/排产/发货数据
+        """
+        for td in TradeModuleData.query.filter_by(data_year=year).all():
+            tmod = td.module_name
+            if tmod in TRADE_MODULES_ORDER:
+                d = _ensure('商贸合计', tmod)
+                if td.sign_amount:
+                    d[f'sign_amount_{suffix}'] = td.sign_amount
+                if td.schedule_amount:
+                    d[f'schedule_amount_{suffix}'] = td.schedule_amount
+                if td.ship_amount:
+                    d[f'ship_amount_{suffix}'] = td.ship_amount
+                if td.payment_amount:
+                    d[f'payment_{suffix}'] = td.payment_amount
+
+    _inject_trade_data(year_prev, 'prev')
+    _inject_trade_data(year_curr, 'curr')
+
     # ── 商贸行 ──
     trade_total = {}
     for tmod in TRADE_MODULES_ORDER:
@@ -940,11 +1098,18 @@ def get_two_year_comparison():
             for k in d:
                 if isinstance(d[k], (int, float)):
                     trade_total[k] += d[k]
-            rows.append(_make_row('trade', '商贸合计', tmod, d))
+            row = _make_row('trade', '商贸合计', tmod, d)
+            # 商贸/配件行不显示金额增长率（2025年数据不完整，增长比例无意义）
+            for gf in ['sign_amount_growth', 'sign_total_growth',
+                       'schedule_amount_growth', 'schedule_total_growth',
+                       'ship_amount_growth', 'ship_total_growth',
+                       'payment_total_growth']:
+                row[gf] = None
+            rows.append(row)
 
-    # 备件商贸合计
+    # 商贸配件合计
     if trade_total:
-        rows.append(_make_row('subtotal', '商贸合计', '备件商贸合计', trade_total))
+        rows.append(_make_row('subtotal', '商贸合计', '商贸配件合计', trade_total))
 
     # ── 国际总计（聚合原始数据，避免万元重复转换） ──
     grand_raw = {}
@@ -954,6 +1119,11 @@ def get_two_year_comparison():
         for k in d:
             if isinstance(d[k], (int, float)):
                 grand_raw[k] = grand_raw.get(k, 0) + d[k]
+    # 国际总计的台数不包含真正改造梯（product_type含"改造"的合同台数）
+    for field in ['sign_units_prev', 'sign_units_curr',
+                  'schedule_units_prev', 'schedule_units_curr',
+                  'ship_units_prev', 'ship_units_curr']:
+        grand_raw[field] = grand_raw.get(field, 0) - gaizao_true_units.get(field, 0)
     if grand_raw:
         rows.append(_make_row('grand_total', '', '国际总计', grand_raw))
 
@@ -975,13 +1145,650 @@ def get_two_year_comparison():
     return result
 
 
+
+# ── 年度指标 ──────────────────────────────────────────
+
+# 年度指标 — 从 2026年合同完成情况表 抄录
+# key: (region, module)
+ANNUAL_TARGETS = {
+    ('俄罗斯', '俄罗斯（中部）'): {
+        "sign_units": 1683, "sign_amount": 35680.0,
+        "payment": 13775.0,
+        "ship_units": 750, "ship_amount": 14500.0,
+        "schedule_units": 750, "schedule_amount": 14500.0,
+        "person": '丛峻', "backlog_units": 102,
+    },
+    ('俄罗斯', '俄罗斯（西部）'): {
+        "sign_units": 1683, "sign_amount": 35680.0,
+        "payment": 13775.0,
+        "ship_units": 750, "ship_amount": 14500.0,
+        "schedule_units": 750, "schedule_amount": 14500.0,
+        "person": '单一', "backlog_units": 107,
+    },
+    ('俄罗斯', '俄罗斯（东部）'): {
+        "sign_units": 400, "sign_amount": 6544.0,
+        "payment": 2524.15,
+        "ship_units": 160, "ship_amount": 2657.0,
+        "schedule_units": 160, "schedule_amount": 2657.0,
+        "person": '宋艾亭', "backlog_units": 30,
+    },
+    ('俄罗斯', '罗斯托夫'): {
+        "sign_units": 270, "sign_amount": 4428.0,
+        "payment": 1710.0,
+        "ship_units": 120, "ship_amount": 1800.0,
+        "schedule_units": 120, "schedule_amount": 1800.0,
+        "person": '张执玮', "backlog_units": 61,
+    },
+    ('俄罗斯', '哈巴'): {
+        "sign_units": 270, "sign_amount": 4428.0,
+        "payment": 1710.0,
+        "ship_units": 120, "ship_amount": 1800.0,
+        "schedule_units": 120, "schedule_amount": 1800.0,
+        "person": '张小帆', "backlog_units": 28,
+    },
+    ('俄罗斯', '俄罗斯（中南）'): {
+        "sign_units": 245, "sign_amount": 4200.0,
+        "payment": 1689.1,
+        "ship_units": 100, "ship_amount": 1778.0,
+        "schedule_units": 100, "schedule_amount": 1778.0,
+        "person": '张沁媛', "backlog_units": 2,
+    },
+    ('俄罗斯', '俄罗斯（西南）'): {
+        "sign_units": 489, "sign_amount": 7525.12,
+        "payment": 2823.4,
+        "ship_units": 210, "ship_amount": 2972.0,
+        "schedule_units": 210, "schedule_amount": 2972.0,
+        "person": '刘景伟', "backlog_units": 27,
+    },
+    ('俄罗斯', '莫斯科'): {
+        "sign_units": 72, "sign_amount": 1085.0,
+        "payment": 427.5,
+        "ship_units": 30, "ship_amount": 450.0,
+        "schedule_units": 30, "schedule_amount": 450.0,
+        "person": '张东辉', "backlog_units": 0,
+    },
+    ('俄罗斯', '叶卡'): {
+        "sign_units": 72, "sign_amount": 1085.0,
+        "payment": 427.5,
+        "ship_units": 30, "ship_amount": 450.0,
+        "schedule_units": 30, "schedule_amount": 450.0,
+        "person": '孙继伟', "backlog_units": 0,
+    },
+    ('俄罗斯', '新西'): {
+        "sign_units": 72, "sign_amount": 1085.0,
+        "payment": 427.5,
+        "ship_units": 30, "ship_amount": 450.0,
+        "schedule_units": 30, "schedule_amount": 450.0,
+        "person": '（空）', "backlog_units": 0,
+    },
+    ('中亚', '蒙古'): {
+        "sign_units": 81, "sign_amount": 1260.0,
+        "payment": 475.0,
+        "ship_units": 32, "ship_amount": 500.0,
+        "schedule_units": 32, "schedule_amount": 500.0,
+        "person": '逄顺福', "backlog_units": 7,
+    },
+    ('中亚', '哈萨克斯坦-1'): {
+        "sign_units": 581, "sign_amount": 5575.68,
+        "payment": 2188.8,
+        "ship_units": 239, "ship_amount": 2304.0,
+        "schedule_units": 239, "schedule_amount": 2304.0,
+        "person": '彭凤琴', "backlog_units": 65,
+    },
+    ('中亚', '塔吉克/哈萨克斯坦-2'): {
+        "sign_units": 207, "sign_amount": 2082.5,
+        "payment": 807.5,
+        "ship_units": 85, "ship_amount": 850.0,
+        "schedule_units": 85, "schedule_amount": 850.0,
+        "person": '于洋', "backlog_units": 31,
+    },
+    ('中亚', '哈萨克斯坦-3'): {
+        "sign_units": 145, "sign_amount": 1500.0,
+        "payment": 570.0,
+        "ship_units": 60, "ship_amount": 600.0,
+        "schedule_units": 60, "schedule_amount": 600.0,
+        "person": '秦力超', "backlog_units": 9,
+    },
+    ('中亚', '乌兹别克斯坦'): {
+        "sign_units": 81, "sign_amount": 735.0,
+        "payment": 285.0,
+        "ship_units": 33, "ship_amount": 300.0,
+        "schedule_units": 33, "schedule_amount": 300.0,
+        "person": '孙博伦', "backlog_units": 15,
+    },
+    ('中亚', '吉尔吉斯斯坦'): {
+        "sign_units": 127, "sign_amount": 980.0,
+        "payment": 380.0,
+        "ship_units": 52, "ship_amount": 400.0,
+        "schedule_units": 52, "schedule_amount": 400.0,
+        "person": '马月', "backlog_units": 0,
+    },
+    ('中亚', '阿塞拜疆'): {
+        "sign_units": 73, "sign_amount": 816.66666655,
+        "payment": 332.5,
+        "ship_units": 32, "ship_amount": 350.0,
+        "schedule_units": 32, "schedule_amount": 350.0,
+        "person": '韩宇', "backlog_units": 52,
+    },
+    ('中亚', '格鲁吉亚'): {
+        "sign_units": 44, "sign_amount": 490.0,
+        "payment": 190.0,
+        "ship_units": 20, "ship_amount": 200.0,
+        "schedule_units": 20, "schedule_amount": 200.0,
+        "person": '孙博伦', "backlog_units": 0,
+    },
+    ('亚洲1', '朝鲜-韩国'): {
+        "sign_units": 54, "sign_amount": 540.0,
+        "payment": 250.955281626998,
+        "ship_units": 32, "ship_amount": 264.163454344208,
+        "schedule_units": 32, "schedule_amount": 264.163454344208,
+        "person": '安鹏霖', "backlog_units": 10,
+    },
+    ('亚洲1', '新加坡市政会'): {
+        "sign_units": 277, "sign_amount": 6100.0,
+        "payment": 2045.35,
+        "ship_units": 101, "ship_amount": 2153.0,
+        "schedule_units": 101, "schedule_amount": 2153.0,
+        "person": '祁阳', "backlog_units": 2,
+    },
+    ('亚洲1', '新加坡HDB'): {
+        "sign_units": 566, "sign_amount": 20400.0,
+        "payment": 8075.0,
+        "ship_units": 260, "ship_amount": 8500.0,
+        "schedule_units": 260, "schedule_amount": 8500.0,
+        "person": '王珊珊', "backlog_units": 63,
+    },
+    ('亚洲1', '泰国'): {
+        "sign_units": 90, "sign_amount": 840.0,
+        "payment": 190.0,
+        "ship_units": 25, "ship_amount": 200.0,
+        "schedule_units": 25, "schedule_amount": 200.0,
+        "person": '张琬怡', "backlog_units": 5,
+    },
+    ('亚洲1', '泰国2'): {
+        "sign_units": 136, "sign_amount": 1200.0,
+        "payment": 285.0,
+        "ship_units": 36, "ship_amount": 300.0,
+        "schedule_units": 36, "schedule_amount": 300.0,
+        "person": '刘瑞', "backlog_units": 11,
+    },
+    ('亚洲1', '金三角'): {
+        "sign_units": 40, "sign_amount": 200.0,
+        "payment": 190.0,
+        "ship_units": 36, "ship_amount": 200.0,
+        "schedule_units": 36, "schedule_amount": 200.0,
+        "person": '张琬怡', "backlog_units": 0,
+    },
+    ('亚洲1', '马来西亚'): {
+        "sign_units": 109, "sign_amount": 900.0,
+        "payment": 494.95,
+        "ship_units": 61, "ship_amount": 521.0,
+        "schedule_units": 61, "schedule_amount": 521.0,
+        "person": '鲁鸿飞', "backlog_units": 9,
+    },
+    ('亚洲1', '马尔代夫'): {
+        "sign_units": 36, "sign_amount": 630.0,
+        "payment": 250.955281626998,
+        "ship_units": 17, "ship_amount": 264.163454344208,
+        "schedule_units": 17, "schedule_amount": 264.163454344208,
+        "person": '叶哲铭', "backlog_units": 4,
+    },
+    ('亚洲1', '香港-台湾'): {
+        "sign_units": 20, "sign_amount": 200.0,
+        "payment": 190.0,
+        "ship_units": 15, "ship_amount": 200.0,
+        "schedule_units": 15, "schedule_amount": 200.0,
+        "person": '王海娇', "backlog_units": 0,
+    },
+    ('亚洲2', '越南-2'): {
+        "sign_units": 235, "sign_amount": 1673.35,
+        "payment": 648.85,
+        "ship_units": 63, "ship_amount": 683.0,
+        "schedule_units": 63, "schedule_amount": 683.0,
+        "person": '韩月华', "backlog_units": 1,
+    },
+    ('亚洲2', '印度公建'): {
+        "sign_units": 66, "sign_amount": 930.0,
+        "payment": 414.432922440495,
+        "ship_units": 28, "ship_amount": 436.245181516311,
+        "schedule_units": 28, "schedule_amount": 436.245181516311,
+        "person": '张鹏', "backlog_units": 20,
+    },
+    ('亚洲2', '巴基斯坦'): {
+        "sign_units": 87, "sign_amount": 688.0,
+        "payment": 251.75,
+        "ship_units": 32, "ship_amount": 265.0,
+        "schedule_units": 32, "schedule_amount": 265.0,
+        "person": '耿建伟', "backlog_units": 0,
+    },
+    ('亚洲2', '孟加拉-1'): {
+        "sign_units": 238, "sign_amount": 1768.9,
+        "payment": 685.9,
+        "ship_units": 73, "ship_amount": 722.0,
+        "schedule_units": 73, "schedule_amount": 722.0,
+        "person": '刘晓虎', "backlog_units": 3,
+    },
+    ('亚洲2', '澳大利亚'): {
+        "sign_units": 136, "sign_amount": 964.0,
+        "payment": 361.0,
+        "ship_units": 32, "ship_amount": 380.0,
+        "schedule_units": 32, "schedule_amount": 380.0,
+        "person": '董永生', "backlog_units": 8,
+    },
+    ('亚洲2', '菲律宾'): {
+        "sign_units": 69, "sign_amount": 710.0,
+        "payment": 332.5,
+        "ship_units": 27, "ship_amount": 350.0,
+        "schedule_units": 27, "schedule_amount": 350.0,
+        "person": '吴旭东', "backlog_units": 0,
+    },
+    ('亚洲2', '印尼-1'): {
+        "sign_units": 263, "sign_amount": 1640.0,
+        "payment": 380.0,
+        "ship_units": 42, "ship_amount": 400.0,
+        "schedule_units": 42, "schedule_amount": 400.0,
+        "person": '张欢', "backlog_units": 1,
+    },
+    ('亚洲2', '越南-1（工厂）'): {
+        "sign_units": 148, "sign_amount": 1470.0,
+        "payment": 570.0,
+        "ship_units": 55, "ship_amount": 600.0,
+        "schedule_units": 55, "schedule_amount": 600.0,
+        "person": '于春光', "backlog_units": 106,
+    },
+    ('亚洲2', '印度私营'): {
+        "sign_units": 246, "sign_amount": 2934.0,
+        "payment": 1577.0,
+        "ship_units": 82, "ship_amount": 1660.0,
+        "schedule_units": 82, "schedule_amount": 1660.0,
+        "person": '任嘉庆', "backlog_units": 48,
+    },
+    ('亚洲2', '菲律宾-2'): {
+        "sign_units": 85, "sign_amount": 650.0,
+        "payment": 332.5,
+        "ship_units": 27, "ship_amount": 350.0,
+        "schedule_units": 27, "schedule_amount": 350.0,
+        "person": '吴永顺', "backlog_units": 0,
+    },
+    ('亚洲2', '印尼-2'): {
+        "sign_units": 250, "sign_amount": 1700.0,
+        "payment": 380.0,
+        "ship_units": 42, "ship_amount": 400.0,
+        "schedule_units": 42, "schedule_amount": 400.0,
+        "person": '岳亮', "backlog_units": 0,
+    },
+    ('美洲', '墨西哥-1'): {
+        "sign_units": 450, "sign_amount": 6270.0,
+        "payment": 2897.5,
+        "ship_units": 210, "ship_amount": 3050.0,
+        "schedule_units": 210, "schedule_amount": 3050.0,
+        "person": '尤健宇', "backlog_units": 36,
+    },
+    ('美洲', '墨西哥-2'): {
+        "sign_units": 450, "sign_amount": 6270.0,
+        "payment": 2897.5,
+        "ship_units": 210, "ship_amount": 3050.0,
+        "schedule_units": 210, "schedule_amount": 3050.0,
+        "person": '肖宇晗', "backlog_units": 35,
+    },
+    ('美洲', '秘鲁'): {
+        "sign_units": 100, "sign_amount": 1390.0,
+        "payment": 389.5,
+        "ship_units": 35, "ship_amount": 410.0,
+        "schedule_units": 35, "schedule_amount": 410.0,
+        "person": '李知源', "backlog_units": 21,
+    },
+    ('美洲', '智利'): {
+        "sign_units": 120, "sign_amount": 1670.0,
+        "payment": 456.0,
+        "ship_units": 40, "ship_amount": 480.0,
+        "schedule_units": 40, "schedule_amount": 480.0,
+        "person": '翟文龙', "backlog_units": 7,
+    },
+    ('美洲', '加勒比海'): {
+        "sign_units": 520, "sign_amount": 7248.8,
+        "payment": 2502.3,
+        "ship_units": 200, "ship_amount": 2634.0,
+        "schedule_units": 200, "schedule_amount": 2634.0,
+        "person": '范皓铭', "backlog_units": 61,
+    },
+    ('美洲', '多米尼加'): {
+        "sign_units": 72, "sign_amount": 1000.0,
+        "payment": 380.0,
+        "ship_units": 40, "ship_amount": 400.0,
+        "schedule_units": 40, "schedule_amount": 400.0,
+        "person": '梁国裕', "backlog_units": 1,
+    },
+    ('美洲', '哥伦比亚'): {
+        "sign_units": 800, "sign_amount": 11151.0,
+        "payment": 4132.5,
+        "ship_units": 360, "ship_amount": 4350.0,
+        "schedule_units": 360, "schedule_amount": 4350.0,
+        "person": '田媛媛', "backlog_units": 76,
+    },
+    ('美洲', '秘鲁2'): {
+        "sign_units": 50, "sign_amount": 700.0,
+        "payment": 285.0,
+        "ship_units": 30, "ship_amount": 300.0,
+        "schedule_units": 30, "schedule_amount": 300.0,
+        "person": '魏珍荣', "backlog_units": 0,
+    },
+    ('美洲', '巴西'): {
+        "sign_units": 60, "sign_amount": 840.0,
+        "payment": 190.0,
+        "ship_units": 20, "ship_amount": 200.0,
+        "schedule_units": 20, "schedule_amount": 200.0,
+        "person": '杨春', "backlog_units": 0,
+    },
+    ('中东', '阿联酋-2'): {
+        "sign_units": 122, "sign_amount": 3360.0,
+        "payment": 1330.0,
+        "ship_units": 62, "ship_amount": 1400.0,
+        "schedule_units": 62, "schedule_amount": 1400.0,
+        "person": '李军辉', "backlog_units": 5,
+    },
+    ('中东', '沙特工厂'): {
+        "sign_units": 733, "sign_amount": 6860.0,
+        "payment": 2242.0,
+        "ship_units": 200, "ship_amount": 2360.0,
+        "schedule_units": 200, "schedule_amount": 2360.0,
+        "person": '武永佳', "backlog_units": 0,
+    },
+    ('中东', '沙特-1'): {
+        "sign_units": 299, "sign_amount": 3710.0,
+        "payment": 1425.0,
+        "ship_units": 150, "ship_amount": 1500.0,
+        "schedule_units": 150, "schedule_amount": 1500.0,
+        "person": '陈科锦', "backlog_units": 108,
+    },
+    ('中东', '科威特'): {
+        "sign_units": 136, "sign_amount": 1820.0,
+        "payment": 695.4,
+        "ship_units": 64, "ship_amount": 732.0,
+        "schedule_units": 64, "schedule_amount": 732.0,
+        "person": '赵俊峰', "backlog_units": 0,
+    },
+    ('中东', '阿联酋-1'): {
+        "sign_units": 416, "sign_amount": 3710.0,
+        "payment": 1425.0,
+        "ship_units": 150, "ship_amount": 1500.0,
+        "schedule_units": 150, "schedule_amount": 1500.0,
+        "person": '陈科锦', "backlog_units": 8,
+    },
+    ('中东', '卡塔尔'): {
+        "sign_units": 50, "sign_amount": 700.0,
+        "payment": 475.0,
+        "ship_units": 42, "ship_amount": 500.0,
+        "schedule_units": 42, "schedule_amount": 500.0,
+        "person": '李军辉', "backlog_units": 0,
+    },
+    ('中东', '伊拉克'): {
+        "sign_units": 81, "sign_amount": 700.0,
+        "payment": 285.0,
+        "ship_units": 42, "ship_amount": 300.0,
+        "schedule_units": 42, "schedule_amount": 300.0,
+        "person": '吕超', "backlog_units": 1,
+    },
+    ('中东', '巴勒斯坦'): {
+        "sign_units": 181, "sign_amount": 1680.0,
+        "payment": 665.0,
+        "ship_units": 80, "ship_amount": 700.0,
+        "schedule_units": 80, "schedule_amount": 700.0,
+        "person": '吕超', "backlog_units": 5,
+    },
+    ('中东', '伊朗+阿曼'): {
+        "sign_units": 45, "sign_amount": 700.0,
+        "payment": 285.0,
+        "ship_units": 25, "ship_amount": 300.0,
+        "schedule_units": 25, "schedule_amount": 300.0,
+        "person": '张朕铭', "backlog_units": 17,
+    },
+    ('非洲', '埃及-1'): {
+        "sign_units": 900, "sign_amount": 6000.0,
+        "payment": 2470.0,
+        "ship_units": 400, "ship_amount": 2600.0,
+        "schedule_units": 400, "schedule_amount": 2600.0,
+        "person": '石云龙', "backlog_units": 494,
+    },
+    ('非洲', '埃及-2'): {
+        "sign_units": 100, "sign_amount": 800.0,
+        "payment": 285.0,
+        "ship_units": 30, "ship_amount": 300.0,
+        "schedule_units": 30, "schedule_amount": 300.0,
+        "person": '丁绎澎', "backlog_units": 0,
+    },
+    ('非洲', '肯尼亚/坦桑尼亚'): {
+        "sign_units": 101, "sign_amount": 980.0,
+        "payment": 381.749525320429,
+        "ship_units": 33, "ship_amount": 401.841605600452,
+        "schedule_units": 33, "schedule_amount": 401.841605600452,
+        "person": '史宇哲', "backlog_units": 5,
+    },
+    ('非洲', '尼日利亚/埃塞俄比亚'): {
+        "sign_units": 100, "sign_amount": 980.0,
+        "payment": 381.9,
+        "ship_units": 33, "ship_amount": 402.0,
+        "schedule_units": 33, "schedule_amount": 402.0,
+        "person": '袁帅', "backlog_units": 4,
+    },
+    ('非洲', '非洲法语区'): {
+        "sign_units": 90, "sign_amount": 800.0,
+        "payment": 285.0,
+        "ship_units": 30, "ship_amount": 300.0,
+        "schedule_units": 30, "schedule_amount": 300.0,
+        "person": '孙小婷', "backlog_units": 7,
+    },
+    ('非洲', '南非/安格拉'): {
+        "sign_units": 90, "sign_amount": 800.0,
+        "payment": 285.0,
+        "ship_units": 30, "ship_amount": 300.0,
+        "schedule_units": 30, "schedule_amount": 300.0,
+        "person": '刘纪龙', "backlog_units": 1,
+    },
+    ('欧洲', '德国西班牙'): {
+        "sign_units": 34, "sign_amount": 520.0,
+        "payment": 199.5,
+        "ship_units": 15, "ship_amount": 210.0,
+        "schedule_units": 15, "schedule_amount": 210.0,
+        "person": '（空）', "backlog_units": 0,
+    },
+    ('欧洲', '东欧'): {
+        "sign_units": 50, "sign_amount": 500.0,
+        "payment": 190.95,
+        "ship_units": 15, "ship_amount": 201.0,
+        "schedule_units": 15, "schedule_amount": 201.0,
+        "person": '吴雪明', "backlog_units": 0,
+    },
+    ('欧洲', '英国意大利'): {
+        "sign_units": 34, "sign_amount": 520.0,
+        "payment": 199.5,
+        "ship_units": 15, "ship_amount": 210.0,
+        "schedule_units": 15, "schedule_amount": 210.0,
+        "person": '王俊豪', "backlog_units": 0,
+    },
+    ('商贸配件', '商贸1'): {
+        "sign_units": 0, "sign_amount": 1402.0,
+        "payment": 570.0,
+        "ship_units": 0, "ship_amount": 600.0,
+        "schedule_units": 0, "schedule_amount": 600.0,
+        "person": '张涛', "backlog_units": 0,
+    },
+    ('商贸配件', '商贸2'): {
+        "sign_units": 0, "sign_amount": 720.0,
+        "payment": 285.0,
+        "ship_units": 0, "ship_amount": 300.0,
+        "schedule_units": 0, "schedule_amount": 300.0,
+        "person": '李成富', "backlog_units": 0,
+    },
+    ('商贸配件', '商贸3'): {
+        "sign_units": 0, "sign_amount": 720.0,
+        "payment": 285.0,
+        "ship_units": 0, "ship_amount": 300.0,
+        "schedule_units": 0, "schedule_amount": 300.0,
+        "person": '李美珊', "backlog_units": 0,
+    },
+    ('商贸配件', '配件-1'): {
+        "sign_units": 0, "sign_amount": 4800.0,
+        "payment": 1900.0,
+        "ship_units": 0, "ship_amount": 2000.0,
+        "schedule_units": 0, "schedule_amount": 2000.0,
+        "person": '赵莹', "backlog_units": 0,
+    },
+    ('商贸配件', '配件-2'): {
+        "sign_units": 0, "sign_amount": 2400.0,
+        "payment": 950.0,
+        "ship_units": 0, "ship_amount": 1000.0,
+        "schedule_units": 0, "schedule_amount": 1000.0,
+        "person": '吴航', "backlog_units": 0,
+    },
+    ('商贸配件', '改造'): {
+        "sign_units": 0, "sign_amount": 1960.0,
+        "payment": 950.0,
+        "ship_units": 0, "ship_amount": 1000.0,
+        "schedule_units": 0, "schedule_amount": 1000.0,
+        "person": '苏利', "backlog_units": 16,
+    },
+}
+
+
+# ── 年度完成情况 ──────────────────────────────────────
+
+# 指标ID → 实际值字段映射 (金额用_total, 台数用原始)
+_ACTUAL_FIELD = {
+    'sign_units': 'sign_units_curr',
+    'sign_amount': 'sign_total_curr',
+    'payment': 'payment_total_curr',
+    'ship_units': 'ship_units_curr',
+    'ship_amount': 'ship_total_curr',
+    'schedule_units': 'schedule_units_curr',
+    'schedule_amount': 'schedule_total_curr',
+}
+
+_METRIC_KEYS = ['sign_units', 'sign_amount', 'schedule_units', 'schedule_amount', 'ship_units', 'ship_amount', 'payment']
+
+
+def get_annual_completion():
+    """
+    2026年合同完成情况表
+    复用两年对比的聚合结果，合并硬编码年度指标，计算完成全年比。
+    金额指标使用 _total 字段（含海外差额）。
+    """
+    base = get_two_year_comparison()
+    rows = base['rows']
+    today = date.today()
+    data_date = today - timedelta(days=1)
+
+    def _ratio(actual, target):
+        if target == 0 or target is None:
+            return None
+        return round(actual / target, 4)
+
+    # 预计算各区域的子模块指标合计，用于 subtotal 行
+    region_targets = {}
+    for (r, m), t in ANNUAL_TARGETS.items():
+        if r not in region_targets:
+            region_targets[r] = {k: 0 for k in _METRIC_KEYS}
+            region_targets[r]['_person'] = ''
+            region_targets[r]['_backlog'] = 0
+        for k in _METRIC_KEYS:
+            region_targets[r][k] += t.get(k, 0)
+        region_targets[r]['_backlog'] += t.get('backlog_units', 0)
+
+    # 商贸合计 subtotal 使用 商贸配件 的指标汇总
+    if '商贸配件' in region_targets:
+        region_targets['商贸合计'] = region_targets['商贸配件']
+
+    # 大区排序
+    region_order = ['俄罗斯', '中亚', '亚洲1', '亚洲2', '美洲', '中东', '非洲', '欧洲']
+
+    result_rows = []
+    seq = 0
+
+    for row in rows:
+        typ = row['type']
+        region = row.get('region', '')
+        module = row.get('module', '')
+
+        entry = {
+            'type': typ,
+            'region': region,
+            'module': module if typ in ('data', 'trade') else (module or region),
+            'category': row.get('category', ''),
+        }
+
+        # Look up target (商贸合计 rows use 商贸配件 targets)
+        target = ANNUAL_TARGETS.get((region, module), {})
+        if not target and region == '商贸合计':
+            target = ANNUAL_TARGETS.get(('商贸配件', module), {})
+
+        if typ in ('data', 'trade'):
+            seq += 1
+            entry['seq'] = seq
+            for mk in _METRIC_KEYS:
+                af = _ACTUAL_FIELD[mk]
+                actual = row.get(af, 0) or 0
+                tgt = target.get(mk, 0) if target else 0
+                entry[mk + '_target'] = tgt
+                entry[mk + '_actual'] = actual
+                entry[mk + '_ratio'] = _ratio(actual, tgt)
+            entry['person'] = target.get('person', '') if target else ''
+            entry['backlog_units'] = target.get('backlog_units', 0) if target else 0
+
+        elif typ == 'subtotal':
+            # Subtota: actual from row, target from sum of children
+            for mk in _METRIC_KEYS:
+                af = _ACTUAL_FIELD[mk]
+                actual = row.get(af, 0) or 0
+                tgt = region_targets.get(region, {}).get(mk, 0)
+                entry[mk + '_target'] = tgt
+                entry[mk + '_actual'] = actual
+                entry[mk + '_ratio'] = _ratio(actual, tgt)
+            entry['person'] = ''
+            entry['backlog_units'] = region_targets.get(region, {}).get('_backlog', 0)
+
+        elif typ == 'grand_total':
+            # Grand total: actual from row, target from sum of all
+            all_target = {k: 0 for k in _METRIC_KEYS}
+            all_backlog = 0
+            for t in ANNUAL_TARGETS.values():
+                for k in _METRIC_KEYS:
+                    all_target[k] += t.get(k, 0)
+                all_backlog += t.get('backlog_units', 0)
+            for mk in _METRIC_KEYS:
+                af = _ACTUAL_FIELD[mk]
+                actual = row.get(af, 0) or 0
+                tgt = all_target.get(mk, 0)
+                entry[mk + '_target'] = tgt
+                entry[mk + '_actual'] = actual
+                entry[mk + '_ratio'] = _ratio(actual, tgt)
+            entry['person'] = ''
+            entry['backlog_units'] = all_backlog
+
+        # 改造 columns (暂空)
+        for gk in ['gaizao_sign_units', 'gaizao_sign_amount',
+                    'gaizao_schedule_units', 'gaizao_schedule_amount',
+                    'gaizao_ship_units', 'gaizao_ship_amount']:
+            entry[gk] = 0
+
+        result_rows.append(entry)
+
+    return {
+        'title': '2026年海外市场经营系统合同完成情况',
+        'data_date': data_date.strftime('%Y-%m-%d'),
+        'year': today.year,
+        'metric_keys': _METRIC_KEYS,
+        'region_order': region_order,
+        'rows': result_rows,
+    }
+
+
+
 # ── Excel 导出 ──────────────────────────────────────────
 
 def export_two_year_comparison_xlsx(hidden_metric_ids=None):
-    """生成带公式的两年对比表 Excel 文件，返回文件路径
+    """生成两年对比表 Excel 文件（所有数值为硬编码，与页面显示一致），返回文件路径
     hidden_metric_ids: 要隐藏的指标ID列表，如 ['sign_amount', 'overseas_diff']
     """
-    import io
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
     from openpyxl.utils import get_column_letter
@@ -1061,7 +1868,6 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
 
     # 数据行（从 row 4 开始）
     excel_row = 4
-    region_data_start = {}  # region → 第一个 data/trade 行的Excel行号
 
     # 预先计算每个 group 对应的列号
     group_cols = {}  # gid -> (col_prev, col_curr, col_growth)
@@ -1074,45 +1880,9 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
             group_cols[g['id']] = (col, col+1, None)
             col += 2
 
-    def _col_letter(c):
-        return get_column_letter(c)
-
-    def _write_raw_value(typ, r, cp, cc, cg, row_data, prev_key, curr_key, growth_key):
-        """写入原始值（不带公式），用于列被隐藏时的回退"""
-        if typ in ('data', 'trade'):
-            pv = row_data.get(prev_key)
-            cv = row_data.get(curr_key)
-            if pv is not None:
-                ws.cell(row=r, column=cp, value=pv)
-            if cv is not None:
-                ws.cell(row=r, column=cc, value=cv)
-        elif typ == 'subtotal':
-            start_row = region_data_start.get(row_data['region'])
-            if start_row:
-                s, e = start_row, r - 1
-                ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
-                ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
-            else:
-                ws.cell(row=r, column=cp, value=row_data.get(prev_key))
-                ws.cell(row=r, column=cc, value=row_data.get(curr_key))
-        elif typ == 'grand_total':
-            st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
-            if st_rows:
-                ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
-                ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
-        if cg:
-            ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
-            ws.cell(row=r, column=cg).number_format = '0%'
-
     for row_data in rows:
         r = excel_row
         typ = row_data['type']
-
-        # data 和 trade 行都参与 region 追踪，记录每个大区的起始行
-        if typ in ('data', 'trade'):
-            region_key = row_data.get('region', '')
-            if region_key and region_key not in region_data_start:
-                region_data_start[region_key] = r
 
         # 模块名和类别
         cell_a = ws.cell(row=r, column=1, value=row_data['module'])
@@ -1121,7 +1891,7 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
         elif typ in ('subtotal', 'grand_total'):
             ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
 
-        # 写各组数据
+        # 写各组数据 — 全部使用硬编码值（数据源已预计算所有合计/增长率）
         for g in groups:
             gid = g['id']
             cp, cc, cg = group_cols[gid]
@@ -1129,89 +1899,16 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
             curr_key = f'{gid}_curr'
             growth_key = f'{gid}_growth'
 
-            # === 签订额合计: =签订额+海外差额 ===
-            if gid == 'sign_total':
-                # 如果签订额或海外差额被隐藏，使用原始值
-                if 'sign_amount' not in group_cols or 'overseas_diff' not in group_cols:
-                    _write_raw_value(typ, r, cp, cc, cg, row_data, prev_key, curr_key, growth_key)
-                else:
-                    sa_cp, sa_cc, _ = group_cols['sign_amount']
-                    od_cp, od_cc, _ = group_cols['overseas_diff']
-                    if typ in ('data', 'trade'):
-                        ws.cell(row=r, column=cp).value = f'={_col_letter(sa_cp)}{r}+{_col_letter(od_cp)}{r}'
-                        ws.cell(row=r, column=cc).value = f'={_col_letter(sa_cc)}{r}+{_col_letter(od_cc)}{r}'
-                    elif typ == 'subtotal':
-                        start_row = region_data_start.get(row_data['region'])
-                        if start_row:
-                            s, e = start_row, r - 1
-                            ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
-                            ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
-                        else:
-                            ws.cell(row=r, column=cp, value=row_data.get(prev_key))
-                            ws.cell(row=r, column=cc, value=row_data.get(curr_key))
-                    elif typ == 'grand_total':
-                        st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
-                        if st_rows:
-                            ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
-                            ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
-                    if cg:
-                        ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
-                        ws.cell(row=r, column=cg).number_format = '0%'
-
-            # === 回款额: =回款+海外回款及其他 ===
-            elif gid == 'payment_total':
-                if 'payment' not in group_cols or 'overseas_payment' not in group_cols:
-                    _write_raw_value(typ, r, cp, cc, cg, row_data, prev_key, curr_key, growth_key)
-                else:
-                    py_cp, py_cc, _ = group_cols['payment']
-                    op_cp, op_cc, _ = group_cols['overseas_payment']
-                    if typ in ('data', 'trade'):
-                        ws.cell(row=r, column=cp).value = f'={_col_letter(py_cp)}{r}+{_col_letter(op_cp)}{r}'
-                        ws.cell(row=r, column=cc).value = f'={_col_letter(py_cc)}{r}+{_col_letter(op_cc)}{r}'
-                    elif typ == 'subtotal':
-                        start_row = region_data_start.get(row_data['region'])
-                        if start_row:
-                            s, e = start_row, r - 1
-                            ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
-                            ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
-                        else:
-                            ws.cell(row=r, column=cp, value=row_data.get(prev_key))
-                            ws.cell(row=r, column=cc, value=row_data.get(curr_key))
-                    elif typ == 'grand_total':
-                        st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
-                        if st_rows:
-                            ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
-                            ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
-                    if cg:
-                        ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
-                        ws.cell(row=r, column=cg).number_format = '0%'
-
-            # === 普通列组 ===
-            else:
-                if typ in ('data', 'trade'):
-                    pv = row_data.get(prev_key)
-                    cv = row_data.get(curr_key)
-                    if pv is not None:
-                        ws.cell(row=r, column=cp, value=pv)
-                    if cv is not None:
-                        ws.cell(row=r, column=cc, value=cv)
-                elif typ == 'subtotal':
-                    start_row = region_data_start.get(row_data['region'])
-                    if start_row:
-                        s, e = start_row, r - 1
-                        ws.cell(row=r, column=cp).value = f'=SUM({_col_letter(cp)}{s}:{_col_letter(cp)}{e})'
-                        ws.cell(row=r, column=cc).value = f'=SUM({_col_letter(cc)}{s}:{_col_letter(cc)}{e})'
-                    else:
-                        ws.cell(row=r, column=cp, value=row_data.get(prev_key))
-                        ws.cell(row=r, column=cc, value=row_data.get(curr_key))
-                elif typ == 'grand_total':
-                    st_rows = [rr for rr in range(4, r) if ws.cell(row=rr, column=1).value and '合计' in str(ws.cell(row=rr, column=1).value or '')]
-                    if st_rows:
-                        ws.cell(row=r, column=cp).value = f'=SUM({",".join(_col_letter(cp)+str(sr) for sr in st_rows)})'
-                        ws.cell(row=r, column=cc).value = f'=SUM({",".join(_col_letter(cc)+str(sr) for sr in st_rows)})'
-                # 增长比例（所有行类型统一使用公式）
-                if cg:
-                    ws.cell(row=r, column=cg).value = f'=IF({_col_letter(cp)}{r}=0,\"-\",({_col_letter(cc)}{r}-{_col_letter(cp)}{r})/{_col_letter(cp)}{r})'
+            pv = row_data.get(prev_key)
+            cv = row_data.get(curr_key)
+            if pv is not None:
+                ws.cell(row=r, column=cp, value=pv)
+            if cv is not None:
+                ws.cell(row=r, column=cc, value=cv)
+            if cg:
+                gv = row_data.get(growth_key)
+                if gv is not None:
+                    ws.cell(row=r, column=cg, value=gv / 100)
                     ws.cell(row=r, column=cg).number_format = '0%'
 
         # 行样式
@@ -1249,3 +1946,170 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
     tmp = os.path.join(tempfile.gettempdir(), 'two_year_comparison.xlsx')
     wb.save(tmp)
     return tmp
+
+
+
+def export_annual_completion_xlsx(hide_extra=False):
+    """导出年度完成情况表 Excel（双行表头、居中、整数、硬编码值）"""
+    import os
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    data = get_annual_completion()
+    rows = data['rows']
+    metric_keys = data['metric_keys']
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '完成表'
+
+    # Styles
+    hdr_font = Font(name='微软雅黑', bold=True, size=10)
+    hdr_fill = PatternFill('solid', fgColor='EEF2F7')
+    data_font = Font(name='微软雅黑', size=10)
+    subtotal_fill = PatternFill('solid', fgColor='D6E4F0')
+    grand_fill = PatternFill('solid', fgColor='B4C6E7')
+    bold_font = Font(name='微软雅黑', bold=True, size=10)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    pct_fmt = '0.0%'
+    int_fmt = '#,##0'
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'))
+
+    # ── Row 1: Group headers ──
+    # Columns: 1:序号 2:类别 3:模块 | 4-24: 7 metrics x 3 | 25-30:改造 x 6 | 31:积压台数 | 32:负责人
+    metric_labels = ['签订台数', '签订额', '排产台数', '排产额', '发货台数', '发货额', '回款']
+
+    # Fixed headers
+    for c, label in [(1, '序号'), (2, '类别'), (3, '模块')]:
+        cell = ws.cell(row=1, column=c, value=label)
+        cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+        ws.merge_cells(start_row=1, start_column=c, end_row=2, end_column=c)
+
+    # Metric group headers (row 1, colspan=3)
+    for i, ml in enumerate(metric_labels):
+        c = 4 + i * 3
+        cell = ws.cell(row=1, column=c, value=ml)
+        cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+        ws.merge_cells(start_row=1, start_column=c, end_row=1, end_column=c+2)
+
+    # Gaizao group header (row 1, colspan=6) — only if not hiding extra
+    gaizao_start = 4 + 7 * 3  # = 25
+    if not hide_extra:
+        cell = ws.cell(row=1, column=gaizao_start, value='改造')
+        cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+        ws.merge_cells(start_row=1, start_column=gaizao_start, end_row=1, end_column=gaizao_start+5)
+
+        # Backlog + Person headers
+        cell = ws.cell(row=1, column=gaizao_start+6, value='积压台数')
+        cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+        ws.merge_cells(start_row=1, start_column=gaizao_start+6, end_row=2, end_column=gaizao_start+6)
+        cell = ws.cell(row=1, column=gaizao_start+7, value='负责人')
+        cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+        ws.merge_cells(start_row=1, start_column=gaizao_start+7, end_row=2, end_column=gaizao_start+7)
+
+    # ── Row 2: Sub-headers ──
+    for c in [1, 2, 3]:
+        cell = ws.cell(row=2, column=c)
+        cell.font = hdr_font; cell.fill = hdr_fill; cell.border = thin_border
+    for i in range(7):
+        c = 4 + i * 3
+        for j, label in enumerate(['指标', '实际完成', '完成全年比']):
+            cell = ws.cell(row=2, column=c+j, value=label)
+            cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+    if not hide_extra:
+        gaizao_subs = ['签单台数','签单额','排产台数','排产额','发货台数','发货额']
+        for j, label in enumerate(gaizao_subs):
+            cell = ws.cell(row=2, column=gaizao_start+j, value=label)
+            cell.font = hdr_font; cell.fill = hdr_fill; cell.alignment = center; cell.border = thin_border
+
+    # Freeze header rows
+    ws.freeze_panes = 'A3'
+
+    # ── Data rows ──
+    excel_row = 3  # data starts at row 3 (rows 1-2 are headers)
+
+    for row in rows:
+        typ = row['type']
+        region = row.get('region', '')
+        module = row.get('module', '')
+        is_merged = typ in ('subtotal', 'grand_total')
+
+        # Columns 1-3: merge for subtotal/grand_total
+        if is_merged:
+            cell = ws.cell(row=excel_row, column=1, value=module)
+            cell.font = bold_font; cell.alignment = center; cell.border = thin_border
+            ws.merge_cells(start_row=excel_row, start_column=1, end_row=excel_row, end_column=3)
+            # Fill merged cells
+            for c in range(1, 4):
+                ws.cell(row=excel_row, column=c).border = thin_border
+        else:
+            ws.cell(row=excel_row, column=1, value=row.get('seq', ''))
+            ws.cell(row=excel_row, column=2, value=row.get('category', ''))
+
+        if not is_merged:
+            ws.cell(row=excel_row, column=3, value=module)
+
+        # Metric values — 全部使用硬编码值（数据源已预计算所有合计/比率）
+        for i, mk in enumerate(metric_keys):
+            col = 4 + i * 3
+            tgt = row.get(mk + '_target')
+            act = row.get(mk + '_actual')
+            rat = row.get(mk + '_ratio')
+
+            if tgt is not None:
+                ws.cell(row=excel_row, column=col, value=tgt).number_format = int_fmt
+            if act is not None:
+                ws.cell(row=excel_row, column=col+1, value=act).number_format = int_fmt
+            if rat is not None:
+                ws.cell(row=excel_row, column=col+2, value=rat).number_format = pct_fmt
+
+        # Gaizao columns + backlog + person (only if not hiding extra)
+        col = gaizao_start
+        if not hide_extra:
+            for gk in ['gaizao_sign_units','gaizao_sign_amount','gaizao_schedule_units',
+                        'gaizao_schedule_amount','gaizao_ship_units','gaizao_ship_amount']:
+                ws.cell(row=excel_row, column=col, value=row.get(gk, 0) or 0)
+                col += 1
+            # Backlog
+            c = ws.cell(row=excel_row, column=col, value=row.get('backlog_units', 0))
+            c.number_format = int_fmt; col += 1
+            # Person
+            ws.cell(row=excel_row, column=col, value=row.get('person', ''))
+        else:
+            col = gaizao_start  # no extra columns
+
+        # Style all cells in this row
+        last_col = col
+        for c in range(1, last_col + 1):
+            cell = ws.cell(row=excel_row, column=c)
+            cell.font = bold_font if is_merged else data_font
+            cell.border = thin_border
+            cell.alignment = center
+            if typ == 'subtotal':
+                cell.fill = subtotal_fill
+            elif typ == 'grand_total':
+                cell.fill = grand_fill
+
+        excel_row += 1
+
+    # Column widths
+    ws.column_dimensions['A'].width = 6
+    ws.column_dimensions['B'].width = 5
+    ws.column_dimensions['C'].width = 14
+    for i in range(7):
+        c_base = 4 + i * 3
+        ws.column_dimensions[get_column_letter(c_base)].width = 11
+        ws.column_dimensions[get_column_letter(c_base+1)].width = 11
+        ws.column_dimensions[get_column_letter(c_base+2)].width = 9
+
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 18
+
+    tmpdir = os.path.join(os.path.dirname(__file__), '..', '..', 'uploads')
+    os.makedirs(tmpdir, exist_ok=True)
+    filepath = os.path.join(tmpdir, 'annual_completion_export.xlsx')
+    wb.save(filepath)
+    return filepath

@@ -17,7 +17,14 @@
             :class="{ active: view === 'table' }"
             @click="view = 'table'"
           >
-            📋 数据表格
+            📋 两年对比
+          </button>
+          <button
+            class="tyc-seg-btn"
+            :class="{ active: view === 'completion' }"
+            @click="switchToCompletion()"
+          >
+            📊 年度完成比
           </button>
         </div>
       </div>
@@ -31,6 +38,7 @@
           placeholder="全部大区"
         >
           <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
+          <el-option label="按大区" value="__region_only__" />
         </el-select>
         <el-button size="small" type="primary" @click="exportExcel">导出Excel</el-button>
       </div>
@@ -44,7 +52,7 @@
           :rows="allRows"
           :regionOrder="regionOrder"
           :loading="loading"
-          :selectedRegion="selectedRegion || null"
+          :selectedRegion="normalizedRegion"
         />
       </div>
 
@@ -59,6 +67,15 @@
           :loading="loading"
         />
       </div>
+
+      <!-- Annual Completion View -->
+      <div v-show="view === 'completion'">
+        <AnnualCompletionTable
+          ref="completionRef"
+          :rows="completionFilteredRows"
+          :loading="completionLoading"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -66,14 +83,16 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getTwoYearComparison } from '../api/contract-completion'
+import { getTwoYearComparison, getAnnualCompletion } from '../api/contract-completion'
 import TwoYearTable from '../components/ContractCompletion/TwoYearTable.vue'
 import TwoYearDashboard from '../components/ContractCompletion/TwoYearDashboard.vue'
+import AnnualCompletionTable from '../components/ContractCompletion/AnnualCompletionTable.vue'
 
 const loading = ref(false)
 const view = ref('dashboard')
 const selectedRegion = ref(null)
 const tableRef = ref(null)
+const completionRef = ref(null)
 
 const title = ref('')
 const datePrev = ref('')
@@ -87,10 +106,47 @@ const regionOrder = ref([])
 
 const filteredRows = computed(() => {
   if (!selectedRegion.value) return allRows.value
+  if (selectedRegion.value === '__region_only__')
+    return allRows.value.filter(r => r.type === 'subtotal' || r.type === 'grand_total')
   return allRows.value.filter(r =>
     r.region === selectedRegion.value || (r.type !== 'data' && r.type !== 'trade')
   )
 })
+
+const normalizedRegion = computed(() => {
+  if (!selectedRegion.value || selectedRegion.value === '__region_only__') return null
+  return selectedRegion.value
+})
+
+// ── Annual Completion ──
+const completionLoading = ref(false)
+const completionAllRows = ref([])
+const completionTitle = ref('')
+
+const completionFilteredRows = computed(() => {
+  if (!selectedRegion.value) return completionAllRows.value
+  if (selectedRegion.value === '__region_only__')
+    return completionAllRows.value.filter(r => r.type === 'subtotal' || r.type === 'grand_total')
+  return completionAllRows.value.filter(r =>
+    r.region === selectedRegion.value || (r.type !== 'data' && r.type !== 'trade')
+  )
+})
+
+async function switchToCompletion() {
+  view.value = 'completion'
+  if (completionAllRows.value.length) return
+  completionLoading.value = true
+  try {
+    const res = await getAnnualCompletion()
+    const d = res.data
+    completionTitle.value = d.title
+    completionAllRows.value = d.rows || []
+  } catch (e) {
+    ElMessage.error('年度完成比数据加载失败')
+  } finally {
+    completionLoading.value = false
+  }
+}
 
 onMounted(() => fetchData())
 
@@ -117,21 +173,51 @@ async function fetchData() {
 
 function exportExcel() {
   const token = localStorage.getItem('token')
-  let url = '/api/contract-completion/two-year-comparison/export'
+  let url = view.value === 'completion'
+    ? '/api/contract-completion/annual-completion/export'
+    : '/api/contract-completion/two-year-comparison/export'
 
-  if (tableRef.value && tableRef.value.hiddenKeys) {
+  if (view.value === 'completion' && completionRef.value && !completionRef.value.showExtra) {
+    url += '?hide_extra=1'
+  }
+
+  if (view.value !== 'completion' && tableRef.value && tableRef.value.hiddenKeys) {
     const hidden = [...tableRef.value.hiddenKeys]
     if (hidden.length) {
-      url += '?' + hidden.map(k => 'hidden=' + encodeURIComponent(k)).join('&')
+      url += (url.includes('?') ? '&' : '?') + hidden.map(k => 'hidden=' + encodeURIComponent(k)).join('&')
     }
   }
 
+  const filename = view.value === 'completion' ? '2026年合同完成情况表.xlsx' : '两年对比表.xlsx'
+
+  // IE11: fetch() 不可用，使用 XMLHttpRequest + msSaveOrOpenBlob
+  if (window.navigator.msSaveOrOpenBlob) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('GET', url, true)
+    xhr.responseType = 'blob'
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        window.navigator.msSaveOrOpenBlob(xhr.response, filename)
+      } else {
+        ElMessage.error('导出失败')
+      }
+    }
+    xhr.onerror = function () { ElMessage.error('导出失败') }
+    xhr.send()
+    return
+  }
+
+  // 现代浏览器：fetch + Blob 下载
   fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    .then(res => res.blob())
+    .then(res => {
+      if (!res.ok) throw new Error('Export failed')
+      return res.blob()
+    })
     .then(blob => {
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = '两年对比表.xlsx'
+      a.download = filename
       a.click()
       URL.revokeObjectURL(a.href)
     })
@@ -140,7 +226,7 @@ function exportExcel() {
 </script>
 
 <style scoped>
-.tyc-page { min-height: calc(100vh - 56px); background: #f0f2f5; }
+.tyc-page { background: #f0f2f5; }
 
 /* ── Top Control Bar ── */
 .tyc-topbar {
@@ -177,6 +263,7 @@ function exportExcel() {
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+  outline: none;
   color: #888;
   background: transparent;
   border: none;

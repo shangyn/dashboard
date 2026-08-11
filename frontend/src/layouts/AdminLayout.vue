@@ -36,6 +36,14 @@
           <el-icon><UploadFilled /></el-icon>
           <span>上传配置管理</span>
         </el-menu-item>
+        <el-menu-item index="/upload-console" v-if="authStore.userInfo">
+          <el-icon><Upload /></el-icon>
+          <span>数据上传</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/operation-logs" v-if="authStore.hasPermission('upload_manage')">
+          <el-icon><Document /></el-icon>
+          <span>操作日志</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -99,7 +107,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DataAnalysis, User, Lock, Grid, UploadFilled, Trophy, Fold, Expand } from '@element-plus/icons-vue'
+import { DataAnalysis, User, Lock, Grid, UploadFilled, Upload, Document, Trophy, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { changePassword } from '../api/auth'

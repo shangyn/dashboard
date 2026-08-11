@@ -1,0 +1,578 @@
+{
+  "俄罗斯（中部）": {
+    "sign_units": 250,
+    "sign_amount": 4400,
+    "prod_units": 75,
+    "prod_amount": 3200,
+    "ship_units": 126,
+    "ship_amount": 2160
+  },
+  "俄罗斯（西部）": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "俄罗斯（东部）": {
+    "sign_units": 37,
+    "sign_amount": 488.4,
+    "prod_units": 20,
+    "prod_amount": 264,
+    "ship_units": 11,
+    "ship_amount": 152
+  },
+  "罗斯托夫": {
+    "sign_units": 35,
+    "sign_amount": 382,
+    "prod_units": 25,
+    "prod_amount": 260,
+    "ship_units": 45,
+    "ship_amount": 442
+  },
+  "哈巴": {
+    "sign_units": 10,
+    "sign_amount": 14.5,
+    "prod_units": 8,
+    "prod_amount": 96,
+    "ship_units": 28,
+    "ship_amount": 300
+  },
+  "俄罗斯（中南）": {
+    "sign_units": 30,
+    "sign_amount": 400,
+    "prod_units": 20,
+    "prod_amount": 220,
+    "ship_units": 47,
+    "ship_amount": 697.29
+  },
+  "俄罗斯（西南）": {
+    "sign_units": 36,
+    "sign_amount": 800,
+    "prod_units": 4,
+    "prod_amount": 60,
+    "ship_units": 25,
+    "ship_amount": 350
+  },
+  "莫斯科": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "叶卡": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "新西": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "朝鲜-韩国": {
+    "sign_units": 5,
+    "sign_amount": 45,
+    "prod_units": 2,
+    "prod_amount": 15,
+    "ship_units": 4,
+    "ship_amount": 36.24
+  },
+  "新加坡市政会": {
+    "sign_units": 35,
+    "sign_amount": 700,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 2,
+    "ship_amount": 40
+  },
+  "新加坡HDB": {
+    "sign_units": 47,
+    "sign_amount": 940,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 11,
+    "ship_amount": 400
+  },
+  "泰国": {
+    "sign_units": 9,
+    "sign_amount": 90,
+    "prod_units": 1,
+    "prod_amount": 9.6,
+    "ship_units": 1,
+    "ship_amount": 11.3
+  },
+  "泰国2": {
+    "sign_units": 15,
+    "sign_amount": 100,
+    "prod_units": 10,
+    "prod_amount": 60,
+    "ship_units": 8,
+    "ship_amount": 80
+  },
+  "金三角": {
+    "sign_units": 5,
+    "sign_amount": 35,
+    "prod_units": 9,
+    "prod_amount": 60,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "马来西亚": {
+    "sign_units": 10,
+    "sign_amount": 100,
+    "prod_units": 4,
+    "prod_amount": 65,
+    "ship_units": 6,
+    "ship_amount": 142
+  },
+  "马尔代夫": {
+    "sign_units": 4,
+    "sign_amount": 55,
+    "prod_units": 3,
+    "prod_amount": 49,
+    "ship_units": 4,
+    "ship_amount": 40
+  },
+  "香港-台湾": {
+    "sign_units": 3,
+    "sign_amount": 15,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "越南-2": {
+    "sign_units": 15,
+    "sign_amount": 75,
+    "prod_units": 6,
+    "prod_amount": 30,
+    "ship_units": 1,
+    "ship_amount": 5.016
+  },
+  "印度公建": {
+    "sign_units": 8,
+    "sign_amount": 71.5,
+    "prod_units": 9,
+    "prod_amount": 94.22,
+    "ship_units": 1,
+    "ship_amount": 37.669008
+  },
+  "巴基斯坦": {
+    "sign_units": 4,
+    "sign_amount": 42.16,
+    "prod_units": 4,
+    "prod_amount": 42.16,
+    "ship_units": 4,
+    "ship_amount": 42.16
+  },
+  "孟加拉": {
+    "sign_units": 17,
+    "sign_amount": 125.29,
+    "prod_units": 7,
+    "prod_amount": 70.48,
+    "ship_units": 7,
+    "ship_amount": 56.48
+  },
+  "澳大利亚": {
+    "sign_units": 5,
+    "sign_amount": 45,
+    "prod_units": 5,
+    "prod_amount": 45,
+    "ship_units": 2,
+    "ship_amount": 12
+  },
+  "菲律宾": {
+    "sign_units": 14,
+    "sign_amount": 21.69,
+    "prod_units": 8,
+    "prod_amount": 12.88,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "印尼-1": {
+    "sign_units": 8,
+    "sign_amount": 61.2,
+    "prod_units": 11,
+    "prod_amount": 102,
+    "ship_units": 3,
+    "ship_amount": 27.2
+  },
+  "越南-1（工厂）": {
+    "sign_units": 5,
+    "sign_amount": 38.5,
+    "prod_units": 5,
+    "prod_amount": 38.5,
+    "ship_units": 2,
+    "ship_amount": 13.8
+  },
+  "印度私营": {
+    "sign_units": 15,
+    "sign_amount": 170,
+    "prod_units": 14,
+    "prod_amount": 150,
+    "ship_units": 7,
+    "ship_amount": 66
+  },
+  "菲律宾-2": {
+    "sign_units": 38,
+    "sign_amount": 300,
+    "prod_units": 38,
+    "prod_amount": 300,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "印尼-2": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "阿联酋-2": {
+    "sign_units": 20,
+    "sign_amount": 190,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 5,
+    "ship_amount": 54
+  },
+  "沙特工厂": {
+    "sign_units": 20,
+    "sign_amount": 200,
+    "prod_units": 7,
+    "prod_amount": 80,
+    "ship_units": 5,
+    "ship_amount": 60
+  },
+  "沙特-1": {
+    "sign_units": 26,
+    "sign_amount": 180,
+    "prod_units": 70,
+    "prod_amount": 520,
+    "ship_units": 5,
+    "ship_amount": 35
+  },
+  "科威特": {
+    "sign_units": 10,
+    "sign_amount": 150,
+    "prod_units": 2,
+    "prod_amount": 25,
+    "ship_units": 2,
+    "ship_amount": 18
+  },
+  "阿联酋-1": {
+    "sign_units": 15,
+    "sign_amount": 100,
+    "prod_units": 5,
+    "prod_amount": 30,
+    "ship_units": 12,
+    "ship_amount": 130
+  },
+  "卡塔尔": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "伊拉克": {
+    "sign_units": 10,
+    "sign_amount": 80,
+    "prod_units": 5,
+    "prod_amount": 30,
+    "ship_units": 3,
+    "ship_amount": 21
+  },
+  "巴勒斯坦": {
+    "sign_units": 10,
+    "sign_amount": 80,
+    "prod_units": 3,
+    "prod_amount": 21,
+    "ship_units": 5,
+    "ship_amount": 35
+  },
+  "阿联酋3": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "伊朗+阿曼": {
+    "sign_units": 3,
+    "sign_amount": 16,
+    "prod_units": 2,
+    "prod_amount": 26,
+    "ship_units": 4,
+    "ship_amount": 30
+  },
+  "蒙古": {
+    "sign_units": 12,
+    "sign_amount": 115,
+    "prod_units": 6,
+    "prod_amount": 70,
+    "ship_units": 3,
+    "ship_amount": 33
+  },
+  "哈萨克斯坦-1": {
+    "sign_units": 30,
+    "sign_amount": 270,
+    "prod_units": 18,
+    "prod_amount": 170,
+    "ship_units": 17,
+    "ship_amount": 160
+  },
+  "塔吉克/哈萨克斯坦-2": {
+    "sign_units": 20,
+    "sign_amount": 120,
+    "prod_units": 10,
+    "prod_amount": 60,
+    "ship_units": 24,
+    "ship_amount": 154
+  },
+  "哈萨克斯坦-3": {
+    "sign_units": 20,
+    "sign_amount": 130,
+    "prod_units": 15,
+    "prod_amount": 80,
+    "ship_units": 15,
+    "ship_amount": 94
+  },
+  "乌兹别克斯坦": {
+    "sign_units": 22,
+    "sign_amount": 132,
+    "prod_units": 24,
+    "prod_amount": 136,
+    "ship_units": 24,
+    "ship_amount": 136
+  },
+  "吉尔吉斯斯坦": {
+    "sign_units": 5,
+    "sign_amount": 35,
+    "prod_units": 2,
+    "prod_amount": 14,
+    "ship_units": 10,
+    "ship_amount": 81
+  },
+  "阿塞拜疆": {
+    "sign_units": 10,
+    "sign_amount": 50,
+    "prod_units": 18,
+    "prod_amount": 130,
+    "ship_units": 40,
+    "ship_amount": 156
+  },
+  "格鲁吉亚": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "墨西哥-1": {
+    "sign_units": 22,
+    "sign_amount": 248,
+    "prod_units": 15,
+    "prod_amount": 173,
+    "ship_units": 32,
+    "ship_amount": 434
+  },
+  "墨西哥-2": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "秘鲁": {
+    "sign_units": 5,
+    "sign_amount": 50,
+    "prod_units": 3,
+    "prod_amount": 30,
+    "ship_units": 12,
+    "ship_amount": 120
+  },
+  "智利": {
+    "sign_units": 10,
+    "sign_amount": 139,
+    "prod_units": 3,
+    "prod_amount": 34.8,
+    "ship_units": 4,
+    "ship_amount": 52.7
+  },
+  "加勒比海": {
+    "sign_units": 15,
+    "sign_amount": 128.4,
+    "prod_units": 10,
+    "prod_amount": 85.6,
+    "ship_units": 15,
+    "ship_amount": 19.27
+  },
+  "多米尼加": {
+    "sign_units": 2,
+    "sign_amount": 18,
+    "prod_units": 1,
+    "prod_amount": 10,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "哥伦比亚": {
+    "sign_units": 20,
+    "sign_amount": 200,
+    "prod_units": 5,
+    "prod_amount": 50,
+    "ship_units": 9,
+    "ship_amount": 94.46
+  },
+  "秘鲁2": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "巴西": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "肯尼亚/坦桑尼亚": {
+    "sign_units": 6,
+    "sign_amount": 54,
+    "prod_units": 6,
+    "prod_amount": 54,
+    "ship_units": 6,
+    "ship_amount": 54
+  },
+  "埃及-1": {
+    "sign_units": 50,
+    "sign_amount": 350,
+    "prod_units": 4,
+    "prod_amount": 36,
+    "ship_units": 6,
+    "ship_amount": 54
+  },
+  "尼日利亚/埃塞俄比亚": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 3,
+    "ship_amount": 25.8
+  },
+  "阿尔及利亚": {
+    "sign_units": 17,
+    "sign_amount": 103,
+    "prod_units": 6,
+    "prod_amount": 35.2,
+    "ship_units": 1,
+    "ship_amount": 8.4
+  },
+  "南非/安格拉": {
+    "sign_units": 8,
+    "sign_amount": 100,
+    "prod_units": 4,
+    "prod_amount": 35,
+    "ship_units": 3,
+    "ship_amount": 23
+  },
+  "埃及-2": {
+    "sign_units": 14,
+    "sign_amount": 236,
+    "prod_units": 8,
+    "prod_amount": 43,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "德国西班牙": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "东欧": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "英国意大利": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "商贸1": {
+    "sign_units": 0,
+    "sign_amount": 360,
+    "prod_units": 0,
+    "prod_amount": 200,
+    "ship_units": 0,
+    "ship_amount": 100
+  },
+  "商贸2": {
+    "sign_units": 0,
+    "sign_amount": 0,
+    "prod_units": 0,
+    "prod_amount": 0,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "商贸3": {
+    "sign_units": 0,
+    "sign_amount": 100,
+    "prod_units": 0,
+    "prod_amount": 100,
+    "ship_units": 0,
+    "ship_amount": 0
+  },
+  "配件-1": {
+    "sign_units": 0,
+    "sign_amount": 400,
+    "prod_units": 0,
+    "prod_amount": 100,
+    "ship_units": 0,
+    "ship_amount": 110
+  },
+  "配件-2": {
+    "sign_units": 0,
+    "sign_amount": 200,
+    "prod_units": 0,
+    "prod_amount": 100,
+    "ship_units": 0,
+    "ship_amount": 100
+  },
+  "改造": {
+    "sign_units": 0,
+    "sign_amount": 200,
+    "prod_units": 0,
+    "prod_amount": 100,
+    "ship_units": 0,
+    "ship_amount": 100
+  }
+}

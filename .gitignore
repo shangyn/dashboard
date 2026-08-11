@@ -1,0 +1,141 @@
+# ============ 操作系统 ============
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+*.swp
+*.swo
+
+# ============ IDE ============
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# Eclipse
+.settings/
+.project
+.classpath
+*.launch
+.metadata/
+
+# NetBeans
+nbproject/
+nbactions.xml
+*.nb-gradle/
+
+# ============ 日志 ============
+*.log
+logs/
+*.log.*
+
+# ============ 临时文件 ============
+*.tmp
+*.temp
+*.cache
+*.bak
+*.backup
+*~
+*.lock
+
+# ============ 敏感配置 ============
+.env
+.env.*
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+config.local.*
+application-local.*
+application-*.local.properties
+
+# ============ 构建产物 ============
+build/
+target/
+dist/
+*.class
+*.jar
+*.war
+*.ear
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+*.obj
+
+# ============ 依赖 ============
+# Node.js
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Python
+venv/
+env/
+.venv/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Java
+*.hprof
+*.dump
+
+# ============ 测试 ============
+coverage/
+.nyc_output/
+test-reports/
+*.test.js
+*.spec.js
+
+# ============ Docker ============
+.dockerignore
+Dockerfile.*
+*.dockerfile
+
+# ============ 其他 ============
+*.zip
+*.gz
+*.tar
+*.rar
+*.7z
+*.mp4
+*.mp3
+*.avi
+*.mov
+# Excel 文件（包含真实数据，建议忽略）
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+
+# CSV 文件（包含真实数据，建议忽略）
+*.csv
+
+# Word 文件
+*.doc
+*.docx
+*.txt
+
+# 其他 Office 文件
+*.ppt
+*.pptx

@@ -92,6 +92,11 @@ class UploadConfig(db.Model):
     required_columns = db.Column(db.Text, default='')
     sort_order = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('upload_config.id'), nullable=True)
+    handler_script = db.Column(db.String(200), default='')
+    script_dir = db.Column(db.String(300), default='dashboards/generate_dashboard')
+    dashboard_module_id = db.Column(db.Integer, db.ForeignKey('module.id'), nullable=True)
+    children = db.relationship('UploadConfig', backref=db.backref('parent', remote_side=[id]), lazy=True)
 
     def to_dict(self):
         return {
@@ -104,6 +109,10 @@ class UploadConfig(db.Model):
             'required_columns': self.required_columns,
             'sort_order': self.sort_order,
             'is_active': self.is_active,
+            'parent_id': self.parent_id,
+            'handler_script': self.handler_script,
+            'script_dir': self.script_dir,
+            'dashboard_module_id': self.dashboard_module_id,
         }
 
 
@@ -118,6 +127,7 @@ class FileUpload(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     status = db.Column(db.String(20), default='stored')  # stored / parsed / error
     message = db.Column(db.Text, default='')
+    ip_address = db.Column(db.String(50), default='')
     uploaded_at = db.Column(db.DateTime, default=datetime.now)
 
     upload_config = db.relationship('UploadConfig', backref='uploads', lazy=True)
@@ -134,5 +144,33 @@ class FileUpload(db.Model):
             'username': self.user.username if self.user else '',
             'status': self.status,
             'message': self.message,
+            'ip_address': self.ip_address,
             'uploaded_at': self.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') if self.uploaded_at else '',
+        }
+
+
+class OperationLog(db.Model):
+    __tablename__ = 'operation_log'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    username = db.Column(db.String(80), default='')
+    ip_address = db.Column(db.String(50), default='')
+    action_type = db.Column(db.String(50), default='')  # upload / generate_dashboard
+    target_name = db.Column(db.String(200), default='')
+    result = db.Column(db.String(20), default='success')  # success / error
+    message = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'username': self.username,
+            'ip_address': self.ip_address,
+            'action_type': self.action_type,
+            'target_name': self.target_name,
+            'result': self.result,
+            'message': self.message,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
         }

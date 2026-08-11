@@ -1,0 +1,225 @@
+<h2>三种看板布局方案</h2>
+<p class="subtitle">面向领导层快速概览，全流程（签订→排产→发货→回款），绝对值+增长率并重</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>方案A：KPI卡片 + 流程对比 + 大区排行</h3>
+      <p>经典管理层看板布局，自上而下越来越细</p>
+
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">方案A — 全流程两年对比看板</div>
+        <div class="mockup-body" style="padding:16px">
+          <!-- KPI Cards Row -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+            <div style="background:#fff;border-radius:8px;padding:12px;text-align:center;border-top:3px solid #4C78A8">
+              <div style="font-size:11px;color:#888">📝 签订额</div>
+              <div style="font-size:20px;font-weight:700;color:#1a73e8">12,580<span style="font-size:11px;color:#666"> 万</span></div>
+              <div style="font-size:12px;color:#059669;font-weight:600">↑ +18.2%</div>
+            </div>
+            <div style="background:#fff;border-radius:8px;padding:12px;text-align:center;border-top:3px solid #54A867">
+              <div style="font-size:11px;color:#888">🏭 排产额</div>
+              <div style="font-size:20px;font-weight:700;color:#1a73e8">9,320<span style="font-size:11px;color:#666"> 万</span></div>
+              <div style="font-size:12px;color:#059669;font-weight:600">↑ +12.5%</div>
+            </div>
+            <div style="background:#fff;border-radius:8px;padding:12px;text-align:center;border-top:3px solid #C8963C">
+              <div style="font-size:11px;color:#888">🚚 发货额</div>
+              <div style="font-size:20px;font-weight:700;color:#1a73e8">7,150<span style="font-size:11px;color:#666"> 万</span></div>
+              <div style="font-size:12px;color:#dc2626;font-weight:600">↓ -3.1%</div>
+            </div>
+            <div style="background:#fff;border-radius:8px;padding:12px;text-align:center;border-top:3px solid #D4645C">
+              <div style="font-size:11px;color:#888">💰 回款额</div>
+              <div style="font-size:20px;font-weight:700;color:#1a73e8">6,820<span style="font-size:11px;color:#666"> 万</span></div>
+              <div style="font-size:12px;color:#059669;font-weight:600">↑ +22.7%</div>
+            </div>
+          </div>
+
+          <!-- Pipeline comparison bars -->
+          <div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:12px">
+            <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px">全流程两年对比（全国合计）</div>
+            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:6px 8px;align-items:center;font-size:11px">
+              <div></div><div style="color:#888;text-align:center">2025</div><div style="color:#1a73e8;text-align:center">2026</div>
+              <div style="font-weight:600">签订</div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#B0C4DE;height:100%;width:65%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#555;font-size:10px">10,660</div></div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#4C78A8;height:100%;width:78%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px">12,580</div><span style="font-size:10px;color:#059669;margin-left:6px">+18%</span></div>
+              <div style="font-weight:600">排产</div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#B0C4DE;height:100%;width:55%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#555;font-size:10px">8,280</div></div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#54A867;height:100%;width:62%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px">9,320</div><span style="font-size:10px;color:#059669;margin-left:6px">+13%</span></div>
+              <div style="font-weight:600">发货</div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#B0C4DE;height:100%;width:48%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#555;font-size:10px">7,380</div></div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#C8963C;height:100%;width:47%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px">7,150</div><span style="font-size:10px;color:#dc2626;margin-left:6px">-3%</span></div>
+              <div style="font-weight:600">回款</div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#B0C4DE;height:100%;width:37%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#555;font-size:10px">5,560</div></div>
+              <div style="background:#f0f0f0;border-radius:4px;height:20px;position:relative"><div style="background:#D4645C;height:100%;width:45%;border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:10px">6,820</div><span style="font-size:10px;color:#059669;margin-left:6px">+23%</span></div>
+            </div>
+          </div>
+
+          <!-- Regional ranking -->
+          <div style="background:#fff;border-radius:8px;padding:12px">
+            <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px">签订额 大区排名 & 同比增长</div>
+            <div style="font-size:11px">
+              <div style="display:flex;align-items:center;margin-bottom:4px;padding:4px 8px;background:#f8fafc;border-radius:4px">
+                <span style="width:20px;font-weight:700;color:#4C78A8">1</span>
+                <span style="width:60px">🇷🇺 俄罗斯</span>
+                <span style="flex:1;background:#eee;height:16px;border-radius:3px;position:relative;margin:0 8px"><span style="background:#4C78A8;height:100%;width:90%;display:block;border-radius:3px"></span></span>
+                <span style="font-weight:700;margin-right:8px">3,200万</span>
+                <span style="color:#059669;font-weight:600">+25%</span>
+              </div>
+              <div style="display:flex;align-items:center;margin-bottom:4px;padding:4px 8px;border-radius:4px">
+                <span style="width:20px;font-weight:700;color:#54A867">2</span>
+                <span style="width:60px">🌏 亚洲1</span>
+                <span style="flex:1;background:#eee;height:16px;border-radius:3px;position:relative;margin:0 8px"><span style="background:#54A867;height:100%;width:75%;display:block;border-radius:3px"></span></span>
+                <span style="font-weight:700;margin-right:8px">2,680万</span>
+                <span style="color:#059669;font-weight:600">+18%</span>
+              </div>
+              <div style="display:flex;align-items:center;margin-bottom:4px;padding:4px 8px;border-radius:4px">
+                <span style="width:20px;font-weight:700;color:#C8963C">3</span>
+                <span style="width:60px">🌍 中东</span>
+                <span style="flex:1;background:#eee;height:16px;border-radius:3px;position:relative;margin:0 8px"><span style="background:#C8963C;height:100%;width:60%;display:block;border-radius:3px"></span></span>
+                <span style="font-weight:700;margin-right:8px">1,950万</span>
+                <span style="color:#dc2626;font-weight:600">-8%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>方案B：矩阵式大区×指标一览表</h3>
+      <p>所有大区、所有指标平铺展示，适合快速横向对比</p>
+
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">方案B — 大区×指标 矩阵看板</div>
+        <div class="mockup-body" style="padding:16px">
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <thead>
+              <tr style="background:#eef2f7">
+                <th style="padding:8px;text-align:left;border:1px solid #d0d5dd">大区</th>
+                <th style="padding:8px;border:1px solid #d0d5dd">签订额<br><small style="color:#888">2025→2026</small></th>
+                <th style="padding:8px;border:1px solid #d0d5dd">排产额<br><small style="color:#888">2025→2026</small></th>
+                <th style="padding:8px;border:1px solid #d0d5dd">发货额<br><small style="color:#888">2025→2026</small></th>
+                <th style="padding:8px;border:1px solid #d0d5dd">回款额<br><small style="color:#888">2025→2026</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding:8px;border:1px solid #d0d5dd;font-weight:600">🇷🇺 俄罗斯</td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">2,850→<b>3,200</b><br><span style="color:#059669">↑25%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">2,100→<b>2,450</b><br><span style="color:#059669">↑17%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,800→<b>1,950</b><br><span style="color:#059669">↑8%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,520→<b>1,880</b><br><span style="color:#059669">↑24%</span></td>
+              </tr>
+              <tr style="background:#f8fafc"><td style="padding:8px;border:1px solid #d0d5dd;font-weight:600">🌏 亚洲1</td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">2,270→<b>2,680</b><br><span style="color:#059669">↑18%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,890→<b>2,020</b><br><span style="color:#059669">↑7%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,650→<b>1,580</b><br><span style="color:#dc2626">↓4%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,300→<b>1,420</b><br><span style="color:#059669">↑9%</span></td>
+              </tr>
+              <tr><td style="padding:8px;border:1px solid #d0d5dd;font-weight:600">🌍 中东</td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">2,120→<b>1,950</b><br><span style="color:#dc2626">↓8%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,760→<b>1,680</b><br><span style="color:#dc2626">↓5%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,540→<b>1,420</b><br><span style="color:#dc2626">↓8%</span></td>
+                <td style="padding:8px;border:1px solid #d0d5dd;text-align:center">1,180→<b>1,250</b><br><span style="color:#059669">↑6%</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top:8px;font-size:10px;color:#888">💡 每格含：去年值 → 今年值 + 增长率，颜色标示涨跌</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>方案C：组合式 — KPI + 双环图 + 大区热力图</h3>
+      <p>混合图表类型，视觉冲击力强，信息密度适中</p>
+
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">方案C — 混合图表看板</div>
+        <div class="mockup-body" style="padding:16px">
+          <!-- Summary strip -->
+          <div style="display:flex;gap:8px;margin-bottom:12px;font-size:10px;color:#888">
+            <span>📊 全国签订 <b style="color:#1a73e8">12,580万</b> <span style="color:#059669">↑18%</span></span>
+            <span>|</span>
+            <span>🏭 全国排产 <b style="color:#1a73e8">9,320万</b> <span style="color:#059669">↑13%</span></span>
+            <span>|</span>
+            <span>🚚 全国发货 <b style="color:#1a73e8">7,150万</b> <span style="color:#dc2626">↓3%</span></span>
+            <span>|</span>
+            <span>💰 全国回款 <b style="color:#1a73e8">6,820万</b> <span style="color:#059669">↑23%</span></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <!-- Donut charts -->
+            <div style="background:#fff;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">签订额 大区占比 vs 同比增长</div>
+              <div style="display:flex;justify-content:center;gap:20px;align-items:center">
+                <div style="width:100px;height:100px;border-radius:50%;background:conic-gradient(#4C78A8 0% 28%, #54A867 28% 52%, #C8963C 52% 69%, #D4645C 69% 81%, #5AA3AE 81% 90%, #7BA868 90% 100%);display:flex;align-items:center;justify-content:center"><div style="width:50px;height:50px;border-radius:50%;background:#fff"></div></div>
+                <div style="text-align:left;font-size:10px">
+                  <div>🇷🇺 俄罗斯 28% <span style="color:#059669">↑25%</span></div>
+                  <div>🌏 亚洲1 24% <span style="color:#059669">↑18%</span></div>
+                  <div>🌍 中东 17% <span style="color:#dc2626">↓8%</span></div>
+                  <div>🌐 其他 31% <span style="color:#059669">↑6%</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Heatmap -->
+            <div style="background:#fff;border-radius:8px;padding:12px">
+              <div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">各环节同比增长热力图</div>
+              <table style="width:100%;font-size:10px;border-collapse:collapse">
+                <tr style="background:#eef2f7"><th style="padding:4px;border:1px solid #d0d5dd">大区</th><th style="padding:4px;border:1px solid #d0d5dd">签订</th><th style="padding:4px;border:1px solid #d0d5dd">排产</th><th style="padding:4px;border:1px solid #d0d5dd">发货</th><th style="padding:4px;border:1px solid #d0d5dd">回款</th></tr>
+                <tr><td style="padding:4px;border:1px solid #d0d5dd">俄罗斯</td><td style="background:#d4edda;color:#059669;padding:6px">+25%</td><td style="background:#d4edda;color:#059669;padding:6px">+17%</td><td style="background:#d4edda;color:#059669;padding:6px">+8%</td><td style="background:#d4edda;color:#059669;padding:6px">+24%</td></tr>
+                <tr><td style="padding:4px;border:1px solid #d0d5dd">亚洲1</td><td style="background:#d4edda;color:#059669;padding:6px">+18%</td><td style="background:#d4edda;color:#059669;padding:6px">+7%</td><td style="background:#fce4e4;color:#dc2626;padding:6px">-4%</td><td style="background:#d4edda;color:#059669;padding:6px">+9%</td></tr>
+                <tr><td style="padding:4px;border:1px solid #d0d5dd">中东</td><td style="background:#fce4e4;color:#dc2626;padding:6px">-8%</td><td style="background:#fce4e4;color:#dc2626;padding:6px">-5%</td><td style="background:#fce4e4;color:#dc2626;padding:6px">-8%</td><td style="background:#d4edda;color:#059669;padding:6px">+6%</td></tr>
+                <tr><td style="padding:4px;border:1px solid #d0d5dd">美洲</td><td style="background:#d4edda;color:#059669;padding:6px">+12%</td><td style="background:#d4edda;color:#059669;padding:6px">+15%</td><td style="background:#d4edda;color:#059669;padding:6px">+20%</td><td style="background:#d4edda;color:#059669;padding:6px">+11%</td></tr>
+              </table>
+              <div style="margin-top:6px;font-size:9px;color:#888">🟢 绿色=增长 🔴 红色=下降</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px">
+  <h3>方案对比</h3>
+  <div class="pros-cons">
+    <div class="pros"><h4>方案A 优势</h4><ul>
+      <li>自上而下的信息层级，领导层最熟悉的结构</li>
+      <li>水平条形图直观对比两年数据</li>
+      <li>大区排行一眼看出谁领先谁掉队</li>
+    </ul></div>
+    <div class="cons"><h4>方案A 劣势</h4><ul>
+      <li>需滚动页面才能看完所有指标</li>
+      <li>对大区间的横向对比不够直接</li>
+    </ul></div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>方案B 优势</h4><ul>
+      <li>所有信息在一个矩阵内，无滚动需求</li>
+      <li>大区×指标交叉对比极快</li>
+      <li>数据密度高，适合打印/截图汇报</li>
+    </ul></div>
+    <div class="cons"><h4>方案B 劣势</h4><ul>
+      <li>视觉变化少，像表格升级版而非"看板"</li>
+      <li>趋势和排行不够直观</li>
+    </ul></div>
+  </div>
+  <div class="pros-cons">
+    <div class="pros"><h4>方案C 优势</h4><ul>
+      <li>图表类型丰富（环形图+热力图），视觉吸引力强</li>
+      <li>热力图一眼定位"哪里出问题"</li>
+      <li>大区占比 + 增长率在同一屏</li>
+    </ul></div>
+    <div class="cons"><h4>方案C 劣势</h4><ul>
+      <li>绝对值不如方案A清晰</li>
+      <li>ECharts 环形图需要额外开发</li>
+    </ul></div>
+  </div>
+</div>

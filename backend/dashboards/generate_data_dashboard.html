@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026年8月签单排产发货看板</title>
+<script src="echarts.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #f0f2f5 0%, #e3e8ee 50%, #edf0f5 100%);
+    min-height: 100vh;
+    color: #1a2332;
+}
+.container { width: 100%; max-width: 1920px; margin: 0 auto; padding: 36px 24px; }
+
+.hero { text-align: center; margin-bottom: 28px; }
+.hero h1 { font-size: 34px; font-weight: 800; letter-spacing: 3px; color: #0d1b2a; }
+.hero .date { font-size: 18px; color: #8899aa; margin-top: 8px; }
+
+.summary {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 14px;
+    margin-bottom: 36px;
+}
+.summary-card {
+    position: relative;
+    background: #fff;
+    border-radius: 16px;
+    padding: 22px 10px 16px;
+    text-align: center;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+    transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: default;
+    overflow: hidden;
+    min-width: 0;
+}
+.summary-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    border-radius: 16px 16px 0 0;
+}
+.summary-card:nth-child(1)::before { background: #4C78A8; }
+.summary-card:nth-child(2)::before { background: #54A867; }
+.summary-card:nth-child(3)::before { background: #C8963C; }
+.summary-card:nth-child(4)::before { background: #5AA3AE; }
+.summary-card:nth-child(5)::before { background: #7BA868; }
+.summary-card:nth-child(6)::before { background: #8C6DB8; }
+.summary-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.10);
+}
+.summary-card .sc-label {
+    font-size: 13px; color: #1a2332; margin-bottom: 6px;
+    letter-spacing: 2px; font-weight: 600;
+}
+.summary-card .sc-value {
+    font-size: 36px; font-weight: 800; color: #2563eb; line-height: 1.15;
+}
+.summary-card .sc-unit {
+    font-size: 14px; font-weight: 500; color: #2563eb; margin-left: 1px;
+}
+.summary-card .sc-ratio {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 12px;
+    border-radius: 16px;
+    font-size: 13px; font-weight: 700;
+}
+.ratio-badge-high { background: #ecfdf5; color: #059669; }
+.ratio-badge-mid { background: #eff6ff; color: #2563eb; }
+.ratio-badge-low { background: #ecfdf5; color: #059669; }
+
+.section-title {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: #0d1b2a;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+}
+
+.region-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 22px;
+    margin-bottom: 30px;
+    padding: 14px 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #333;
+    font-weight: 500;
+}
+.legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    margin-bottom: 36px;
+}
+.chart-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 18px 14px 14px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+    overflow: hidden;
+    min-width: 0;
+}
+.chart-title {
+    font-size: 16px;
+    font-weight: 700;
+    text-align: left;
+    color: #0d1b2a;
+    margin-bottom: 12px;
+    padding-left: 6px;
+    letter-spacing: 1px;
+}
+.chart-wrap {
+    width: 100%;
+    height: 540px;
+    overflow: hidden;
+}
+
+.toggle-bar {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+.toggle-btn {
+    padding: 10px 36px;
+    border: 2px solid #3b82f6;
+    border-radius: 8px;
+    background: #fff;
+    color: #3b82f6;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    letter-spacing: 2px;
+}
+.toggle-btn.active {
+    background: #3b82f6;
+    color: #fff;
+}
+.toggle-btn:hover:not(.active) {
+    background: #eff6ff;
+}
+.toggle-btn:focus { outline: none; }
+
+#view-charts.hide { display: none; }
+#view-table { display: none; }
+#view-table.show { display: block; }
+
+.table-wrap {
+    overflow-x: auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+    margin-bottom: 36px;
+}
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+.data-table thead th {
+    background: #3b82f6;
+    color: #fff;
+    padding: 5px 4px;
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border: 1px solid #dbeafe;
+}
+.data-table thead th.sub-header {
+    background: #60a5fa;
+    padding: 3px 4px;
+}
+.data-table tbody td {
+    padding: 3px 5px;
+    border: 1px solid #e5e7eb;
+    text-align: center;
+    white-space: nowrap;
+    font-size: 14px;
+}
+.data-table .col-a { text-align: center; width: 36px; color: #9ca3af; }
+.data-table .col-b { text-align: left; padding-left: 6px; }
+.data-table .row-subtotal td { background: #D6E4F0; font-weight: 700; font-size: 16px; padding: 6px 5px; }
+.data-table .row-grand td { background: #B4C6E7; font-weight: 800; font-size: 16px; padding: 8px 5px; }
+.data-table .row-normal:nth-child(even) td { background: #f8fafc; }
+.data-table .row-normal:nth-child(even).row-subtotal td { background: #D6E4F0; }
+.data-table .row-region-header td {
+    background: #4c8ef9; color: #fff; font-weight: 600; font-size: 13px;
+    padding: 4px 4px; border: 1px solid #dbeafe;
+}
+.data-table .row-region-header.row-region-subheader td {
+    background: #4c8ef9; font-size: 12px; font-weight: 500;
+}
+
+.ratio-low  { color: #ff00008c !important; font-weight: 600; }
+.ratio-mid  { color: #ff0000 !important; font-weight: 600; }
+.ratio-high { color: #ff0000 !important; font-weight: 600; }
+
+.footer { text-align: center; color: #aab5c0; font-size: 12px; margin-top: 12px; letter-spacing: 1px; }
+
+@media (max-width: 1100px) {
+    .summary { grid-template-columns: repeat(3, 1fr); }
+    .charts-grid { grid-template-columns: 1fr; }
+    .chart-wrap { height: 480px; }
+    .chart-card { padding: 14px 10px 10px; }
+    .container { padding: 20px 16px; }
+}
+@media (max-width: 640px) {
+    .summary { grid-template-columns: repeat(2, 1fr); }
+    .hero h1 { font-size: 22px; }
+    .summary-card .sc-value { font-size: 28px; }
+    .chart-wrap { height: 400px; }
+    .chart-card { padding: 10px 6px 6px; }
+    .chart-title { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="hero">
+    <h1>2026年8月签单排产发货看板</h1>
+    <div class="date">报表日期：2026-08-11</div>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<div class="toggle-bar">
+    <button class="toggle-btn active" id="btnCharts" onclick="switchView('charts')">看 板</button>
+    <button class="toggle-btn" id="btnTable" onclick="switchView('table')">图 表</button>
+    <button class="toggle-btn" id="btnExport" onclick="ExportManager.downloadOriginal()">导出Excel</button>
+</div>
+
+<div id="view-charts">
+    <div class="region-legend" id="regionLegend"></div>
+    <div class="charts-grid" id="chartsGrid"></div>
+</div>
+
+<div id="view-table">
+    <div class="table-wrap">
+        <table class="data-table">
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="footer">签单排产发货看板 · 数据自动生成</div>
+</div>
+
+<script>
+const DATA = {"regions": [{"name": "美洲合计", "sign_units": {"fc": 97.0, "ac": 25.0, "ratio": 0.2577}, "sign_amount": {"fc": 1172.0, "ac": 516.0, "ratio": 0.4403}, "prod_units": {"fc": 57.0, "ac": 20.0, "ratio": 0.3509}, "prod_amount": {"fc": 565.0, "ac": 212.0, "ratio": 0.3751}, "ship_units": {"fc": 75.0, "ac": 28.0, "ratio": 0.3733}, "ship_amount": {"fc": 1078.0, "ac": 458.0, "ratio": 0.4246}}, {"name": "亚洲2合计", "sign_units": {"fc": 94.0, "ac": 1.0, "ratio": 0.0106}, "sign_amount": {"fc": 1058.0, "ac": 10.0, "ratio": 0.0092}, "prod_units": {"fc": 52.0, "ac": 3.0, "ratio": 0.0577}, "prod_amount": {"fc": 539.0, "ac": 33.0, "ratio": 0.0604}, "ship_units": {"fc": 46.0, "ac": 3.0, "ratio": 0.0652}, "ship_amount": {"fc": 394.0, "ac": 34.0, "ratio": 0.0864}}, {"name": "俄罗斯合计", "sign_units": {"fc": 244.0, "ac": 9.0, "ratio": 0.0369}, "sign_amount": {"fc": 5035.0, "ac": 41.0, "ratio": 0.0081}, "prod_units": {"fc": 130.0, "ac": 105.0, "ratio": 0.8077}, "prod_amount": {"fc": 2701.0, "ac": 1916.0, "ratio": 0.7095}, "ship_units": {"fc": 139.0, "ac": 13.0, "ratio": 0.0935}, "ship_amount": {"fc": 2260.0, "ac": 180.0, "ratio": 0.0795}}, {"name": "非洲合计", "sign_units": {"fc": 55.0, "ac": 1.0, "ratio": 0.0182}, "sign_amount": {"fc": 516.0, "ac": 8.0, "ratio": 0.0146}, "prod_units": {"fc": 268.0, "ac": 9.0, "ratio": 0.0336}, "prod_amount": {"fc": 1943.0, "ac": 102.0, "ratio": 0.0526}, "ship_units": {"fc": 109.0, "ac": 4.0, "ratio": 0.0367}, "ship_amount": {"fc": 911.0, "ac": 36.0, "ratio": 0.0398}}, {"name": "亚洲1合计", "sign_units": {"fc": 130.0, "ac": 1.0, "ratio": 0.0077}, "sign_amount": {"fc": 2113.0, "ac": 6.0, "ratio": 0.0029}, "prod_units": {"fc": 22.0, "ac": 7.0, "ratio": 0.3182}, "prod_amount": {"fc": 271.0, "ac": 44.0, "ratio": 0.1624}, "ship_units": {"fc": 67.0, "ac": 18.0, "ratio": 0.2687}, "ship_amount": {"fc": 1510.0, "ac": 319.0, "ratio": 0.211}}, {"name": "欧洲合计", "sign_units": {"fc": 0.0, "ac": 0.0, "ratio": 0}, "sign_amount": {"fc": 144.0, "ac": 0.0, "ratio": 0.0}, "prod_units": {"fc": 0.0, "ac": 0.0, "ratio": 0}, "prod_amount": {"fc": 144.0, "ac": 0.0, "ratio": 0.0}, "ship_units": {"fc": 0.0, "ac": 0.0, "ratio": 0}, "ship_amount": {"fc": 97.0, "ac": 0.0, "ratio": 0.0}}, {"name": "中亚合计", "sign_units": {"fc": 132.0, "ac": 7.0, "ratio": 0.053}, "sign_amount": {"fc": 1177.0, "ac": 36.0, "ratio": 0.0306}, "prod_units": {"fc": 75.0, "ac": 11.0, "ratio": 0.1467}, "prod_amount": {"fc": 624.0, "ac": 68.0, "ratio": 0.1083}, "ship_units": {"fc": 85.0, "ac": 19.0, "ratio": 0.2235}, "ship_amount": {"fc": 654.0, "ac": 142.0, "ratio": 0.2176}}, {"name": "商贸配件合计", "sign_units": {"fc": 0.0, "ac": 0.0, "ratio": 0}, "sign_amount": {"fc": 910.0, "ac": 0.0, "ratio": 0.0}, "prod_units": {"fc": 0.0, "ac": 0.0, "ratio": 0}, "prod_amount": {"fc": 760.0, "ac": 0.0, "ratio": 0.0}, "ship_units": {"fc": 0.0, "ac": 0.0, "ratio": 0}, "ship_amount": {"fc": 560.0, "ac": 0.0, "ratio": 0.0}}, {"name": "中东合计", "sign_units": {"fc": 98.0, "ac": 1.0, "ratio": 0.0102}, "sign_amount": {"fc": 756.0, "ac": 40.0, "ratio": 0.0525}, "prod_units": {"fc": 63.0, "ac": 1.0, "ratio": 0.0159}, "prod_amount": {"fc": 410.0, "ac": 6.0, "ratio": 0.0148}, "ship_units": {"fc": 52.0, "ac": 6.0, "ratio": 0.1154}, "ship_amount": {"fc": 365.0, "ac": 75.0, "ratio": 0.205}}], "grand": {"name": "全国贸合计", "sign_units": {"fc": 850.0, "ac": 45.0, "ratio": 0.0529}, "sign_amount": {"fc": 12881.0, "ac": 657.0, "ratio": 0.051}, "prod_units": {"fc": 667.0, "ac": 156.0, "ratio": 0.2339}, "prod_amount": {"fc": 7957.0, "ac": 2381.0, "ratio": 0.2992}, "ship_units": {"fc": 573.0, "ac": 91.0, "ratio": 0.1588}, "ship_amount": {"fc": 7829.0, "ac": 1244.0, "ratio": 0.1589}}, "metrics": [{"id": "sign_units", "name": "签单台数", "unit": "台", "fc_col": "C", "ac_col": "D", "ratio_col": "E"}, {"id": "sign_amount", "name": "签单金额", "unit": "万元", "fc_col": "F", "ac_col": "G", "ratio_col": "H"}, {"id": "prod_units", "name": "排产台数", "unit": "台", "fc_col": "I", "ac_col": "J", "ratio_col": "K"}, {"id": "prod_amount", "name": "排产金额", "unit": "万元", "fc_col": "L", "ac_col": "M", "ratio_col": "N"}, {"id": "ship_units", "name": "发货台数", "unit": "台", "fc_col": "O", "ac_col": "P", "ratio_col": "Q"}, {"id": "ship_amount", "name": "发货金额", "unit": "万元", "fc_col": "R", "ac_col": "S", "ratio_col": "T"}], "regionColors": ["#4C78A8", "#54A867", "#C8963C", "#D4645C", "#5AA3AE", "#7BA868", "#E07B42", "#8C6DB8", "#C86C8A"], "innerColors": {"sign_units": "#3b82f6", "sign_amount": "#3b82f6", "prod_units": "#3b82f6", "prod_amount": "#3b82f6", "ship_units": "#3b82f6", "ship_amount": "#3b82f6"}, "tableRows": [{"a": "1", "b": "俄罗斯（东部）", "isSubtotal": false, "isGrand": false, "cols": {"C": 27, "D": 4, "E": 0.14814814814814814, "F": 307.5, "G": 33.06, "H": 0.10751219512195123, "I": 21, "J": 9, "K": 0.42857142857142855, "L": 245.89, "M": 99.24000000000001, "N": 0.4035951035015658, "O": 16, "P": 0, "Q": 0.0, "R": 209.89, "S": 0, "T": 0.0}}, {"a": "2", "b": "俄罗斯（中南）", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "3", "b": "俄罗斯（中部）", "isSubtotal": false, "isGrand": false, "cols": {"C": 160, "D": 0, "E": 0.0, "F": 4000, "G": 0, "H": 0.0, "I": 58, "J": 43, "K": 0.7413793103448276, "L": 1850, "M": 845.0400000000001, "N": 0.4567783783783784, "O": 78, "P": 0, "Q": 0.0, "R": 1460, "S": 0, "T": 0.0}}, {"a": "4", "b": "俄罗斯（西南）", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 1, "E": 0.1, "F": 200, "G": 7.604576, "H": 0.03802288, "I": 14, "J": 10, "K": 0.7142857142857143, "L": 200, "M": 195.3079, "N": 0.9765394999999999, "O": 5, "P": 0, "Q": 0.0, "R": 100, "S": 0, "T": 0.0}}, {"a": "5", "b": "俄罗斯（西部）", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 4, "E": 1, "F": 0, "G": 0.344, "H": 1, "I": 0, "J": 40, "K": 1, "L": 0, "M": 753.6110999999997, "N": 1, "O": 0, "P": 10, "Q": 1, "R": 0, "S": 156.82, "T": 1}}, {"a": "6", "b": "叶卡", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "7", "b": "哈巴", "isSubtotal": false, "isGrand": false, "cols": {"C": 20, "D": 0, "E": 0.0, "F": 220, "G": 0, "H": 0.0, "I": 16, "J": 3, "K": 0.1875, "L": 159, "M": 22.89, "N": 0.1439622641509434, "O": 24, "P": 3, "Q": 0.125, "R": 280, "S": 22.89, "T": 0.08175}}, {"a": "8", "b": "新西", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "9", "b": "罗斯托夫", "isSubtotal": false, "isGrand": false, "cols": {"C": 27, "D": 0, "E": 0.0, "F": 307.5, "G": 0, "H": 0.0, "I": 21, "J": 0, "K": 0.0, "L": 245.89, "M": 0, "N": 0.0, "O": 16, "P": 0, "Q": 0.0, "R": 209.89, "S": 0, "T": 0.0}}, {"a": "10", "b": "莫斯科", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "俄罗斯合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 244, "D": 9, "E": 0.036885245901639344, "F": 5035.0, "G": 41.008576000000005, "H": 0.008144702284011918, "I": 130, "J": 105, "K": 0.8076923076923077, "L": 2700.7799999999997, "M": 1916.0889999999997, "N": 0.7094576381637897, "O": 139, "P": 13, "Q": 0.09352517985611511, "R": 2259.7799999999997, "S": 179.70999999999998, "T": 0.07952544052960908}}, {"a": "11", "b": "新加坡HDB", "isSubtotal": false, "isGrand": false, "cols": {"C": 50, "D": 0, "E": 0.0, "F": 900, "G": 0, "H": 0.0, "I": 3, "J": 0, "K": 0.0, "L": 100, "M": 0, "N": 0.0, "O": 32, "P": 5, "Q": 0.15625, "R": 1100, "S": 225.306818, "T": 0.20482438}}, {"a": "12", "b": "新加坡市政会", "isSubtotal": false, "isGrand": false, "cols": {"C": 50, "D": 0, "E": 0.0, "F": 900, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 2, "Q": 1, "R": 0, "S": 32.635616, "T": 1}}, {"a": "13", "b": "朝鲜-韩国", "isSubtotal": false, "isGrand": false, "cols": {"C": 4, "D": 0, "E": 0.0, "F": 38.6, "G": 0, "H": 0.0, "I": 4, "J": 0, "K": 0.0, "L": 38.6, "M": 0, "N": 0.0, "O": 7, "P": 0, "Q": 0.0, "R": 51.2, "S": 0, "T": 0.0}}, {"a": "14", "b": "泰国", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 0, "E": 0.0, "F": 80, "G": 0, "H": 0.0, "I": 1, "J": 0, "K": 0.0, "L": 10, "M": 0, "N": 0.0, "O": 2, "P": 2, "Q": 1.0, "R": 21.3, "S": 3.299282, "T": 0.1548958685446009}}, {"a": "15", "b": "泰国2", "isSubtotal": false, "isGrand": false, "cols": {"C": 6, "D": 0, "E": 0.0, "F": 82, "G": 0, "H": 0.0, "I": 5, "J": 1, "K": 0.2, "L": 30, "M": 6.01, "N": 0.20033333333333334, "O": 2, "P": 0, "Q": 0.0, "R": 12, "S": 0, "T": 0.0}}, {"a": "16", "b": "金三角", "isSubtotal": false, "isGrand": false, "cols": {"C": 5, "D": 0, "E": 0.0, "F": 70, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 10, "P": 9, "Q": 0.9, "R": 57.3, "S": 57.38, "T": 1.0013961605584643}}, {"a": "17", "b": "香港-台湾", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "18", "b": "马尔代夫", "isSubtotal": false, "isGrand": false, "cols": {"C": 2, "D": 0, "E": 0.0, "F": 12, "G": 0, "H": 0.0, "I": 6, "J": 3, "K": 0.5, "L": 62, "M": 23.4, "N": 0.37741935483870964, "O": 5, "P": 0, "Q": 0.0, "R": 38.6, "S": 0, "T": 0.0}}, {"a": "19", "b": "马来西亚", "isSubtotal": false, "isGrand": false, "cols": {"C": 3, "D": 1, "E": 0.3333333333333333, "F": 30, "G": 6.13, "H": 0.20433333333333334, "I": 3, "J": 3, "K": 1.0, "L": 30, "M": 14.5268, "N": 0.48422666666666664, "O": 9, "P": 0, "Q": 0.0, "R": 230, "S": 0, "T": 0.0}}, {"a": "亚洲1合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 130, "D": 1, "E": 0.007692307692307693, "F": 2112.6, "G": 6.13, "H": 0.002901637792293856, "I": 22, "J": 7, "K": 0.3181818181818182, "L": 270.6, "M": 43.9368, "N": 0.16236807095343678, "O": 67, "P": 18, "Q": 0.26865671641791045, "R": 1510.3999999999999, "S": 318.621716, "T": 0.2109518776483051}}, {"a": "20", "b": "印尼-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 0, "E": 0.0, "F": 100, "G": 0, "H": 0.0, "I": 10, "J": 0, "K": 0.0, "L": 100, "M": 0, "N": 0.0, "O": 10, "P": 0, "Q": 0.0, "R": 100, "S": 0, "T": 0.0}}, {"a": "21", "b": "印尼-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 7, "D": 0, "E": 0.0, "F": 150, "G": 0, "H": 0.0, "I": 5, "J": 0, "K": 0.0, "L": 100, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "22", "b": "印度公建", "isSubtotal": false, "isGrand": false, "cols": {"C": 8, "D": 0, "E": 0.0, "F": 189.964988932153, "G": 0, "H": 0.0, "I": 8, "J": 0, "K": 0.0, "L": 71.5, "M": 0, "N": 0.0, "O": 6, "P": 0, "Q": 0.0, "R": 41.9, "S": 0, "T": 0.0}}, {"a": "23", "b": "印度私营", "isSubtotal": false, "isGrand": false, "cols": {"C": 20, "D": 0, "E": 0.0, "F": 230, "G": 0, "H": 0.0, "I": 5, "J": 0, "K": 0.0, "L": 55, "M": 0, "N": 0.0, "O": 7, "P": 0, "Q": 0.0, "R": 57, "S": 0, "T": 0.0}}, {"a": "24", "b": "孟加拉-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 27, "D": 0, "E": 0.0, "F": 211.14, "G": 0, "H": 0.0, "I": 6, "J": 2, "K": 0.3333333333333333, "L": 38.76, "M": 22.762333, "N": 0.5872634932920537, "O": 10, "P": 0, "Q": 0.0, "R": 86.49, "S": 0, "T": 0.0}}, {"a": "25", "b": "巴基斯坦", "isSubtotal": false, "isGrand": false, "cols": {"C": 2, "D": 0, "E": 0.0, "F": 15, "G": 0, "H": 0.0, "I": 4, "J": 0, "K": 0.0, "L": 42, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "26", "b": "澳大利亚", "isSubtotal": false, "isGrand": false, "cols": {"C": 5, "D": 1, "E": 0.2, "F": 56, "G": 9.777312, "H": 0.17459485714285713, "I": 5, "J": 1, "K": 0.2, "L": 56, "M": 9.777312, "N": 0.17459485714285713, "O": 6, "P": 1, "Q": 0.16666666666666666, "R": 45, "S": 11.792891, "T": 0.2620642444444444}}, {"a": "27", "b": "菲律宾", "isSubtotal": false, "isGrand": false, "cols": {"C": 1, "D": 0, "E": 0.0, "F": 8.89, "G": 0, "H": 0.0, "I": 1, "J": 0, "K": 0.0, "L": 8.89, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "28", "b": "菲律宾-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 4, "D": 0, "E": 0.0, "F": 46.783, "G": 0, "H": 0.0, "I": 4, "J": 0, "K": 0.0, "L": 46.783, "M": 0, "N": 0.0, "O": 4, "P": 0, "Q": 0.0, "R": 46.783, "S": 0, "T": 0.0}}, {"a": "29", "b": "越南-1（工厂）", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 1, "P": 2, "Q": 2.0, "R": 6.58, "S": 22.222442, "T": 3.377270820668693}}, {"a": "30", "b": "越南-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 0, "E": 0.0, "F": 50, "G": 0, "H": 0.0, "I": 4, "J": 0, "K": 0.0, "L": 20, "M": 0, "N": 0.0, "O": 2, "P": 0, "Q": 0.0, "R": 10, "S": 0, "T": 0.0}}, {"a": "亚洲2合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 94, "D": 1, "E": 0.010638297872340425, "F": 1057.777988932153, "G": 9.777312, "H": 0.009243255297711746, "I": 52, "J": 3, "K": 0.057692307692307696, "L": 538.933, "M": 32.539645, "N": 0.06037790411795158, "O": 46, "P": 3, "Q": 0.06521739130434782, "R": 393.753, "S": 34.015333, "T": 0.08638748911119407}}, {"a": "31", "b": "伊拉克", "isSubtotal": false, "isGrand": false, "cols": {"C": 8, "D": 0, "E": 0.0, "F": 60, "G": 0, "H": 0.0, "I": 6, "J": 0, "K": 0.0, "L": 40, "M": 0, "N": 0.0, "O": 3, "P": 3, "Q": 1.0, "R": 20, "S": 29.563351, "T": 1.47816755}}, {"a": "32", "b": "伊朗+阿曼", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 0, "E": 0.0, "F": 16, "G": 0, "H": 0.0, "I": 4, "J": 1, "K": 0.25, "L": 10, "M": 6.057963, "N": 0.6057963, "O": 4, "P": 0, "Q": 0.0, "R": 10, "S": 0, "T": 0.0}}, {"a": "33", "b": "卡塔尔", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "34", "b": "巴勒斯坦", "isSubtotal": false, "isGrand": false, "cols": {"C": 5, "D": 0, "E": 0.0, "F": 50, "G": 0, "H": 0.0, "I": 3, "J": 0, "K": 0.0, "L": 30, "M": 0, "N": 0.0, "O": 5, "P": 0, "Q": 0.0, "R": 35, "S": 0, "T": 0.0}}, {"a": "35", "b": "沙特-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 30, "D": 1, "E": 0.03333333333333333, "F": 190, "G": 39.72033, "H": 0.20905436842105263, "I": 30, "J": 0, "K": 0.0, "L": 190, "M": 0, "N": 0.0, "O": 20, "P": 0, "Q": 0.0, "R": 160, "S": 0, "T": 0.0}}, {"a": "36", "b": "沙特工厂", "isSubtotal": false, "isGrand": false, "cols": {"C": 15, "D": 0, "E": 0.0, "F": 150, "G": 0, "H": 0.0, "I": 10, "J": 0, "K": 0.0, "L": 80, "M": 0, "N": 0.0, "O": 10, "P": 0, "Q": 0.0, "R": 80, "S": 0, "T": 0.0}}, {"a": "37", "b": "科威特", "isSubtotal": false, "isGrand": false, "cols": {"C": 5, "D": 0, "E": 0.0, "F": 100, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "38", "b": "阿联酋-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 15, "D": 0, "E": 0.0, "F": 90, "G": 0, "H": 0.0, "I": 10, "J": 0, "K": 0.0, "L": 60, "M": 0, "N": 0.0, "O": 10, "P": 3, "Q": 0.3, "R": 60, "S": 45.25092, "T": 0.754182}}, {"a": "39", "b": "阿联酋-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 0, "E": 0.0, "F": 100, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "40", "b": "阿联酋3", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "中东合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 98, "D": 1, "E": 0.01020408163265306, "F": 756, "G": 39.72033, "H": 0.052540119047619044, "I": 63, "J": 1, "K": 0.015873015873015872, "L": 410, "M": 6.057963, "N": 0.014775519512195122, "O": 52, "P": 6, "Q": 0.11538461538461539, "R": 365, "S": 74.814271, "T": 0.20497060547945206}}, {"a": "41", "b": "乌兹别克斯坦", "isSubtotal": false, "isGrand": false, "cols": {"C": 18, "D": 0, "E": 0.0, "F": 185, "G": 0, "H": 0.0, "I": 6, "J": 0, "K": 0.0, "L": 56, "M": 0, "N": 0.0, "O": 25, "P": 2, "Q": 0.08, "R": 120, "S": 26.944866, "T": 0.22454055}}, {"a": "42", "b": "吉尔吉斯斯坦", "isSubtotal": false, "isGrand": false, "cols": {"C": 3, "D": 3, "E": 1.0, "F": 22.26, "G": 16.091826, "H": 0.7229032345013477, "I": 3, "J": 6, "K": 2.0, "L": 17.31, "M": 33.40182600000001, "N": 1.929625996533796, "O": 5, "P": 0, "Q": 0.0, "R": 33.81, "S": 0, "T": 0.0}}, {"a": "43", "b": "哈萨克斯坦-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 67, "D": 0, "E": 0.0, "F": 610, "G": 0, "H": 0.0, "I": 22, "J": 4, "K": 0.18181818181818182, "L": 193, "M": 28.174235, "N": 0.14598049222797926, "O": 28, "P": 4, "Q": 0.14285714285714285, "R": 284, "S": 34.48999999999999, "T": 0.12144366197183094}}, {"a": "44", "b": "哈萨克斯坦-3", "isSubtotal": false, "isGrand": false, "cols": {"C": 14, "D": 0, "E": 0.0, "F": 112, "G": 0, "H": 0.0, "I": 4, "J": 0, "K": 0.0, "L": 24, "M": 0, "N": 0.0, "O": 0, "P": 9, "Q": 1, "R": 0, "S": 58.188075, "T": 1}}, {"a": "45", "b": "塔吉克/哈萨克斯坦-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 1, "E": 0.1, "F": 60, "G": 5.296044, "H": 0.08826740000000001, "I": 12, "J": 1, "K": 0.08333333333333333, "L": 80, "M": 6.057963, "N": 0.0757245375, "O": 11, "P": 4, "Q": 0.36363636363636365, "R": 62.9, "S": 22.631444, "T": 0.3598003815580286}}, {"a": "46", "b": "蒙古", "isSubtotal": false, "isGrand": false, "cols": {"C": 7, "D": 0, "E": 0.0, "F": 88, "G": 0, "H": 0.0, "I": 7, "J": 0, "K": 0.0, "L": 88, "M": 0, "N": 0.0, "O": 1, "P": 0, "Q": 0.0, "R": 31, "S": 0, "T": 0.0}}, {"a": "47", "b": "阿塞拜疆", "isSubtotal": false, "isGrand": false, "cols": {"C": 13, "D": 3, "E": 0.23076923076923078, "F": 100, "G": 14.665968, "H": 0.14665968, "I": 21, "J": 0, "K": 0.0, "L": 166, "M": 0, "N": 0.0, "O": 15, "P": 0, "Q": 0.0, "R": 122, "S": 0, "T": 0.0}}, {"a": "中亚合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 132, "D": 7, "E": 0.05303030303030303, "F": 1177.26, "G": 36.053838, "H": 0.03062521278222313, "I": 75, "J": 11, "K": 0.14666666666666667, "L": 624.31, "M": 67.63402400000001, "N": 0.10833403917925392, "O": 85, "P": 19, "Q": 0.2235294117647059, "R": 653.71, "S": 142.25438499999998, "T": 0.21761084425815724}}, {"a": "48", "b": "加勒比海", "isSubtotal": false, "isGrand": false, "cols": {"C": 15, "D": 0, "E": 0.0, "F": 128.4, "G": 0, "H": 0.0, "I": 15, "J": 11, "K": 0.7333333333333333, "L": 128.4, "M": 136.81467, "N": 1.0655348130841122, "O": 14, "P": 4, "Q": 0.2857142857142857, "R": 183.8, "S": 36.391955, "T": 0.19799757889009795}}, {"a": "49", "b": "哥伦比亚", "isSubtotal": false, "isGrand": false, "cols": {"C": 20, "D": 0, "E": 0.0, "F": 200, "G": 0, "H": 0.0, "I": 10, "J": 1, "K": 0.1, "L": 110, "M": 7.49837, "N": 0.068167, "O": 22, "P": 0, "Q": 0.0, "R": 307, "S": 0, "T": 0.0}}, {"a": "50", "b": "墨西哥-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 36, "D": 16, "E": 0.4444444444444444, "F": 556, "G": 291.9614, "H": 0.5251104316546763, "I": 20, "J": 4, "K": 0.2, "L": 255.99, "M": 35.035368, "N": 0.1368622524317356, "O": 27, "P": 13, "Q": 0.48148148148148145, "R": 405, "S": 232.375172, "T": 0.5737658567901235}}, {"a": "51", "b": "墨西哥-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 9, "E": 1, "F": 0, "G": 224.267094, "H": 1, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 11, "Q": 1, "R": 0, "S": 188.857524, "T": 1}}, {"a": "52", "b": "多米尼加", "isSubtotal": false, "isGrand": false, "cols": {"C": 10, "D": 0, "E": 0.0, "F": 104, "G": 0, "H": 0.0, "I": 4, "J": 4, "K": 1.0, "L": 13, "M": 32.72016, "N": 2.5169353846153846, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "53", "b": "巴西", "isSubtotal": false, "isGrand": false, "cols": {"C": 2, "D": 0, "E": 0.0, "F": 2, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "54", "b": "智利", "isSubtotal": false, "isGrand": false, "cols": {"C": 8, "D": 0, "E": 0.0, "F": 104, "G": 0, "H": 0.0, "I": 5, "J": 0, "K": 0.0, "L": 38, "M": 0, "N": 0.0, "O": 8, "P": 0, "Q": 0.0, "R": 128, "S": 0, "T": 0.0}}, {"a": "55", "b": "秘鲁", "isSubtotal": false, "isGrand": false, "cols": {"C": 6, "D": 0, "E": 0.0, "F": 78, "G": 0, "H": 0.0, "I": 3, "J": 0, "K": 0.0, "L": 20, "M": 0, "N": 0.0, "O": 4, "P": 0, "Q": 0.0, "R": 54.1, "S": 0, "T": 0.0}}, {"a": "56", "b": "秘鲁2", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 0, "J": 0, "K": 0, "L": 0, "M": 0, "N": 0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "美洲合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 97, "D": 25, "E": 0.25773195876288657, "F": 1172.4, "G": 516.228494, "H": 0.4403177192084612, "I": 57, "J": 20, "K": 0.3508771929824561, "L": 565.39, "M": 212.068568, "N": 0.37508369090362403, "O": 75, "P": 28, "Q": 0.37333333333333335, "R": 1077.8999999999999, "S": 457.62465100000003, "T": 0.4245520465720383}}, {"a": "57", "b": "南非/安格拉", "isSubtotal": false, "isGrand": false, "cols": {"C": 11, "D": 0, "E": 0.0, "F": 92, "G": 0, "H": 0.0, "I": 3, "J": 0, "K": 0.0, "L": 24, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "58", "b": "埃及-1", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 0, "G": 0, "H": 0, "I": 232, "J": 0, "K": 0.0, "L": 1624, "M": 0, "N": 0.0, "O": 93, "P": 0, "Q": 0.0, "R": 742, "S": 0, "T": 0.0}}, {"a": "59", "b": "埃及-2", "isSubtotal": false, "isGrand": false, "cols": {"C": 25, "D": 0, "E": 0.0, "F": 215.7, "G": 0, "H": 0.0, "I": 14, "J": 2, "K": 0.14285714285714285, "L": 86.9, "M": 22.84788, "N": 0.26292151898734173, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "60", "b": "尼日利亚/埃塞俄比亚", "isSubtotal": false, "isGrand": false, "cols": {"C": 6, "D": 0, "E": 0.0, "F": 69, "G": 0, "H": 0.0, "I": 6, "J": 1, "K": 0.16666666666666666, "L": 69, "M": 13.545333, "N": 0.19630917391304348, "O": 6, "P": 4, "Q": 0.6666666666666666, "R": 69, "S": 36.264844, "T": 0.5255774492753623}}, {"a": "61", "b": "肯尼亚/坦桑尼亚", "isSubtotal": false, "isGrand": false, "cols": {"C": 8, "D": 1, "E": 0.125, "F": 80, "G": 7.536678, "H": 0.094208475, "I": 8, "J": 6, "K": 0.75, "L": 80, "M": 65.711883, "N": 0.8213985375, "O": 10, "P": 0, "Q": 0.0, "R": 100, "S": 0, "T": 0.0}}, {"a": "62", "b": "非洲法语区", "isSubtotal": false, "isGrand": false, "cols": {"C": 5, "D": 0, "E": 0.0, "F": 59, "G": 0, "H": 0.0, "I": 5, "J": 0, "K": 0.0, "L": 59, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 0, "S": 0, "T": 0}}, {"a": "非洲合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 55, "D": 1, "E": 0.01818181818181818, "F": 515.7, "G": 7.536678, "H": 0.014614461896451424, "I": 268, "J": 9, "K": 0.033582089552238806, "L": 1942.9, "M": 102.105096, "N": 0.05255293427350867, "O": 109, "P": 4, "Q": 0.03669724770642202, "R": 911, "S": 36.264844, "T": 0.03980773216245883}}, {"a": "63", "b": "东欧", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 136, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 136, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 89, "S": 0, "T": 0.0}}, {"a": "64", "b": "英国意大利", "isSubtotal": false, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 8, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 8, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 8, "S": 0, "T": 0.0}}, {"a": "欧洲合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 144, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 144, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 97, "S": 0, "T": 0.0}}, {"a": "65", "b": "商贸1", "isSubtotal": false, "isGrand": false, "cols": {"C": "-", "D": "-", "E": "-", "F": 260, "G": 0, "H": 0.0, "I": "-", "J": "-", "K": "-", "L": 260, "M": 0, "N": 0.0, "O": "-", "P": "-", "Q": "-", "R": 60, "S": 0, "T": 0.0}}, {"a": "66", "b": "商贸2", "isSubtotal": false, "isGrand": false, "cols": {"C": "-", "D": "-", "E": "-", "F": 0, "G": 0, "H": 0, "I": "-", "J": "-", "K": "-", "L": 0, "M": 0, "N": 0, "O": "-", "P": "-", "Q": "-", "R": 0, "S": 0, "T": 0}}, {"a": "67", "b": "商贸3", "isSubtotal": false, "isGrand": false, "cols": {"C": "-", "D": "-", "E": "-", "F": 0, "G": 0, "H": 0, "I": "-", "J": "-", "K": "-", "L": 0, "M": 0, "N": 0, "O": "-", "P": "-", "Q": "-", "R": 0, "S": 0, "T": 0}}, {"a": "68", "b": "配件-1", "isSubtotal": false, "isGrand": false, "cols": {"C": "-", "D": "-", "E": "-", "F": 400, "G": 0, "H": 0.0, "I": "-", "J": "-", "K": "-", "L": 150, "M": 0, "N": 0.0, "O": "-", "P": "-", "Q": "-", "R": 100, "S": 0, "T": 0.0}}, {"a": "69", "b": "配件-2", "isSubtotal": false, "isGrand": false, "cols": {"C": "-", "D": "-", "E": "-", "F": 50, "G": 0, "H": 0.0, "I": "-", "J": "-", "K": "-", "L": 250, "M": 0, "N": 0.0, "O": "-", "P": "-", "Q": "-", "R": 250, "S": 0, "T": 0.0}}, {"a": "70", "b": "改造", "isSubtotal": false, "isGrand": false, "cols": {"C": "-", "D": "-", "E": "-", "F": 200, "G": 0, "H": 0.0, "I": "-", "J": "-", "K": "-", "L": 100, "M": 0, "N": 0.0, "O": "-", "P": "-", "Q": "-", "R": 150, "S": 0, "T": 0.0}}, {"a": "商贸配件合计", "b": "", "isSubtotal": true, "isGrand": false, "cols": {"C": 0, "D": 0, "E": 0, "F": 910, "G": 0, "H": 0.0, "I": 0, "J": 0, "K": 0, "L": 760, "M": 0, "N": 0.0, "O": 0, "P": 0, "Q": 0, "R": 560, "S": 0, "T": 0.0}}, {"a": "全国贸合计", "b": "", "isSubtotal": false, "isGrand": true, "cols": {"C": 850, "D": 45, "E": 0.052941176470588235, "F": 12880.737988932155, "G": 656.455228, "H": 0.05096410070324098, "I": 667, "J": 156, "K": 0.23388305847076463, "L": 7956.9130000000005, "M": 2380.4310960000003, "N": 0.2991651531190551, "O": 573, "P": 91, "Q": 0.15881326352530542, "R": 7828.542999999999, "S": 1243.3052, "T": 0.1588169343899625}}], "excelB64": "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", "excelFilename": "签单排产发货_08.xlsx"};
+
+// ---- helpers ----
+function fmtNum(v) {
+    return Math.round(v).toLocaleString();
+}
+
+function ratioClass(r) {
+    if (r >= 1) return 'ratio-badge-high';
+    if (r >= 0.5) return 'ratio-badge-mid';
+    return 'ratio-badge-low';
+}
+
+// ---- summary cards ----
+(function() {
+    var el = document.getElementById('summary');
+    var grand = DATA.grand;
+    DATA.metrics.forEach(function(m) {
+        var d = grand[m.id];
+        var pct = (d.ratio * 100).toFixed(1);
+        var card = document.createElement('div');
+        card.className = 'summary-card';
+        card.innerHTML = '<div class="sc-label">' + m.name + '</div>'
+            + '<div class="sc-value">' + fmtNum(d.ac, m.unit) + '<span class="sc-unit">' + m.unit + '</span></div>'
+            + '<div><span class="sc-ratio ' + ratioClass(d.ratio) + '">已完成 ' + pct + '%</span></div>';
+        el.appendChild(card);
+    });
+})();
+
+// ---- region legend ----
+(function() {
+    var el = document.getElementById('regionLegend');
+    DATA.regions.forEach(function(r, i) {
+        var item = document.createElement('span');
+        item.className = 'legend-item';
+        item.innerHTML = '<span class="legend-dot" style="background:' + DATA.regionColors[i] + '"></span>' + r.name;
+        el.appendChild(item);
+    });
+})();
+
+// ---- charts ----
+(function() {
+    // normalize values so min arc is at least 18% of max arc
+    function normalizeValues(vals) {
+        var maxVal = Math.max.apply(null, vals);
+        if (maxVal === 0) return vals.map(function() { return 1; });
+        var floor = maxVal * 0.18;
+        return vals.map(function(v) { return Math.max(floor, v); });
+    }
+
+    // compute per-label line lengths with cluster stagger
+    function computeLabelLines(displayVals) {
+        var total = displayVals.reduce(function(a, b) { return a + b; }, 0);
+        var n = displayVals.length;
+
+        // mid-angles with original index
+        var mids = [];
+        var cum = 0;
+        for (var i = 0; i < n; i++) {
+            var arc = displayVals[i] / total * 360;
+            mids.push({ idx: i, mid: cum + arc / 2, arc: arc });
+            cum += arc;
+        }
+
+        // sort by angle
+        var sorted = mids.slice().sort(function(a, b) { return a.mid - b.mid; });
+
+        // find clusters: consecutive labels within CLUSTER_GAP degrees
+        var CLUSTER_GAP = 42;
+        var clusters = [];
+        var cur = [sorted[0]];
+        for (var i = 1; i < n; i++) {
+            if (sorted[i].mid - sorted[i - 1].mid < CLUSTER_GAP) {
+                cur.push(sorted[i]);
+            } else {
+                if (cur.length > 1) clusters.push(cur);
+                cur = [sorted[i]];
+            }
+        }
+        // check wrap-around cluster
+        if (clusters.length > 0 && cur.length > 1) {
+            var head = clusters[0];
+            var tail = cur;
+            var wrapGap = tail[tail.length - 1].mid - head[0].mid;
+            if (wrapGap < 0) wrapGap += 360;
+            if (wrapGap < CLUSTER_GAP) {
+                clusters[0] = tail.concat(head);
+            } else {
+                clusters.push(tail);
+            }
+        } else if (cur.length > 1) {
+            clusters.push(cur);
+        }
+
+        // assign stagger tier within each cluster
+        var tier = {};
+        for (var c = 0; c < clusters.length; c++) {
+            for (var k = 0; k < clusters[c].length; k++) {
+                tier[clusters[c][k].idx] = k;
+            }
+        }
+
+        // count left/right
+        var leftCount = 0, rightCount = 0;
+        for (var i = 0; i < n; i++) {
+            if (mids[i].mid > 180) leftCount++;
+            else rightCount++;
+        }
+
+        var lines = [];
+        for (var i = 0; i < n; i++) {
+            var t = tier[i] || 0;
+            var len1 = 34 + t * 6;
+            var len2 = 80 + t * 16;
+            var sideCount = mids[i].mid > 180 ? leftCount : rightCount;
+            var otherCount = mids[i].mid > 180 ? rightCount : leftCount;
+
+            if (sideCount > otherCount + 1) {
+                len1 += 6;
+                len2 += 10;
+            }
+
+            var nearTopBottom = Math.min(
+                Math.abs(mids[i].mid - 0),
+                Math.abs(mids[i].mid - 180),
+                Math.abs(mids[i].mid - 360)
+            );
+            if (nearTopBottom < 25) {
+                len1 += 8;
+                len2 += 10;
+            }
+
+            len1 = Math.min(len1, 52);
+            len2 = Math.min(len2, 130);
+
+            lines.push({ length: len1, length2: len2 });
+        }
+        return lines;
+    }
+
+    function shuffle(arr) {
+        var a = arr.slice();
+        for (var i = a.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var t = a[i]; a[i] = a[j]; a[j] = t;
+        }
+        return a;
+    }
+
+    function makeChartOption(metric, regions, grand) {
+        var mId = metric.id;
+        var unit = metric.unit;
+        var g = grand[mId];
+        var innerColor = DATA.innerColors[mId];
+
+        // shuffle region order so each chart has different arrangement
+        var indexed = regions.map(function(r, i) { return {region: r, origIdx: i}; });
+        var shuffled = shuffle(indexed);
+
+        var rawVals = shuffled.map(function(item) { return item.region[mId].ac; });
+        var displayVals = normalizeValues(rawVals);
+        var labelLines = computeLabelLines(displayVals);
+
+        var outerData = shuffled.map(function(item, i) {
+            var r = item.region;
+            var origIdx = item.origIdx;
+            var d = r[mId];
+            var ll = labelLines[i];
+            return {
+                name: r.name,
+                value: displayVals[i],
+                rawAc: d.ac,
+                rawFc: d.fc,
+                ratio: d.ratio,
+                unit: unit,
+                itemStyle: { color: DATA.regionColors[origIdx], borderRadius: 5, borderColor: '#fff', borderWidth: 2.5 },
+                labelLine: {
+                    length: ll.length,
+                    length2: ll.length2,
+                    lineStyle: { color: DATA.regionColors[origIdx], width: 1.5 }
+                }
+            };
+        });
+
+        var innerData;
+        if (g.fc > 0) {
+            innerData = [
+                { value: g.ac, name: '已完成', itemStyle: { color: innerColor, borderRadius: 3 } },
+                { value: Math.max(0, g.fc - g.ac), name: '剩余', itemStyle: { color: '#E8E8E8', borderRadius: 3 } }
+            ];
+        } else {
+            innerData = [
+                { value: 1, name: '无数据', itemStyle: { color: '#E8E8E8' } }
+            ];
+        }
+
+        return {
+            color: DATA.regionColors,
+            tooltip: {
+                trigger: 'item',
+                formatter: function(p) {
+                    if (p.seriesIndex === 0) {
+                        var d = p.data;
+                        return d.name + '<br/>已完成 ' + fmtNum(d.rawAc) + ' / 预计 ' + fmtNum(d.rawFc) + ' ' + unit
+                            + '<br/>完成比 ' + (d.ratio * 100).toFixed(0) + '%';
+                    }
+                    return '';
+                }
+            },
+            animation: true,
+            animationDuration: 800,
+            animationEasing: 'cubicOut',
+            series: [
+                {
+                    type: 'pie',
+                    radius: ['38%', '56%'],
+                    center: ['50%', '50%'],
+                    top: '5%',
+                    bottom: '5%',
+                    padAngle: 2,
+                    itemStyle: { borderColor: '#fff', borderWidth: 2.5 },
+                    emphasis: {
+                        focus: 'self',
+                        blurScope: 'coordinateSystem',
+                        scale: true,
+                        scaleSize: 8,
+                        label: { fontSize: 20, fontWeight: 'bold' },
+                        labelLine: { lineStyle: { width: 2.5 } }
+                    },
+                    blur: {
+                        itemStyle: { opacity: 0.2 },
+                        labelLine: { lineStyle: { opacity: 0.15 } }
+                    },
+                    label: {
+                        show: true,
+                        position: 'outside',
+                        overflow: 'truncate',
+                        ellipsis: '...',
+                        formatter: function(p) {
+                            var d = p.data;
+                            return '{name|' + d.name + '}\n{val|已完成' + fmtNum(d.rawAc) + unit + ' ' + (d.ratio * 100).toFixed(0) + '%}';
+                        },
+                        rich: {
+                            name: {
+                                fontSize: 14,
+                                fontWeight: 'bold',
+                                color: '#1a2332',
+                                lineHeight: 22,
+                                padding: [0, 0, 2, 0]
+                            },
+                            val: {
+                                fontSize: 12,
+                                color: '#4a5568',
+                                lineHeight: 18
+                            }
+                        }
+                    },
+                    data: outerData
+                },
+                {
+                    type: 'pie',
+                    radius: ['22%', '34%'],
+                    center: ['50%', '50%'],
+                    silent: true,
+                    padAngle: 2,
+                    label: { show: false },
+                    itemStyle: { borderColor: '#fff', borderWidth: 2 },
+                    data: innerData
+                }
+            ],
+            graphic: [
+                {
+                    type: 'text',
+                    left: 'center',
+                    top: '45%',
+                    z: 100,
+                    style: {
+                        text: fmtNum(g.ac) + '/' + fmtNum(g.fc) + ' ' + unit,
+                        textAlign: 'center',
+                        fill: '#1a2332',
+                        fontSize: 19,
+                        fontWeight: 'bold'
+                    }
+                },
+                {
+                    type: 'text',
+                    left: 'center',
+                    top: '53%',
+                    z: 100,
+                    style: {
+                        text: '已完成 ' + (g.ratio * 100).toFixed(0) + '%',
+                        textAlign: 'center',
+                        fill: g.ratio >= 1 ? '#2563eb' : g.ratio >= 0.5 ? '#3b82f6' : '#60a5fa',
+                        fontSize: 16,
+                        fontWeight: '600'
+                    }
+                }
+            ]
+        };
+    }
+
+    function debounce(fn, delay) {
+        var timer = null;
+        return function() {
+            var ctx = this, args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function() { fn.apply(ctx, args); }, delay);
+        };
+    }
+
+    function buildCharts() {
+        var grid = document.getElementById('chartsGrid');
+        var regions = DATA.regions;
+        var grand = DATA.grand;
+
+        DATA.metrics.forEach(function(m) {
+            var card = document.createElement('div');
+            card.className = 'chart-card';
+
+            var titleEl = document.createElement('div');
+            titleEl.className = 'chart-title';
+            titleEl.textContent = m.name;
+            card.appendChild(titleEl);
+
+            var wrap = document.createElement('div');
+            wrap.className = 'chart-wrap';
+            wrap.id = 'chart-' + m.id;
+            card.appendChild(wrap);
+
+            grid.appendChild(card);
+        });
+
+        DATA.metrics.forEach(function(m) {
+            var dom = document.getElementById('chart-' + m.id);
+            if (!dom) return;
+            var chart = echarts.init(dom);
+            chart.setOption(makeChartOption(m, regions, grand));
+            chart.on('mouseover', function(params) {
+                if (params.seriesIndex === 0) {
+                    chart.setOption({
+                        series: [{}, { itemStyle: { opacity: 0.4 } }],
+                        graphic: [{ style: { opacity: 0.4 } }, { style: { opacity: 0.4 } }]
+                    });
+                }
+            });
+            chart.on('mouseout', function(params) {
+                chart.setOption({
+                    series: [{}, { itemStyle: { opacity: 1 } }],
+                    graphic: [{ style: { opacity: 1 } }, { style: { opacity: 1 } }]
+                });
+            });
+            // ResizeObserver with debounce for responsive resize
+            var chartRo = new ResizeObserver(debounce(function(entries) {
+                chart.resize();
+                var w = entries[0].contentRect.width;
+                if (w < 640) {
+                    chart.setOption({
+                        series: [{
+                            label: { rich: { name: { fontSize: 11 }, val: { fontSize: 10 } } }
+                        }, {}]
+                    });
+                } else {
+                    chart.setOption({
+                        series: [{
+                            label: { rich: { name: { fontSize: 14 }, val: { fontSize: 12 } } }
+                        }, {}]
+                    });
+                }
+            }, 200));
+            chartRo.observe(dom);
+        });
+    }
+
+    buildCharts();
+
+    // ---- table view ----
+    window.switchView = function(view) {
+        var btnC = document.getElementById('btnCharts');
+        var btnT = document.getElementById('btnTable');
+        var viewC = document.getElementById('view-charts');
+        var viewT = document.getElementById('view-table');
+        if (view === 'charts') {
+            btnC.classList.add('active'); btnT.classList.remove('active');
+            viewC.classList.remove('hide'); viewT.classList.remove('show');
+            DATA.metrics.forEach(function(m) {
+                var dom = document.getElementById('chart-' + m.id);
+                if (dom) { var c = echarts.getInstanceByDom(dom); if (c) c.resize(); }
+            });
+        } else {
+            btnT.classList.add('active'); btnC.classList.remove('active');
+            viewC.classList.add('hide'); viewT.classList.add('show');
+        }
+    };
+
+    function buildTable() {
+        var ratioCols = { E:1, H:1, K:1, N:1, Q:1, T:1 };
+        var amtCols = { F:1, G:1, L:1, M:1, R:1, S:1 };
+
+        var regionHeaderHtml = '<tr class="row-region-header">'
+            + '<td rowspan="2" style="width:40px">序号</td>'
+            + '<td rowspan="2">模块</td>'
+            + '<td colspan="6">签单情况</td>'
+            + '<td colspan="6">排产情况</td>'
+            + '<td colspan="6">发货情况</td>'
+            + '</tr>'
+            + '<tr class="row-region-header row-region-subheader">'
+            + '<td>预计台数</td><td>已签约</td><td>完成比</td><td>合同额</td><td>签单额</td><td>完成比</td>'
+            + '<td>预计台数</td><td>已排产</td><td>完成比</td><td>合同额</td><td>排产额</td><td>完成比</td>'
+            + '<td>预计台数</td><td>已发货</td><td>完成比</td><td>合同额</td><td>发货额</td><td>完成比</td>'
+            + '</tr>';
+
+        function makeRowHtml(r) {
+            var cls = r.isGrand ? 'row-grand' : r.isSubtotal ? 'row-subtotal' : 'row-normal';
+            var html = '<tr class="' + cls + '">';
+            html += '<td class="col-a">' + (r.a || '') + '</td>';
+            html += '<td class="col-b">' + (r.b || '') + '</td>';
+            'CDEFGHIJKLMNOPQRST'.split('').forEach(function(col) {
+                var v = r.cols[col];
+                var tdCls = '';
+                var display = '';
+                if (v === '' || v === '-') {
+                    display = v === '-' ? '-' : '';
+                } else if (ratioCols[col]) {
+                    var num = Number(v);
+                    if (!isNaN(num)) {
+                        if (num >= 1) tdCls = 'ratio-high';
+                        else if (num >= 0.5) tdCls = 'ratio-mid';
+                        else tdCls = 'ratio-low';
+                        display = num === 0 ? '0' : (num * 100).toFixed(2) + '%';
+                    } else {
+                        display = v;
+                    }
+                } else if (amtCols[col]) {
+                    var num = Number(v);
+                    display = !isNaN(num) ? Math.round(num).toString() : v;
+                } else {
+                    var num = Number(v);
+                    display = !isNaN(num) ? Math.round(num).toString() : v;
+                }
+                html += '<td class="' + tdCls + '">' + display + '</td>';
+            });
+            html += '</tr>';
+            return html;
+        }
+
+        var rows = DATA.tableRows;
+        var bodyHtml = '';
+        var needHeader = true;
+
+        rows.forEach(function(r, idx) {
+            if (needHeader && !r.isGrand) {
+                bodyHtml += regionHeaderHtml;
+                needHeader = false;
+            }
+            bodyHtml += makeRowHtml(r);
+            if (r.isSubtotal) {
+                var nextRow = rows[idx + 1];
+                if (!nextRow || !nextRow.isGrand) {
+                    bodyHtml += '<tr class="row-region-spacer"><td colspan="20" style="height:18px;border:none;background:#f0f2f5;"></td></tr>';
+                }
+                needHeader = true;
+            }
+        });
+
+        document.getElementById('tableBody').innerHTML = bodyHtml;
+    }
+
+    buildTable();
+
+    // ---- ExportManager ----
+    window.ExportManager = (function() {
+        function _base64ToBlob(b64, mimeType) {
+            var byteChars = atob(b64);
+            var byteNums = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) {
+                byteNums[i] = byteChars.charCodeAt(i);
+            }
+            var byteArr = new Uint8Array(byteNums);
+            return new Blob([byteArr], { type: mimeType });
+        }
+
+        function _downloadBlob(blob, filename) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        return {
+            downloadOriginal: function() {
+                if (!DATA.excelB64) {
+                    alert('原始Excel文件数据不可用');
+                    return;
+                }
+                var blob = _base64ToBlob(DATA.excelB64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                _downloadBlob(blob, DATA.excelFilename || 'export.xlsx');
+            }
+        };
+    })();
+})();
+</script>
+</body>
+</html>

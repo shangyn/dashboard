@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>国贸合同执行工期统计报告</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: #f0f2f5; color: #333; line-height: 1.6;
+    }
+    .container { max-width: 1900px; margin: 0 auto; padding: 20px; }
+
+    /* Header */
+    .header {
+        background: linear-gradient(135deg, #1a3a5c 0%, #2d6a9f 100%);
+        color: #fff; padding: 24px 32px; border-radius: 8px; margin-bottom: 20px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .header h1 { font-size: 22px; font-weight: 600; }
+
+    /* Filters */
+    .filter-bar {
+        background: #fff; padding: 16px 24px; border-radius: 8px; margin-bottom: 16px;
+        display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        /* 由JS控制 position:fixed */
+        width: 100%; max-width: 1900px;
+    }
+    .filter-bar label { font-weight: 600; font-size: 14px; color: #555; }
+    .filter-bar select { padding: 6px 12px; border: 1px solid #d0d0d0; border-radius: 4px; font-size: 14px; }
+    .filter-tabs { display: flex; gap: 0; }
+    .filter-tab {
+        padding: 6px 16px; border: 1px solid #d0d0d0; cursor: pointer; font-size: 13px;
+        background: #fff; color: #555; transition: all 0.2s;
+    }
+    .filter-tab:first-child { border-radius: 4px 0 0 4px; }
+    .filter-tab:last-child { border-radius: 0 4px 4px 0; }
+    .filter-tab.active { background: #2d6a9f; color: #fff; border-color: #2d6a9f; }
+
+    /* Summary Cards */
+    .summary-cards {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px; margin-bottom: 20px;
+    }
+    .card {
+        background: #fff; padding: 16px 20px; border-radius: 8px; text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        cursor: pointer; user-select: none;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,0.12); }
+    .card.active { box-shadow: 0 0 0 2px #2d6a9f; }
+    .card .num { font-size: 32px; font-weight: 700; }
+    .card .label { font-size: 12px; color: #888; margin-top: 4px; }
+    .card.total .num { color: #2d6a9f; }
+    .card.ontime .num { color: #28a745; }
+    .card.minor .num { color: #dc3545; }
+    .card.major .num { color: #b71c1c; }
+    .card.early .num { color: #17a2b8; }
+
+    /* Region Sections */
+    .region-section {
+        background: #fff; border-radius: 8px; margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden;
+    }
+    .region-header {
+        padding: 14px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+        background: #fafbfc; border-bottom: 1px solid #eee; user-select: none;
+        transition: background 0.15s;
+    }
+    .region-header:hover { background: #f0f4f8; }
+    .toggle-icon { font-size: 0; color: #888; transition: transform 0.2s; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
+    .region-section.collapsed .region-body { display: none; }
+    .region-name { font-weight: 700; font-size: 16px; color: #1a3a5c; }
+    .region-stat { font-size: 13px; color: #888; margin-left: auto; }
+
+    .region-body { padding: 0; }
+    .module-header {
+        padding: 8px 20px; font-size: 13px; color: #888; background: #fdfdff;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    /* 固定大区头部 — 仅当滚动到 regionTables 时显示 */
+    #stickyRegionHead {
+        display: none; position: fixed; z-index: 15;
+        background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #stickyRegionHead .sticky-region-row {
+        padding: 10px 20px; display: flex; align-items: center; gap: 10px;
+        background: #fafbfc; border-bottom: 1px solid #eee; font-weight: 700;
+        font-size: 16px; color: #1a3a5c;
+    }
+    #stickyRegionHead .sticky-region-row .toggle-arrow {
+        display: inline-block; width: 0; height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #888;
+        vertical-align: middle;
+    }
+    #stickyRegionHead .sticky-region-stat {
+        font-size: 13px; color: #888; margin-left: auto; font-weight: 400;
+    }
+    #stickyRegionHead .sticky-module-row {
+        padding: 6px 20px; font-size: 13px; color: #888;
+        background: #fdfdff; border-bottom: 1px solid #f0f0f0;
+    }
+    #stickyRegionHead .contract-table {
+        width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px;
+    }
+    #stickyRegionHead .contract-table th {
+        background: #f7f8fa; padding: 8px 8px; text-align: center; font-weight: 600;
+        color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap;
+    }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    .contract-table {
+        width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px;
+    }
+    .contract-table th {
+        background: #f7f8fa; padding: 10px 8px; text-align: center; font-weight: 600;
+        color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap;
+    }
+    /* 列宽定义 (th:nth-child 对应11列) */
+    .contract-table th:nth-child(1) { width: 7%; text-align: center; }   /* 合同号 */
+    .contract-table th:nth-child(2) { width: 5%; }                      /* 梯号 */
+    .contract-table th:nth-child(3) { width: 6%; }                      /* 项目 */
+    .contract-table th:nth-child(4) { width: 7%; }                      /* 订货结束I */
+    .contract-table th:nth-child(5) { width: 7%; }                      /* 设计完成J */
+    .contract-table th:nth-child(6) { width: 7%; }                      /* 机械入库K */
+    .contract-table th:nth-child(7) { width: 9%; }                      /* 机械延期L — 加宽 */
+    .contract-table th:nth-child(8) { width: 7%; }                      /* 电气入库M */
+    .contract-table th:nth-child(9) { width: 9%; }                     /* 电气延期N — 加宽 */
+    .contract-table th:nth-child(10) { width: 7%; }                     /* 审核完工O */
+    .contract-table th:nth-child(11) { width: 8%; }                     /* 阶段 */
+    .contract-table td {
+        padding: 8px; border-bottom: 1px solid #f0f0f0; white-space: nowrap;
+        text-align: center;
+    }
+    .contract-table tr:hover td { background: #f8faff; }
+    .td-contract { font-weight: 600; color: #1a3a5c; font-family: "SF Mono", "Consolas", monospace; text-align: center; }
+    .td-elevator { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .td-date { font-family: "SF Mono", "Consolas", monospace; font-size: 12px; }
+    .td-delay { }
+    /* Badges */
+    .badge {
+        display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px;
+        font-weight: 600; min-width: 50px; text-align: center;
+    }
+    .badge-gray { background: #e2e3e5; color: #6c757d; }
+
+    /* Category Tags */
+    .cat-tag {
+        display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;
+    }
+    .cat-straight { background: #dbeafe; color: #1e40af; }
+    .cat-escalator { background: #fef3c7; color: #92400e; }
+    .cat-retrofit { background: #fce7f3; color: #9d174d; }
+
+    /* Stage */
+    .stage-badge { font-size: 13px; }
+    .reject-tag {
+        display: inline-block; background: #dc3545; color: #fff; padding: 1px 6px;
+        border-radius: 3px; font-size: 11px; margin-left: 4px;
+    }
+
+    /* Stage dot — CSS-only replacement for emoji */
+    .stage-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        margin-right: 4px; vertical-align: middle;
+    }
+    .dot-gray   { background: #6c757d; }
+    .dot-blue   { background: #3b82f6; }
+    .dot-purple { background: #8b5cf6; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-orange { background: #f97316; }
+    .dot-green  { background: #28a745; }
+    .dot-teal   { background: #17a2b8; }
+    .dot-red    { background: #dc3545; }
+
+    /* Card dot — slightly larger for summary cards */
+    .card-dot {
+        display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+        margin-right: 2px; vertical-align: middle;
+    }
+
+    /* Toggle arrow — CSS triangle replacing ▼ */
+    .toggle-arrow {
+        display: inline-block; width: 0; height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #888;
+        vertical-align: middle;
+        transition: transform 0.2s;
+    }
+    .region-section.collapsed .toggle-arrow {
+        transform: rotate(-90deg);
+    }
+
+</style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div>
+            <h1>国贸合同执行工期统计报告</h1>
+            <div style="font-size:13px;opacity:0.7;margin-top:4px;">数据来源: 数据库 (cc_schedule_tracking)</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+        <label>大区筛选:</label>
+        <select id="regionFilter" onchange="applyFilters()">
+            <option value="全部">全部大区</option><option value="俄罗斯">俄罗斯</option><option value="美洲">美洲</option><option value="中亚">中亚</option><option value="亚洲1">亚洲1</option><option value="亚洲2">亚洲2</option><option value="非洲">非洲</option><option value="中东">中东</option>
+        </select>
+        <span id="resultCount" style="font-size:13px;color:#888;margin-left:auto;"></span>
+    </div>
+
+    <!-- 固定大区头部 — 初始隐藏，滚动到 regionTables 时显示 -->
+    <div id="stickyRegionHead">
+        <div class="sticky-region-row">
+            <span class="toggle-arrow"></span>
+            <span class="sticky-region-name"></span>
+            <span class="sticky-region-stat"></span>
+        </div>
+        <div class="sticky-module-row"></div>
+        <table class="contract-table">
+            <thead><tr>
+                <th>合同号</th>
+                <th>梯号</th>
+                <th>项目</th>
+                <th>订货结束</th>
+                <th>设计完成</th>
+                <th>机械入库</th>
+                <th>机械延期</th>
+                <th>电气入库</th>
+                <th>电气延期</th>
+                <th>排产完成工期</th>
+                <th>阶段</th>
+            </tr></thead>
+        </table>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="card total" id="cardTotal" data-status="all"><div class="num">97</div><div class="label"><span class="card-dot dot-gray"></span> 总合同记录</div></div>
+        <div class="card major" id="cardMajor" data-status="major"><div class="num">1</div><div class="label"><span class="card-dot dot-red"></span> 严重延期(>5天)</div></div>
+        <div class="card minor" id="cardMinor" data-status="minor"><div class="num">7</div><div class="label"><span class="card-dot dot-red"></span> 轻微延期(1-5天)</div></div>
+        <div class="card ontime" id="cardOntime" data-status="ontime"><div class="num">44</div><div class="label"><span class="card-dot dot-green"></span> 按时完成</div></div>
+        <div class="card early" id="cardEarly" data-status="early"><div class="num">4</div><div class="label"><span class="card-dot dot-teal"></span> 提前完成</div></div>
+        <div class="card" id="cardPending" data-status="pending"><div class="num" style="color:#6c757d;">41</div><div class="label"><span class="card-dot dot-gray"></span> 待定/未到期</div></div>
+    </div>
+
+    <!-- Region Detail Tables -->
+    <div id="regionTables">
+        
+        <div class="region-section" data-region="俄罗斯">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">俄罗斯</span>
+                <span class="region-stat">总27条 | 延期2条 | 严重0 | 按时率37.0%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 5 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="early" data-n-class="ontime">
+                    <td class="td-contract">DHT-261256T</td>
+                    <td class="td-elevator" title="1-5#">1-5#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261257T</td>
+                    <td class="td-elevator" title="1-6#">1-6#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-10</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261260T</td>
+                    <td class="td-elevator" title="1-5#">1-5#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-date">未入库</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">未入库</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-09-04</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-red"></span> 超期未入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261260T</td>
+                    <td class="td-elevator" title="6#">6#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-date">未入库</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">未入库</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-09-04</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-red"></span> 超期未入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-260798T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-14</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-260798T</td>
+                    <td class="td-elevator" title="4-6#">4-6#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-14</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261263T</td>
+                    <td class="td-elevator" title="1#,3-5#">1#,3-5#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-12</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-02</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261263T</td>
+                    <td class="td-elevator" title="2#">2#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-12</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-02</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261259T</td>
+                    <td class="td-elevator" title="1-17#">1-17#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-11</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261262T</td>
+                    <td class="td-elevator" title="1-9#">1-9#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-15</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-14</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261258T</td>
+                    <td class="td-elevator" title="1-8#">1-8#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-08-08</td>
+                    <td class="td-date">2026-08-19</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-19</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261251T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-17</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-orange"></span> 部分入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261325T</td>
+                    <td class="td-elevator" title="4#">4#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-orange"></span> 部分入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261342T</td>
+                    <td class="td-elevator" title="17#">17#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261353T</td>
+                    <td class="td-elevator" title="17-20#">17-20#</td>
+                    <td>俄罗斯1</td>
+                    <td class="td-date">2026-08-08</td>
+                    <td class="td-date">2026-08-12</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261271T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>东俄罗斯</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="early">
+                    <td class="td-contract">DHT-260760T</td>
+                    <td class="td-elevator" title="1-13#">1-13#</td>
+                    <td>东俄罗斯</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-2天</span></td>
+                    <td class="td-date">2026-08-24</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261224T</td>
+                    <td class="td-elevator" title="1-9#">1-9#</td>
+                    <td>东俄罗斯</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-13</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-02</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261011T</td>
+                    <td class="td-elevator" title="1-4#">1-4#</td>
+                    <td>东俄罗斯</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-20</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-10</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="early" data-n-class="ontime">
+                    <td class="td-contract">DHT-261248T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>俄罗斯6</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261290T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>俄罗斯6</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="minor" data-n-class="early">
+                    <td class="td-contract">DHT-261315T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>俄罗斯6</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-08</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+2天</span></td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-08-28</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261261T</td>
+                    <td class="td-elevator" title="1-27,30-32,36,38#">1-27,30-32,36,38#</td>
+                    <td>西俄罗斯</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-18</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-18</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261261T</td>
+                    <td class="td-elevator" title="28-29,33-35,37,39-43#">28-29,33-35,37,39-43#</td>
+                    <td>西俄罗斯</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-18</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-18</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-260794T</td>
+                    <td class="td-elevator" title="1-4#">1-4#</td>
+                    <td>西俄罗斯</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-19</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-12</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="minor" data-n-class="ontime">
+                    <td class="td-contract">DHT-261226T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>俄罗斯2</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+1天</span></td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="俄罗斯" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261236T</td>
+                    <td class="td-elevator" title="1-4#,9-10#,29-30#,33-34#">1-4#,9-10#,29-30#,33-34#</td>
+                    <td>俄罗斯2</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-17</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-16</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <div class="region-section" data-region="美洲">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">美洲</span>
+                <span class="region-stat">总27条 | 延期0条 | 严重0 | 按时率59.3%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 6 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="early">
+                    <td class="td-contract">DHT-260884T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-08-22</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260875T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-14</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261001T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-19</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="early">
+                    <td class="td-contract">DHT-261000T</td>
+                    <td class="td-elevator" title="2#">2#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-3天</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260998T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-17</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261302T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261303T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261304T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261305T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261250T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>危地马拉</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-15</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261249T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>危地马拉</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-08-13</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-07</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261299T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>危地马拉</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-22</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261316T</td>
+                    <td class="td-elevator" title="1-4#">1-4#</td>
+                    <td>危地马拉</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261277T</td>
+                    <td class="td-elevator" title="1-6#">1-6#</td>
+                    <td>哥斯达黎加</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-17</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-31</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261273T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>危地马拉</td>
+                    <td class="td-date">2026-08-08</td>
+                    <td class="td-date">2026-08-18</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-30</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260879T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥1</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-17</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260883T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>墨西哥1</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-22</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261301T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>墨西哥1</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-21</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261300T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>墨西哥1</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-18</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261055T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>墨西哥1</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-18</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261225T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>多米尼加3</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-20</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261022T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>多米尼加3</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-13</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261023T</td>
+                    <td class="td-elevator" title="2#">2#</td>
+                    <td>多米尼加3</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-19</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-15</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261024T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>多米尼加3</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-13</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261025T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>多米尼加3</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-13</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-29</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="early" data-n-class="early">
+                    <td class="td-contract">DHT-261254E</td>
+                    <td class="td-elevator" title="1-8#">1-8#</td>
+                    <td>土耳其3</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-08-14</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="美洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260956T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>玻利维亚</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-25</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <div class="region-section" data-region="中亚">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">中亚</span>
+                <span class="region-stat">总15条 | 延期1条 | 严重0 | 按时率66.7%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 5 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261220Z</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>哈萨克斯坦1</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-22</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261141T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>塔吉克斯坦1</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-20</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261202T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>哈萨克斯坦1</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-20</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261328T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>哈萨克斯坦1</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261356T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>哈萨克斯坦1</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="minor">
+                    <td class="td-contract">DHT-260903T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>塔吉克斯坦</td>
+                    <td class="td-date">2026-07-23</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+1天</span></td>
+                    <td class="td-date">2026-08-13</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261102T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>哈萨克斯坦</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-18</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261240T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>吉尔吉斯斯坦</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-25</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-260859T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>塔吉克斯坦</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-28</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="early" data-n-class="early">
+                    <td class="td-contract">DHT-261235T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>阿塞拜疆</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-5天</span></td>
+                    <td class="td-date">2026-08-15</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="early">
+                    <td class="td-contract">DHT-261228T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>阿塞拜疆</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-3天</span></td>
+                    <td class="td-date">2026-08-15</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261321T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>阿塞拜疆</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-15</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-orange"></span> 部分入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260274T</td>
+                    <td class="td-elevator" title="1-2#,9#">1-2#,9#</td>
+                    <td>中国2</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-20</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261354T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>吉尔吉斯斯坦2</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中亚" data-category="改造/外购" data-l-class="early" data-n-class="ontime">
+                    <td class="td-contract">DHT-261205T</td>
+                    <td class="td-elevator" title="8#">8#</td>
+                    <td>蒙古</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-25</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <div class="region-section" data-region="亚洲1">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">亚洲1</span>
+                <span class="region-stat">总10条 | 延期3条 | 严重0 | 按时率20.0%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 4 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261058T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>印尼1</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-08</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261146T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>马尔代夫1</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-26</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261285T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>泰国3</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-07</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="ontime" data-n-class="minor">
+                    <td class="td-contract">DHT-261285T</td>
+                    <td class="td-elevator" title="3#">3#</td>
+                    <td>泰国3</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+3天</span></td>
+                    <td class="td-date">2026-08-22</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261026T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>马来西亚</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-04</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261324T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>马来西亚</td>
+                    <td class="td-date">2026-08-08</td>
+                    <td class="td-date">2026-08-17</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-04</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="minor" data-n-class="ontime">
+                    <td class="td-contract">DHT-261338T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>马来西亚</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">未入库(已暂停)</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+4天</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-17</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-red"></span> 超期未入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="minor" data-n-class="ontime">
+                    <td class="td-contract">DHT-261327T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>马来西亚</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">未入库(已暂停)</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+4天</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-17</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-red"></span> 超期未入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261314T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>泰国2</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-15</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲1" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261323T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>文莱</td>
+                    <td class="td-date">2026-08-08</td>
+                    <td class="td-date">2026-08-17</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-10</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <div class="region-section" data-region="亚洲2">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">亚洲2</span>
+                <span class="region-stat">总9条 | 延期1条 | 严重0 | 按时率77.8%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 3 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261223T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>孟加拉</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-17</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="early" data-n-class="early">
+                    <td class="td-contract">DHT-261195T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>孟加拉</td>
+                    <td class="td-date">2026-07-21</td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-08-13</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="early">
+                    <td class="td-contract">DHT-261081T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>孟加拉</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-3天</span></td>
+                    <td class="td-date">2026-08-21</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261222T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>孟加拉</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-30</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-19</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-260379T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>孟加拉</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-07</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="minor">
+                    <td class="td-contract">DHT-261229T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>澳大利亚</td>
+                    <td class="td-date">2026-07-25</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-01</td>
+                    <td class="td-delay"><span class="badge" style="background:#fce4e4;color:#b71c1c">+1天</span></td>
+                    <td class="td-date">2026-08-31</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261230T</td>
+                    <td class="td-elevator" title="1-2#">1-2#</td>
+                    <td>斐济</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-04</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-25</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261343T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>澳大利亚</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-12</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-10</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="亚洲2" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261253E</td>
+                    <td class="td-elevator" title="1-6#">1-6#</td>
+                    <td>印度1</td>
+                    <td class="td-date">2026-07-24</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-27</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-25</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <div class="region-section" data-region="非洲">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">非洲</span>
+                <span class="region-stat">总6条 | 延期0条 | 严重0 | 按时率33.3%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 3 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="非洲" data-category="改造/外购" data-l-class="ontime" data-n-class="ontime">
+                    <td class="td-contract">DHT-261255T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>坦桑尼亚</td>
+                    <td class="td-date">2026-07-23</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-07-28</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-12</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="非洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261131T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>肯尼亚</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-11</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="非洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261130T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>肯尼亚</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-14</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-10</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="非洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261346T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>肯尼亚</td>
+                    <td class="td-date">2026-08-10</td>
+                    <td class="td-date">2026-08-13</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-27</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="非洲" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261330T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>津巴布韦1</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-12</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-09-01</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="非洲" data-category="改造/外购" data-l-class="ontime" data-n-class="early">
+                    <td class="td-contract">DHT-260491A</td>
+                    <td class="td-elevator" title="10-11#">10-11#</td>
+                    <td>埃及3</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-date">2026-08-06</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">0天</span></td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-1天</span></td>
+                    <td class="td-date">2026-08-30</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <div class="region-section" data-region="中东">
+            <div class="region-header" onclick="toggleRegion(this)">
+                <span class="toggle-icon"><span class="toggle-arrow"></span></span>
+                <span class="region-name">中东</span>
+                <span class="region-stat">总3条 | 延期1条 | 严重1 | 按时率33.3%</span>
+            </div>
+            <div class="region-body">
+                <div class="module-header">
+                    <span>共 3 个模块</span>
+                </div>
+                <div class="table-wrap">
+                <table class="contract-table">
+                    <thead>
+                        <tr>
+                            <th>合同号</th>
+                            <th>梯号</th>
+                            <th>项目</th>
+                            <th>订货结束</th>
+                            <th>设计完成</th>
+                            <th>机械入库</th>
+                            <th>机械延期</th>
+                            <th>电气入库</th>
+                            <th>电气延期</th>
+                            <th>排产完成工期</th>
+                            <th>阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr class="contract-row" data-region="中东" data-category="改造/外购" data-l-class="early" data-n-class="major">
+                    <td class="td-contract">DHT-261137T</td>
+                    <td class="td-elevator" title="1-34#">1-34#</td>
+                    <td>阿联酋4</td>
+                    <td class="td-date">2026-06-29</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-07-31</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-3天</span></td>
+                    <td class="td-date">未入库(销售要下合同变更)</td>
+                    <td class="td-delay"><span class="badge" style="background:#dc3545;color:#ffffff">+7天</span></td>
+                    <td class="td-date">2026-09-08</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-red"></span> 超期未入库</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中东" data-category="改造/外购" data-l-class="early" data-n-class="early">
+                    <td class="td-contract">DHT-261298T</td>
+                    <td class="td-elevator" title="1#">1#</td>
+                    <td>巴林2</td>
+                    <td class="td-date">2026-07-29</td>
+                    <td class="td-date">2026-08-05</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-2天</span></td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-delay"><span class="badge" style="background:#d4edda;color:#155724">-2天</span></td>
+                    <td class="td-date">2026-08-31</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-teal"></span> 已完工</span></td>
+                </tr>
+                <tr class="contract-row" data-region="中东" data-category="改造/外购" data-l-class="pending" data-n-class="pending">
+                    <td class="td-contract">DHT-261322T</td>
+                    <td class="td-elevator" title="1-3#">1-3#</td>
+                    <td>伊拉克1</td>
+                    <td class="td-date">2026-08-03</td>
+                    <td class="td-date">2026-08-17</td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">-</td>
+                    <td class="td-delay"><span class="badge badge-gray">—</span></td>
+                    <td class="td-date">2026-08-31</td>
+                    <td><span class="stage-badge"><span class="stage-dot dot-yellow"></span> 等待入库</span></td>
+                </tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ── 工具函数 ──
+    function getWorstStatus(lc, nc) {
+        if (lc === 'major' || nc === 'major') return 'major';
+        if (lc === 'minor' || nc === 'minor') return 'minor';
+        if (lc === 'ontime' || nc === 'ontime') return 'ontime';
+        if (lc === 'early' || nc === 'early') return 'early';
+        return 'pending';
+    }
+
+    // ── 折叠/展开 ──
+    function toggleRegion(header) {
+        header.parentElement.classList.toggle('collapsed');
+        refreshStickyState();
+    }
+
+    // ── 筛选 ──
+    let currentRegion = '全部';
+    let currentCategory = '全部';
+
+    function setCategory(cat, el) {
+        currentCategory = cat;
+        document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        applyFilters();
+    }
+
+    var currentCardFilter = 'all';
+
+    function setCardFilter(status) {
+        if (currentCardFilter === status) {
+            currentCardFilter = 'all';
+        } else {
+            currentCardFilter = status;
+        }
+        document.querySelectorAll('.summary-cards .card').forEach(function(card) {
+            card.classList.toggle('active', card.dataset.status === currentCardFilter);
+        });
+        applyFilters();
+    }
+
+    function applyFilters() {
+        currentRegion = document.getElementById('regionFilter').value;
+        let visible = 0;
+
+        // 大区 section
+        document.querySelectorAll('.region-section').forEach(section => {
+            let region = section.dataset.region;
+            let regionMatch = (currentRegion === '全部' || region === currentRegion);
+
+            // 行筛选
+            let rowVisible = 0;
+            section.querySelectorAll('.contract-row').forEach(row => {
+                let cat = row.dataset.category;
+                let catMatch = false;
+                if (currentCategory === '全部') catMatch = true;
+                else if (currentCategory === '直梯' && cat !== '改造/外购') catMatch = true;
+                else if (currentCategory === '改造/外购' && cat === '改造/外购') catMatch = true;
+
+                var cardMatch = true;
+                if (currentCardFilter !== 'all') {
+                    var worst = getWorstStatus(row.dataset.lClass, row.dataset.nClass);
+                    cardMatch = (worst === currentCardFilter);
+                }
+                if (regionMatch && catMatch && cardMatch) {
+                    row.style.display = '';
+                    rowVisible++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            if (regionMatch && rowVisible > 0) {
+                section.style.display = '';
+                visible += rowVisible;
+            } else {
+                section.style.display = 'none';
+            }
+        });
+
+        document.getElementById('resultCount').textContent = '显示 ' + visible + ' 条记录';
+        updateCards();
+        // 筛选改变了布局，刷新sticky状态
+        refreshStickyState();
+        // 选中具体大区时，滚动到该大区头部
+        if (currentRegion !== '全部') {
+            var target = document.querySelector('.region-section[data-region="' + currentRegion + '"]');
+            if (target && target.style.display !== 'none') {
+                var targetTop = target.getBoundingClientRect().top + window.pageYOffset - filterBarH - 10;
+                window.scrollTo({ top: targetTop, behavior: 'instant' });
+            }
+        }
+    }
+
+    function updateCards() {
+        let major = 0, minor = 0, ontime = 0, early = 0, pending = 0, total = 0;
+        document.querySelectorAll('.contract-row').forEach(row => {
+            // 卡片筛选激活时，自行判断 region+category 匹配，忽略卡片筛选影响
+            if (currentCardFilter !== 'all') {
+                var section = row.closest('.region-section');
+                var rowRegion = section ? section.dataset.region : null;
+                if (!rowRegion) return;
+                if (currentRegion !== '全部' && rowRegion !== currentRegion) return;
+                if (currentCategory !== '全部') {
+                    var cat = row.dataset.category;
+                    if (currentCategory === '直梯' && cat === '改造/外购') return;
+                    if (currentCategory === '改造/外购' && cat !== '改造/外购') return;
+                }
+            } else {
+                if (row.style.display === 'none') return;
+            }
+            total++;
+            let lc = row.dataset.lClass;
+            let nc = row.dataset.nClass;
+            let worst = getWorstStatus(lc, nc);
+            if (worst === 'major') major++;
+            else if (worst === 'minor') minor++;
+            else if (worst === 'ontime') ontime++;
+            else if (worst === 'early') early++;
+            else pending++;
+        });
+        document.querySelector('#cardTotal .num').textContent = total;
+        document.querySelector('#cardMajor .num').textContent = major;
+        document.querySelector('#cardMinor .num').textContent = minor;
+        document.querySelector('#cardOntime .num').textContent = ontime;
+        document.querySelector('#cardEarly .num').textContent = early;
+        document.querySelector('#cardPending .num').textContent = pending;
+    }
+
+    // ── 双层粘性定位: 筛选栏 + 大区头部 ──
+    const filterBar = document.querySelector('.filter-bar');
+    const container = document.querySelector('.container');
+    const stickyHead = document.getElementById('stickyRegionHead');
+    const CONTAINER_PAD = 20;  // container 左右 padding
+
+    var filterBarTop = 0;
+    var filterBarH = 0;
+    var lastRegion = null;
+
+    // 在自然流中重新测量筛选栏位置和高度，然后重新评估sticky状态
+    function refreshStickyState() {
+        if (filterBar.style.position === 'fixed') {
+            // 已在fixed状态，不破坏性重置（避免白屏闪烁），只重新评估
+            onScroll();
+        } else {
+            // 自然流中安全测量
+            filterBarTop = filterBar.getBoundingClientRect().top + window.pageYOffset;
+            filterBarH = filterBar.getBoundingClientRect().height;
+            onScroll();
+        }
+    }
+
+    // 从源表格复制列宽到sticky表头，确保列对齐
+    function syncColumnWidths(sourceSection) {
+        var srcThs = sourceSection.querySelectorAll('thead th');
+        var stickyThs = stickyHead.querySelectorAll('thead th');
+        for (var i = 0; i < srcThs.length && i < stickyThs.length; i++) {
+            var w = srcThs[i].getBoundingClientRect().width;
+            stickyThs[i].style.width = w + 'px';
+            stickyThs[i].style.minWidth = w + 'px';
+        }
+    }
+
+    function onScroll() {
+        var sy = window.pageYOffset;
+        var cr = container.getBoundingClientRect();
+        // 内容区左边缘和宽度（排除container padding）
+        var contentLeft = cr.left + CONTAINER_PAD;
+        var contentWidth = cr.width - CONTAINER_PAD * 2;
+        var fixed = sy > filterBarTop;
+
+        if (fixed) {
+            // 筛选栏固定 — 宽度对齐container内容区
+            filterBar.style.position = 'fixed';
+            filterBar.style.top = '0';
+            filterBar.style.left = contentLeft + 'px';
+            filterBar.style.width = contentWidth + 'px';
+            filterBar.style.zIndex = '20';
+            filterBar.style.borderRadius = '0';
+            container.style.paddingTop = filterBarH + 'px';
+
+            // 大区头部 — 宽度对齐container内容区
+            stickyHead.style.top = filterBarH + 'px';
+            stickyHead.style.left = contentLeft + 'px';
+            stickyHead.style.width = contentWidth + 'px';
+
+            // 找当前可视大区: 遍历可见section，第一个bottom在筛选栏下方
+            var found = null;
+            var sections = document.querySelectorAll('.region-section');
+            for (var i = 0; i < sections.length; i++) {
+                if (sections[i].style.display === 'none') continue;
+                if (sections[i].getBoundingClientRect().bottom > filterBarH + 10) {
+                    found = sections[i];
+                    break;
+                }
+            }
+
+            // 判断大区头部是否已滚到筛选栏上方
+            var showRegion = false;
+            if (found) {
+                var rh = found.querySelector('.region-header');
+                if (rh && rh.getBoundingClientRect().top < filterBarH + 10) {
+                    showRegion = true;
+                }
+            }
+
+            if (showRegion) {
+                if (lastRegion !== found) {
+                    lastRegion = found;
+                    stickyHead.querySelector('.sticky-region-name').textContent = found.querySelector('.region-name').textContent;
+                    stickyHead.querySelector('.sticky-region-stat').textContent = found.querySelector('.region-stat').textContent;
+                    stickyHead.querySelector('.sticky-module-row').textContent = found.querySelector('.module-header span').textContent;
+                    // 复制列宽确保表头与数据对齐
+                    syncColumnWidths(found);
+                }
+                stickyHead.style.display = 'block';
+            } else {
+                stickyHead.style.display = 'none';
+                lastRegion = null;
+            }
+        } else {
+            // 恢复自然流
+            filterBar.style.cssText = '';
+            container.style.paddingTop = '';
+            stickyHead.style.display = 'none';
+            lastRegion = null;
+        }
+    }
+
+    function onResize() {
+        // resize改变了viewport/布局，需要完整重测（即使fixed状态也需重测filterBarH）
+        var wasFixed = filterBar.style.position === 'fixed';
+        filterBar.style.cssText = '';
+        container.style.paddingTop = '';
+        stickyHead.style.display = 'none';
+        lastRegion = null;
+        filterBarTop = filterBar.getBoundingClientRect().top + window.pageYOffset;
+        filterBarH = filterBar.getBoundingClientRect().height;
+        // 同步完成重测+重fixed，浏览器在同一个task内不会绘制中间状态，无闪烁
+        onScroll();
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    // 初始测量 + 首次判断
+    filterBarTop = filterBar.getBoundingClientRect().top + window.pageYOffset;
+    filterBarH = filterBar.getBoundingClientRect().height;
+    onScroll();
+    // 卡片点击事件绑定
+    document.querySelectorAll('.summary-cards .card').forEach(function(card) {
+        card.addEventListener('click', function() {
+            setCardFilter(card.dataset.status);
+        });
+    });
+    // 初始化筛选（在所有sticky变量声明之后调用）
+    applyFilters();
+</script>
+</body>
+</html>

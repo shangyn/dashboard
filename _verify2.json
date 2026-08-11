@@ -1,0 +1,47 @@
+[
+  {
+    "module": "乌兹别克斯坦",
+    "type": "data",
+    "overseas_diff": 47,
+    "sign_total": 488,
+    "schedule_overseas": 75,
+    "ship_overseas": null,
+    "overseas_payment": 18
+  },
+  {
+    "module": "新加坡HDB",
+    "type": "data",
+    "overseas_diff": null,
+    "sign_total": 11786,
+    "schedule_overseas": 644,
+    "ship_overseas": 584,
+    "overseas_payment": null
+  },
+  {
+    "module": "新加坡市政会",
+    "type": "data",
+    "overseas_diff": 222,
+    "sign_total": 4037,
+    "schedule_overseas": 8,
+    "ship_overseas": 87,
+    "overseas_payment": 9465
+  },
+  {
+    "module": "印度公建",
+    "type": "data",
+    "overseas_diff": 212,
+    "sign_total": 566,
+    "schedule_overseas": null,
+    "ship_overseas": null,
+    "overseas_payment": 212
+  },
+  {
+    "module": "国际总计",
+    "type": "grand_total",
+    "overseas_diff": 481,
+    "sign_total": 127163,
+    "schedule_overseas": 727,
+    "ship_overseas": 671,
+    "overseas_payment": 9695
+  }
+]
