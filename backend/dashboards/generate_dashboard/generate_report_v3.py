@@ -174,6 +174,14 @@ def build_stats_from_db(target_month):
     month_prefix = target_month  # "2026-08"
 
     for c in contracts:
+        # 排除已作废合同
+        if c.product_status and str(c.product_status).strip() == '已作废':
+            continue
+
+        # 排除改造梯（产品型号含"改造"，与外购梯不同，改造梯不参与签排发统计）
+        if c.product_type and '改造' in str(c.product_type):
+            continue
+
         # 确定模块名
         module_name = None
         country = c.country or ""
@@ -189,10 +197,6 @@ def build_stats_from_db(target_month):
             module_name = c.mapped_module
         if not module_name:
             continue
-
-        # 改造类 → 模块名固定为"改造"
-        if c.elevator_type and "改造" in str(c.elevator_type):
-            module_name = "改造"
 
         # 签单
         if c.sign_date and str(c.sign_date).startswith(month_prefix):
