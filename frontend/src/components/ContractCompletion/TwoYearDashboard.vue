@@ -491,4 +491,36 @@ function cellStyle(v) {
 @media (max-width: 768px) {
   .tyd-kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
+
+@media (max-width: 480px) {
+  .tyd-kpi-row {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .tyd-kpi-card {
+    padding: 8px 6px;
+  }
+  .tyd-kpi-label {
+    font-size: 9px;
+  }
+  .tyd-kpi-growth {
+    font-size: 18px;
+  }
+  .tyd-kpi-abs {
+    font-size: 10px;
+  }
+  .tyd-heatmap-card {
+    padding: 10px;
+  }
+  .tyd-chart-card {
+    display: none;
+  }
+  .tyd-heatmap-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .tyd-chart-body {
+    height: 260px;
+  }
+}
 </style>

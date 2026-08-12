@@ -539,6 +539,20 @@ body {{
     .chart-card {{ padding: 10px 6px 6px; }}
     .chart-title {{ font-size: 14px; }}
 }}
+@media (max-width: 480px) {{
+    .summary {{ grid-template-columns: 1fr; }}
+    .hero h1 {{ font-size: 18px; }}
+    .hero .subtitle {{ font-size: 11px; }}
+    .summary-card .sc-value {{ font-size: 22px; }}
+    .summary-card .sc-label {{ font-size: 11px; }}
+    .chart-wrap {{ height: 280px; }}
+    .chart-card {{ padding: 8px 4px 4px; }}
+    .chart-title {{ font-size: 12px; }}
+    .data-table {{ font-size: 11px; }}
+    .data-table thead th {{ font-size: 11px; padding: 4px 3px; }}
+    .data-table tbody td {{ padding: 3px 4px; }}
+    .container {{ padding: 16px 10px; }}
+}}
 </style>
 </head>
 <body>

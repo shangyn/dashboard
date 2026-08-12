@@ -305,4 +305,28 @@ function exportExcel() {
   .tyc-topbar-left { gap: 10px; }
   .tyc-title { font-size: 14px; }
 }
+
+@media (max-width: 480px) {
+  .tyc-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .tyc-topbar-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+  .tyc-topbar-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .tyc-seg-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+  .tyc-content {
+    padding: 10px 8px;
+  }
+}
 </style>

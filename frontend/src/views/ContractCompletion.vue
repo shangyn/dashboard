@@ -248,4 +248,42 @@ function onRegionChange() {
   padding: 16px;
   min-width: 0;
 }
+
+@media (max-width: 480px) {
+  .cc-topbar {
+    padding: 10px 12px;
+  }
+  .cc-title {
+    font-size: 15px;
+    width: 100%;
+  }
+  .cc-topbar-right {
+    gap: 6px;
+  }
+  .cc-body {
+    flex-direction: column;
+  }
+  .cc-sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .cc-toggle-btn {
+    width: auto;
+    flex: 1;
+    min-width: 60px;
+    padding: 10px 6px;
+    font-size: 12px;
+  }
+  .cc-dl-link {
+    margin-top: 0;
+    margin-left: auto;
+  }
+  .cc-content {
+    padding: 10px 8px;
+  }
+}
 </style>

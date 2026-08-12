@@ -196,6 +196,35 @@ async function handleChangePassword() {
   flex: 1;
   overflow: hidden;
 }
+
+@media (max-width: 480px) {
+  .user-header {
+    height: 44px;
+    padding: 0 12px;
+  }
+  .header-brand {
+    font-size: 16px;
+    gap: 4px;
+  }
+  .brand-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+  }
+  .header-actions {
+    gap: 8px;
+  }
+  .header-username {
+    font-size: 11px;
+  }
+  .console-btn,
+  .logout-btn {
+    font-size: 10px;
+    padding: 5px 10px;
+  }
+  .user-main {
+    padding: 12px 10px;
+  }
+}
 </style>
 
 <style>
@@ -282,5 +311,26 @@ async function handleChangePassword() {
 }
 .confirm-btn:hover {
   opacity: 0.9;
+}
+
+@media (max-width: 480px) {
+  .pwd-dialog.el-dialog {
+    width: 90% !important;
+  }
+  .dialog-header {
+    padding: 14px 20px;
+    font-size: 15px;
+  }
+  .dialog-body {
+    padding: 20px 16px 0;
+  }
+  .dialog-footer {
+    padding: 8px 16px 20px;
+  }
+  .cancel-btn,
+  .confirm-btn {
+    padding: 14px 0;
+    font-size: 12px;
+  }
 }
 </style>

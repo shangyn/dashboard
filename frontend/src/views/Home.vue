@@ -160,4 +160,42 @@ function goDashboard(module) {
 .module-card:hover .card-link {
   background: #1557b0;
 }
+
+@media (max-width: 480px) {
+  .home-page {
+    padding: 16px 0 24px;
+  }
+  .home-container {
+    padding: 0 12px;
+  }
+  .welcome-section {
+    margin-bottom: 24px;
+  }
+  .welcome-section h2 {
+    font-size: 20px;
+  }
+  .welcome-section p {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .module-card {
+    padding: 24px 20px;
+  }
+  .card-icon {
+    width: 48px; height: 48px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+  }
+  .card-name {
+    font-size: 15px;
+  }
+  .card-desc {
+    font-size: 12px;
+    min-height: auto;
+  }
+}
 </style>

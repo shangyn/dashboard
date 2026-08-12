@@ -167,4 +167,17 @@ async function handleLogin() {
   margin-top: -12px;
   padding-bottom: 8px;
 }
+
+@media (max-width: 480px) {
+  .login-card {
+    width: 90%;
+    max-width: 380px;
+  }
+  .login-header {
+    margin-bottom: 20px;
+  }
+  .login-header h2 {
+    font-size: 19px;
+  }
+}
 </style>

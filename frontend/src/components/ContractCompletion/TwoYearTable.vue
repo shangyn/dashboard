@@ -18,7 +18,7 @@
         <thead>
           <tr>
             <th rowspan="2" class="fixed" style="width:120px">模块</th>
-            <th rowspan="2" class="fixed" style="width:44px">市场<br/>类别</th>
+            <th rowspan="2" class="" style="width:44px">市场<br/>类别</th>
             <template v-for="g in visibleMetricGroups" :key="g.id">
               <th :colspan="g.has_growth ? 3 : 2">{{ g.name }}</th>
             </template>
@@ -46,7 +46,7 @@
             >
               {{ row.module }}
             </td>
-            <td class="fixed cat-col" v-if="row.type === 'data' || row.type === 'trade'">
+            <td class=" cat-col" v-if="row.type === 'data' || row.type === 'trade'">
               {{ row.type === 'trade' ? '' : (row.category || '') }}
             </td>
 
@@ -204,5 +204,21 @@ function growthStyle(row, key) {
   background: #fef2f2;
   border-color: #fecaca;
   color: #dc2626;
+}
+
+@media (max-width: 480px) {
+  .table-wrap {
+    padding: 8px;
+  }
+  .col-toggle-btn {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+  .col-toggle-label {
+    font-size: 10px;
+  }
+  .cc-table {
+    font-size: 10px;
+  }
 }
 </style>
