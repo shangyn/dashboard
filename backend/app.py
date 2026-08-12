@@ -24,7 +24,7 @@ def create_app():
     os.makedirs(os.path.join(os.path.dirname(__file__), 'dashboards'), exist_ok=True)
 
     # 扩展初始化
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {"origins": ["http://101.200.52.49:8082", "http://101.200.52.49", "http://localhost:5173", "http://127.0.0.1:5173"]}})
     db.init_app(app)
     jwt = JWTManager(app)
 
@@ -97,4 +97,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=os.getenv('FLASK_DEBUG', '0') == '1', threaded=True)
