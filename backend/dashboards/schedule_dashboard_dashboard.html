@@ -199,6 +199,43 @@
         transform: rotate(-90deg);
     }
 
+@media (max-width: 480px) {
+    .container { padding: 10px 8px; }
+    .header {
+        flex-direction: column; gap: 8px;
+        padding: 16px 20px;
+        text-align: center;
+    }
+    .header h1 { font-size: 17px; }
+    .filter-bar {
+        padding: 10px 12px; gap: 10px;
+        position: static !important;
+    }
+    .filter-bar label { font-size: 12px; }
+    .filter-bar select { font-size: 12px; padding: 4px 8px; }
+    .filter-tab { padding: 4px 10px; font-size: 11px; }
+    .summary-cards {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    .card { padding: 12px 10px; }
+    .card .num { font-size: 24px; }
+    .card .label { font-size: 10px; }
+    .region-header {
+        padding: 10px 14px;
+    }
+    .region-name { font-size: 14px; }
+    .region-stat { font-size: 11px; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .contract-table { width: auto; min-width: 100%; table-layout: auto; font-size: 12px; }
+    .contract-table th,
+    .contract-table td { padding: 6px; white-space: nowrap; }
+    #stickyRegionHead { display: none !important; }
+    .stage-badge { font-size: 11px; }
+    .td-date { font-size: 10px; }
+}
+
 </style>
 </head>
 <body>
