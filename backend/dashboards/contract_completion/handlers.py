@@ -1017,6 +1017,15 @@ def _classify_delay(days):
     return "major"
 
 
+def _is_overdue_warehouse_text(s):
+    """判断 K/M 单元格文本是否为「超期未入库」：
+    包含「未入库」，且不包含「未到入库时间」（等待入库）与「已暂停」（暂停）。
+    """
+    if not s:
+        return False
+    return '未入库' in s and '未到入库时间' not in s and '已暂停' not in s
+
+
 def _determine_stage(i_date, j_date, k_date, k_raw, m_date, m_raw, o_date, is_rejected):
     """判断合同当前所处阶段（移植自 process_data.py）"""
     if is_rejected:
@@ -1029,7 +1038,7 @@ def _determine_stage(i_date, j_date, k_date, k_raw, m_date, m_raw, o_date, is_re
         if o_date:
             return "completed"
         return "warehoused"
-    elif '未入库' in (k_raw or '') or '未入库' in (m_raw or ''):
+    elif _is_overdue_warehouse_text(k_raw) or _is_overdue_warehouse_text(m_raw):
         return "overdue_warehouse"
     elif has_k or has_m:
         return "partial_warehouse"
@@ -1106,12 +1115,11 @@ def parse_schedule_tracking(file_path: str) -> dict:
             except (ValueError, TypeError):
                 n_days = None
 
-            # 未入库延期天数计算：L/N为空 + K/M包含"未入库" → 文件名日期 - J日期
-            # 注意："未到入库时间" ≠ "未入库"，必须排除
-            _has_weiruku = lambda s: s and '未入库' in s and '未到入库时间' not in s
-            if l_days is None and j_date and _has_weiruku(k_raw_str) and file_date:
+            # 未入库延期天数计算：L/N为空 + K/M为"超期未入库"文本 → 文件名日期 - J日期
+            # 注意："未到入库时间"（等待入库）与"已暂停"（暂停）都不算"未入库"，必须排除
+            if l_days is None and j_date and _is_overdue_warehouse_text(k_raw_str) and file_date:
                 l_days = (file_date - j_date).days
-            if n_days is None and j_date and _has_weiruku(m_raw_str) and file_date:
+            if n_days is None and j_date and _is_overdue_warehouse_text(m_raw_str) and file_date:
                 n_days = (file_date - j_date).days
 
             # 驳回
@@ -1144,10 +1152,10 @@ def parse_schedule_tracking(file_path: str) -> dict:
                 order_end_date=i_date,
                 design_done_date=j_date,
                 mech_warehouse_date=k_date,
-                mech_warehouse_raw=k_raw_str if k_raw_str and '未入库' in k_raw_str and '未到入库时间' not in k_raw_str else None,
+                mech_warehouse_raw=k_raw_str if _is_overdue_warehouse_text(k_raw_str) else None,
                 mech_delay_days=l_days,
                 elec_warehouse_date=m_date,
-                elec_warehouse_raw=m_raw_str if m_raw_str and '未入库' in m_raw_str and '未到入库时间' not in m_raw_str else None,
+                elec_warehouse_raw=m_raw_str if _is_overdue_warehouse_text(m_raw_str) else None,
                 elec_delay_days=n_days,
                 audit_done_date=o_date,
                 designer_mech=_safe_str(row[19]),
