@@ -182,6 +182,7 @@ class ScheduleTracking(db.Model):
     category = db.Column(db.String(30))
     l_class = db.Column(db.String(20))
     n_class = db.Column(db.String(20))
+    data_date = db.Column(db.Date)   # 数据统计日期（来自上传文件名）
     uploaded_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):

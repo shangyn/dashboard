@@ -38,6 +38,8 @@ def seed_database(app):
                 conn.execute(text("ALTER TABLE cc_schedule_tracking ADD COLUMN mech_warehouse_raw VARCHAR(100)"))
             if 'elec_warehouse_raw' not in st_cols:
                 conn.execute(text("ALTER TABLE cc_schedule_tracking ADD COLUMN elec_warehouse_raw VARCHAR(100)"))
+            if 'data_date' not in st_cols:
+                conn.execute(text("ALTER TABLE cc_schedule_tracking ADD COLUMN data_date DATE"))
             conn.commit()
 
         # 数据架构迁移：停用重复的上传配置，新增预算上传入口

@@ -1175,6 +1175,7 @@ def parse_schedule_tracking(file_path: str) -> dict:
                 category=category,
                 l_class=l_class,
                 n_class=n_class,
+                data_date=file_date,
             )
             db.session.add(st)
             total += 1
