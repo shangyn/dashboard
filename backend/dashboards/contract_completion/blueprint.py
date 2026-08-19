@@ -94,9 +94,10 @@ def api_regions():
 @cc_bp.route('/api/contract-completion/two-year-comparison', methods=['GET'])
 @jwt_required()
 def api_two_year_comparison():
-    """两年对比表（无需参数，日期自动取当日）"""
+    """两年对比表（无需参数，日期自动取当日）；?include_personal=1 额外计入报表a个人业绩"""
     try:
-        data = get_two_year_comparison()
+        include_personal = request.args.get('include_personal', '0') == '1'
+        data = get_two_year_comparison(include_personal=include_personal)
         return jsonify(code=200, msg='success', data=data), 200
     except Exception as e:
         return jsonify(code=500, msg=str(e), data=None), 500
@@ -108,7 +109,8 @@ def api_export_two_year():
     """导出两年对比表Excel（带公式），支持 ?hidden=sign_amount&hidden=overseas_diff 隐藏列"""
     try:
         hidden = request.args.getlist('hidden') or None
-        filepath = export_two_year_comparison_xlsx(hidden_metric_ids=hidden)
+        include_personal = request.args.get('include_personal', '0') == '1'
+        filepath = export_two_year_comparison_xlsx(hidden_metric_ids=hidden, include_personal=include_personal)
         return send_file(filepath, as_attachment=True,
                          download_name='两年对比表.xlsx',
                          mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -119,9 +121,10 @@ def api_export_two_year():
 @cc_bp.route('/api/contract-completion/annual-completion', methods=['GET'])
 @jwt_required()
 def api_annual_completion():
-    """2026年合同完成情况表"""
+    """2026年合同完成情况表；?include_personal=1 额外计入报表a个人业绩"""
     try:
-        data = get_annual_completion()
+        include_personal = request.args.get('include_personal', '0') == '1'
+        data = get_annual_completion(include_personal=include_personal)
         return jsonify(code=200, msg='success', data=data), 200
     except Exception as e:
         return jsonify(code=500, msg=str(e), data=None), 500
@@ -133,7 +136,8 @@ def api_export_annual_completion():
     """导出年度完成情况表Excel，支持 ?hide_extra=1 隐藏后8列"""
     try:
         hide_extra = request.args.get('hide_extra') == '1'
-        filepath = export_annual_completion_xlsx(hide_extra=hide_extra)
+        include_personal = request.args.get('include_personal', '0') == '1'
+        filepath = export_annual_completion_xlsx(hide_extra=hide_extra, include_personal=include_personal)
         return send_file(filepath, as_attachment=True,
                          download_name='2026年合同完成情况表.xlsx',
                          mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

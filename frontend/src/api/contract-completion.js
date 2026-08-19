@@ -24,10 +24,14 @@ export function getRegions() {
   return request.get('/api/contract-completion/regions')
 }
 
-export function getTwoYearComparison() {
-  return request.get('/api/contract-completion/two-year-comparison')
+export function getTwoYearComparison(includePersonal = false) {
+  return request.get('/api/contract-completion/two-year-comparison', {
+    params: includePersonal ? { include_personal: 1 } : {}
+  })
 }
 
-export function getAnnualCompletion() {
-  return request.get('/api/contract-completion/annual-completion')
+export function getAnnualCompletion(includePersonal = false) {
+  return request.get('/api/contract-completion/annual-completion', {
+    params: includePersonal ? { include_personal: 1 } : {}
+  })
 }

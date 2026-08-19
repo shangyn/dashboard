@@ -707,9 +707,10 @@ def _get_category(module_name):
     return CATEGORY_MAP.get(module_name, '')
 
 
-def get_two_year_comparison():
+def get_two_year_comparison(include_personal=False):
     """
     两年对比表 — 严格按照模板 Sheet 3 格式
+    include_personal: 为 True 时，额外把报表a签单/排产额按人名归属到 8 大区模块
     日期动态计算：当年1月1日~今日，去年1月1日~去年同日
     行结构：以国家映射表为准，按大区→模块分组，含小计行、商贸行、国际总计
 
@@ -717,9 +718,10 @@ def get_two_year_comparison():
     """
     global _two_year_cache, _two_year_fingerprint
 
-    # 检查缓存
+    # 检查缓存（fingerprint + include_personal 区分两套缓存）
     fp = _get_data_fingerprint()
-    if _two_year_fingerprint == fp and _two_year_cache is not None:
+    cache_key = (fp, include_personal)
+    if _two_year_fingerprint == cache_key and _two_year_cache is not None:
         return _two_year_cache
 
     # 数据截止日期 = 昨天（当天数据通常尚未入库）
@@ -882,6 +884,22 @@ def get_two_year_comparison():
                 d['ship_amount_curr'] += c.contract_amount_rmb or 0
                 if is_true_gaizao:
                     gaizao_true_units['ship_units_curr'] += c.unit_count or 0
+
+        # 报表a个人业绩：额外按人名归属到 8 大区模块（不影响商贸合计原有统计）
+        if include_personal and c.source == 'report_a' and c.personal_module and c.personal_region:
+            pd = _ensure(c.personal_region, c.personal_module)
+            # 签订（只加金额，不加台数）
+            if c.sign_date:
+                if prev_start <= c.sign_date <= prev_end:
+                    pd['sign_amount_prev'] += c.contract_amount_rmb or 0
+                if curr_start <= c.sign_date <= curr_end:
+                    pd['sign_amount_curr'] += c.contract_amount_rmb or 0
+            # 排产
+            if c.schedule_date:
+                if prev_start <= c.schedule_date <= prev_end:
+                    pd['schedule_amount_prev'] += c.contract_amount_rmb or 0
+                if curr_start <= c.schedule_date <= curr_end:
+                    pd['schedule_amount_curr'] += c.contract_amount_rmb or 0
 
     # 回款聚合（排除：抵佣金/手续费、新加坡分公司关联方、DHN/YBN合同）
     payments = PaymentCollection.query.filter(
@@ -1140,7 +1158,7 @@ def get_two_year_comparison():
 
     # 存入缓存
     _two_year_cache = result
-    _two_year_fingerprint = fp
+    _two_year_fingerprint = cache_key
 
     return result
 
@@ -1667,13 +1685,13 @@ _ACTUAL_FIELD = {
 _METRIC_KEYS = ['sign_units', 'sign_amount', 'schedule_units', 'schedule_amount', 'ship_units', 'ship_amount', 'payment']
 
 
-def get_annual_completion():
+def get_annual_completion(include_personal=False):
     """
     2026年合同完成情况表
     复用两年对比的聚合结果，合并硬编码年度指标，计算完成全年比。
     金额指标使用 _total 字段（含海外差额）。
     """
-    base = get_two_year_comparison()
+    base = get_two_year_comparison(include_personal=include_personal)
     rows = base['rows']
     today = date.today()
     data_date = today - timedelta(days=1)
@@ -1785,7 +1803,7 @@ def get_annual_completion():
 
 # ── Excel 导出 ──────────────────────────────────────────
 
-def export_two_year_comparison_xlsx(hidden_metric_ids=None):
+def export_two_year_comparison_xlsx(hidden_metric_ids=None, include_personal=False):
     """生成两年对比表 Excel 文件（所有数值为硬编码，与页面显示一致），返回文件路径
     hidden_metric_ids: 要隐藏的指标ID列表，如 ['sign_amount', 'overseas_diff']
     """
@@ -1793,7 +1811,7 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
     from openpyxl.utils import get_column_letter
 
-    data = get_two_year_comparison()
+    data = get_two_year_comparison(include_personal=include_personal)
     rows = data['rows']
     groups = data['metric_groups']
     year_prev = data['year_prev']
@@ -1949,14 +1967,14 @@ def export_two_year_comparison_xlsx(hidden_metric_ids=None):
 
 
 
-def export_annual_completion_xlsx(hide_extra=False):
+def export_annual_completion_xlsx(hide_extra=False, include_personal=False):
     """导出年度完成情况表 Excel（双行表头、居中、整数、硬编码值）"""
     import os
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
-    data = get_annual_completion()
+    data = get_annual_completion(include_personal=include_personal)
     rows = data['rows']
     metric_keys = data['metric_keys']
 

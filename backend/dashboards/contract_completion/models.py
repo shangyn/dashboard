@@ -45,6 +45,8 @@ class LedgerContract(db.Model):
     mapped_region = db.Column(db.String(50))                              # 映射后的大区
     mapped_module = db.Column(db.String(100))                             # 映射后的模块
     mapped_manager = db.Column(db.String(50))                             # 映射后的模块经理
+    personal_module = db.Column(db.String(100))                           # 报表a个人归属模块（8大区模块；商贸配件为空）
+    personal_region = db.Column(db.String(50))                            # 报表a个人归属大区
 
     uploaded_at = db.Column(db.DateTime, default=datetime.now)
 

@@ -22,9 +22,30 @@
           <button
             class="tyc-seg-btn"
             :class="{ active: view === 'completion' }"
-            @click="switchToCompletion()"
+            @click="view = 'completion'"
           >
             📊 年度完成比
+          </button>
+          <button
+            class="tyc-seg-btn"
+            :class="{ active: view === 'dashboard_p' }"
+            @click="view = 'dashboard_p'"
+          >
+            📈 增长看板（含配件）
+          </button>
+          <button
+            class="tyc-seg-btn"
+            :class="{ active: view === 'table_p' }"
+            @click="view = 'table_p'"
+          >
+            📋 两年对比（含配件）
+          </button>
+          <button
+            class="tyc-seg-btn"
+            :class="{ active: view === 'completion_p' }"
+            @click="view = 'completion_p'"
+          >
+            📊 年度完成比（含配件）
           </button>
         </div>
       </div>
@@ -47,9 +68,9 @@
     <!-- Content Area -->
     <div class="tyc-content">
       <!-- Dashboard View -->
-      <div v-show="view === 'dashboard'">
+      <div v-show="isDashboard">
         <TwoYearDashboard
-          :rows="allRows"
+          :rows="isPersonal ? allRowsP : allRows"
           :regionOrder="regionOrder"
           :loading="loading"
           :selectedRegion="normalizedRegion"
@@ -57,10 +78,10 @@
       </div>
 
       <!-- Table View -->
-      <div v-show="view === 'table'">
+      <div v-show="isTable">
         <TwoYearTable
           ref="tableRef"
-          :rows="filteredRows"
+          :rows="isPersonal ? filteredRowsP : filteredRows"
           :metricGroups="metricGroups"
           :yearPrev="yearPrev"
           :yearCurr="yearCurr"
@@ -69,10 +90,10 @@
       </div>
 
       <!-- Annual Completion View -->
-      <div v-show="view === 'completion'">
+      <div v-show="isCompletion">
         <AnnualCompletionTable
           ref="completionRef"
-          :rows="completionFilteredRows"
+          :rows="isPersonal ? completionFilteredRowsP : completionFilteredRows"
           :loading="completionLoading"
         />
       </div>
@@ -81,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getTwoYearComparison, getAnnualCompletion } from '../api/contract-completion'
 import TwoYearTable from '../components/ContractCompletion/TwoYearTable.vue'
@@ -101,17 +122,26 @@ const yearPrev = ref(2025)
 const yearCurr = ref(2026)
 const metricGroups = ref([])
 const allRows = ref([])
+const allRowsP = ref([])
 const regions = ref([])
 const regionOrder = ref([])
 
-const filteredRows = computed(() => {
-  if (!selectedRegion.value) return allRows.value
+const isPersonal = computed(() => view.value === 'dashboard_p' || view.value === 'table_p' || view.value === 'completion_p')
+const isDashboard = computed(() => view.value === 'dashboard' || view.value === 'dashboard_p')
+const isTable = computed(() => view.value === 'table' || view.value === 'table_p')
+const isCompletion = computed(() => view.value === 'completion' || view.value === 'completion_p')
+
+function _filter(rows) {
+  if (!selectedRegion.value) return rows
   if (selectedRegion.value === '__region_only__')
-    return allRows.value.filter(r => r.type === 'subtotal' || r.type === 'grand_total')
-  return allRows.value.filter(r =>
+    return rows.filter(r => r.type === 'subtotal' || r.type === 'grand_total')
+  return rows.filter(r =>
     r.region === selectedRegion.value || (r.type !== 'data' && r.type !== 'trade')
   )
-})
+}
+
+const filteredRows = computed(() => _filter(allRows.value))
+const filteredRowsP = computed(() => _filter(allRowsP.value))
 
 const normalizedRegion = computed(() => {
   if (!selectedRegion.value || selectedRegion.value === '__region_only__') return null
@@ -121,32 +151,54 @@ const normalizedRegion = computed(() => {
 // ── Annual Completion ──
 const completionLoading = ref(false)
 const completionAllRows = ref([])
+const completionAllRowsP = ref([])
 const completionTitle = ref('')
 
-const completionFilteredRows = computed(() => {
-  if (!selectedRegion.value) return completionAllRows.value
-  if (selectedRegion.value === '__region_only__')
-    return completionAllRows.value.filter(r => r.type === 'subtotal' || r.type === 'grand_total')
-  return completionAllRows.value.filter(r =>
-    r.region === selectedRegion.value || (r.type !== 'data' && r.type !== 'trade')
-  )
-})
+const completionFilteredRows = computed(() => _filter(completionAllRows.value))
+const completionFilteredRowsP = computed(() => _filter(completionAllRowsP.value))
 
-async function switchToCompletion() {
-  view.value = 'completion'
-  if (completionAllRows.value.length) return
+async function loadCompletion(personal) {
   completionLoading.value = true
   try {
-    const res = await getAnnualCompletion()
+    const res = await getAnnualCompletion(personal)
     const d = res.data
     completionTitle.value = d.title
-    completionAllRows.value = d.rows || []
+    if (personal) {
+      completionAllRowsP.value = d.rows || []
+    } else {
+      completionAllRows.value = d.rows || []
+    }
   } catch (e) {
     ElMessage.error('年度完成比数据加载失败')
   } finally {
     completionLoading.value = false
   }
 }
+
+async function loadTwoYearPersonal() {
+  loading.value = true
+  try {
+    const res = await getTwoYearComparison(true)
+    allRowsP.value = res.data.rows || []
+  } catch (e) {
+    ElMessage.error('数据加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 切换到含个人/年度完成比视图时懒加载
+watch(view, (v) => {
+  if ((v === 'dashboard_p' || v === 'table_p') && !allRowsP.value.length) {
+    loadTwoYearPersonal()
+  }
+  if (v === 'completion' && !completionAllRows.value.length) {
+    loadCompletion(false)
+  }
+  if (v === 'completion_p' && !completionAllRowsP.value.length) {
+    loadCompletion(true)
+  }
+})
 
 onMounted(() => fetchData())
 
@@ -173,22 +225,25 @@ async function fetchData() {
 
 function exportExcel() {
   const token = localStorage.getItem('token')
-  let url = view.value === 'completion'
+  let url = isCompletion.value
     ? '/api/contract-completion/annual-completion/export'
     : '/api/contract-completion/two-year-comparison/export'
 
-  if (view.value === 'completion' && completionRef.value && !completionRef.value.showExtra) {
-    url += '?hide_extra=1'
+  const params = []
+  if (isPersonal.value) params.push('include_personal=1')
+
+  if (isCompletion.value && completionRef.value && !completionRef.value.showExtra) {
+    params.push('hide_extra=1')
   }
 
-  if (view.value !== 'completion' && tableRef.value && tableRef.value.hiddenKeys) {
+  if (!isCompletion.value && tableRef.value && tableRef.value.hiddenKeys) {
     const hidden = [...tableRef.value.hiddenKeys]
-    if (hidden.length) {
-      url += (url.includes('?') ? '&' : '?') + hidden.map(k => 'hidden=' + encodeURIComponent(k)).join('&')
-    }
+    hidden.forEach(k => params.push('hidden=' + encodeURIComponent(k)))
   }
 
-  const filename = view.value === 'completion' ? '2026年合同完成情况表.xlsx' : '两年对比表.xlsx'
+  if (params.length) url += '?' + params.join('&')
+
+  const filename = isCompletion.value ? '2026年合同完成情况表.xlsx' : '两年对比表.xlsx'
 
   // IE11: fetch() 不可用，使用 XMLHttpRequest + msSaveOrOpenBlob
   if (window.navigator.msSaveOrOpenBlob) {

@@ -551,6 +551,52 @@ def _parse_payment_openpyxl(file_path: str) -> dict:
 
 # ── Handler 4: 报表a（商贸配件签单+排产） ──────────────
 
+# 商贸配件6模块（个人业绩跳过集合，含名称变体）
+_TRADE_SKIP_MODULES = {
+    '商贸-1', '商贸1', '商贸-2', '商贸2', '商贸-3', '商贸3',
+    '配件-1', '配件-2', '改造', '更新改造',
+}
+
+
+def _build_module_region_map():
+    """从 ANNUAL_TARGETS 建立 模块 -> 大区 映射（判定报表a个人业绩归属哪个大区）"""
+    from dashboards.contract_completion.services import ANNUAL_TARGETS
+    return {module: region for (region, module) in ANNUAL_TARGETS}
+
+
+def _load_person_module_map():
+    """读取 数据源/模块对应表.xlsx 的 D(姓名)->E(模块) 映射，返回 dict；失败返回空"""
+    import openpyxl
+    here = os.path.abspath(os.path.dirname(__file__))                  # backend/dashboards/contract_completion
+    base = os.path.dirname(os.path.dirname(os.path.dirname(here)))     # 项目根
+    path = os.path.join(base, '数据源', '模块对应表.xlsx')
+    if not os.path.isfile(path):
+        return {}
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    try:
+        ws = wb['整梯模块对应表']
+        mapping = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            d = row[3] if len(row) > 3 else None   # D列=姓名
+            e = row[4] if len(row) > 4 else None   # E列=模块
+            if d and str(d).strip():
+                mapping[str(d).strip()] = str(e).strip() if e is not None else ''
+        return mapping
+    finally:
+        wb.close()
+
+
+def _resolve_personal_target(person2mod, mod2region, person_name):
+    """根据报表a col56 人名，返回 (module, region)；商贸配件/无法判定时返回 (None, None)"""
+    target_mod = person2mod.get(person_name, '')
+    if not target_mod or target_mod in _TRADE_SKIP_MODULES:
+        return None, None
+    region = mod2region.get(target_mod)
+    if not region or region == '商贸配件':
+        return None, None
+    return target_mod, region
+
+
 def parse_report_a(file_path: str) -> dict:
     """解析报表a.xls → 提取配件-1/配件-2的签单额、排产额 → 写入ledger表"""
     try:
@@ -562,6 +608,10 @@ def parse_report_a(file_path: str) -> dict:
         # K(col10): 签订日期
         # P(col15): 排产日期
         # BC(col54): 模块
+
+        # 个人业绩归属：加载 姓名->模块 与 模块->大区 映射
+        person2mod = _load_person_module_map()
+        mod2region = _build_module_region_map()
 
         trade_rows = []
         for r in range(1, ws.nrows):
@@ -576,6 +626,11 @@ def parse_report_a(file_path: str) -> dict:
             project_name = _safe_str(ws.cell_value(r, 2)) if ws.ncols > 2 else ''
             contract_no = _safe_str(ws.cell_value(r, 0))
 
+            # 个人业绩归属：col56 订单备注（人名）→ 目标模块/大区
+            person_name = _safe_str(ws.cell_value(r, 56))
+            personal_module, personal_region = _resolve_personal_target(
+                person2mod, mod2region, person_name)
+
             trade_rows.append({
                 'contract_no': contract_no or f'REPORT_A_{r}',
                 'project_name': project_name,
@@ -583,6 +638,8 @@ def parse_report_a(file_path: str) -> dict:
                 'sign_date': sign_date,
                 'schedule_date': prod_date,
                 'contract_amount_rmb': amount_rmb,
+                'personal_module': personal_module,
+                'personal_region': personal_region,
             })
 
         # 删除之前的报表a来源数据
@@ -605,6 +662,8 @@ def parse_report_a(file_path: str) -> dict:
                     sign_date=tr['sign_date'],
                     contract_amount_rmb=tr['contract_amount_rmb'],
                     unit_count=0,
+                    personal_module=tr['personal_module'],
+                    personal_region=tr['personal_region'],
                 )
                 batch.append(lc)
                 total += 1
@@ -621,6 +680,8 @@ def parse_report_a(file_path: str) -> dict:
                     schedule_date=tr['schedule_date'],
                     contract_amount_rmb=tr['contract_amount_rmb'],
                     unit_count=0,
+                    personal_module=tr['personal_module'],
+                    personal_region=tr['personal_region'],
                 )
                 batch.append(lc)
                 total += 1

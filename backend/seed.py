@@ -40,6 +40,12 @@ def seed_database(app):
                 conn.execute(text("ALTER TABLE cc_schedule_tracking ADD COLUMN elec_warehouse_raw VARCHAR(100)"))
             if 'data_date' not in st_cols:
                 conn.execute(text("ALTER TABLE cc_schedule_tracking ADD COLUMN data_date DATE"))
+            # cc_ledger_contract: 加 personal_module / personal_region（报表a个人业绩归属）
+            lc_cols = [c['name'] for c in inspector.get_columns('cc_ledger_contract')]
+            if 'personal_module' not in lc_cols:
+                conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN personal_module VARCHAR(100)"))
+            if 'personal_region' not in lc_cols:
+                conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN personal_region VARCHAR(50)"))
             conn.commit()
 
         # 数据架构迁移：停用重复的上传配置，新增预算上传入口
