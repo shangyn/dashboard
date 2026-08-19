@@ -139,3 +139,7 @@ Dockerfile.*
 # 其他 Office 文件
 *.ppt
 *.pptx
+
+backend/dashboards/generate_data_dashboard.html
+backend/dashboards/receivables_dashboard.html
+backend/dashboards/schedule_dashboard_dashboard.html
