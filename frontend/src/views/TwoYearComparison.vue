@@ -31,7 +31,7 @@
             :class="{ active: view === 'dashboard_p' }"
             @click="view = 'dashboard_p'"
           >
-            📈 增长看板（含配件）测试
+            📈 增长看板（含配件）
           </button>
           <button
             class="tyc-seg-btn"
