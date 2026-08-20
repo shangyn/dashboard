@@ -1080,11 +1080,11 @@ def _classify_delay(days):
 
 def _is_overdue_warehouse_text(s):
     """判断 K/M 单元格文本是否为「超期未入库」：
-    包含「未入库」，且不包含「未到入库时间」（等待入库）与「已暂停」（暂停）。
+    包含「未入库」，且不包含「未到入库时间」（等待入库）、「已暂停」（暂停）与「变更」（变更）。
     """
     if not s:
         return False
-    return '未入库' in s and '未到入库时间' not in s and '已暂停' not in s
+    return '未入库' in s and '未到入库时间' not in s and '已暂停' not in s and '变更' not in s
 
 
 def _determine_stage(i_date, j_date, k_date, k_raw, m_date, m_raw, o_date, is_rejected):
@@ -1177,7 +1177,7 @@ def parse_schedule_tracking(file_path: str) -> dict:
                 n_days = None
 
             # 未入库延期天数计算：L/N为空 + K/M为"超期未入库"文本 → 文件名日期 - J日期
-            # 注意："未到入库时间"（等待入库）与"已暂停"（暂停）都不算"未入库"，必须排除
+            # 注意："未到入库时间"（等待入库）、"已暂停"（暂停）与"变更"（变更）都不算"未入库"，必须排除
             if l_days is None and j_date and _is_overdue_warehouse_text(k_raw_str) and file_date:
                 l_days = (file_date - j_date).days
             if n_days is None and j_date and _is_overdue_warehouse_text(m_raw_str) and file_date:

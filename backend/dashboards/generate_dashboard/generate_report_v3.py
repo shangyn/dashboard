@@ -178,23 +178,23 @@ def build_stats_from_db(target_month):
         if c.product_status and str(c.product_status).strip() == '已作废':
             continue
 
-        # 排除改造梯（产品型号含"改造"，与外购梯不同，改造梯不参与签排发统计）
-        if c.product_type and '改造' in str(c.product_type):
-            continue
-
         # 确定模块名
         module_name = None
         country = c.country or ""
 
-        # 先看映射表
-        if country in mapping:
-            module_name = mapping[country].module_name
-        # 再看 mapped_module（已在导入时填充的）
-        if not module_name and c.mapped_module:
-            module_name = c.mapped_module
-        # 商贸配件来源
-        if c.source in ('report_a', 'report_b') and c.mapped_module:
-            module_name = c.mapped_module
+        # 产品型号含"改造" → 强制归入改造模块（与旧流程/两年对比口径一致）
+        if c.product_type and '改造' in str(c.product_type):
+            module_name = '改造'
+        else:
+            # 先看映射表
+            if country in mapping:
+                module_name = mapping[country].module_name
+            # 再看 mapped_module（已在导入时填充的）
+            if not module_name and c.mapped_module:
+                module_name = c.mapped_module
+            # 商贸配件来源
+            if c.source in ('report_a', 'report_b') and c.mapped_module:
+                module_name = c.mapped_module
         if not module_name:
             continue
 

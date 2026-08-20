@@ -257,11 +257,8 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
                 cell.value = "-"
                 cell.number_format = "@"
             elif rule == "zero":
-                if mod_name == "改造":
-                    field = _col_to_field(col_letter)
-                    cell.value = st.get(field, 0) if field else 0
-                else:
-                    cell.value = 0
+                field = _col_to_field(col_letter)
+                cell.value = st.get(field, 0) if field else 0
             elif rule == "import":
                 field = _col_to_field(col_letter)
                 cell.value = fc.get(field, 0) if field else 0
