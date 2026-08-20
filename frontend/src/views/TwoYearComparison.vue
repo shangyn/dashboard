@@ -376,9 +376,15 @@ function exportExcel() {
     width: 100%;
     flex-wrap: wrap;
   }
+  .tyc-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+  }
   .tyc-seg-btn {
     padding: 5px 10px;
     font-size: 11px;
+    white-space: normal;
   }
   .tyc-content {
     padding: 10px 8px;

@@ -119,9 +119,12 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
     # ---- 4. 动态生成8大区模块行 + 子合计 ----
     current_row = 5
     seq = 1
-    subtotal_rows = []  # 记录子合计行号，用于全国贸合计公式
+    subtotal_rows = []  # 记录子合计行号，用于全国贸合计
     normal_col_rules = _normal_col_rules()
     trade_col_rules = _trade_col_rules()
+    ratio_cols = ["E", "H", "K", "N", "Q", "T"]  # 完成比列
+    value_cols = "CDEFGHIJKLMNOPQRST"
+    grand_totals = {}  # 全国贸合计：累计各大区/商贸配件合计
 
     all_filled_modules = set()  # 追踪已输出的模块，用于日志
 
@@ -132,6 +135,7 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
             continue
 
         region_start_row = current_row
+        region_totals = {}  # 当前大区各列合计（完成比列除外）
 
         for mod_name in modules:
             fc = forecast.get(mod_name, {})
@@ -158,8 +162,12 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
                     field = f"{group}_{'amount' if col_letter in _AMOUNT_COLS else 'units'}"
                     cell.value = st.get(field, 0)
                 elif col_type == "ratio":
-                    fc_col, ac_col = _ratio_pair(col_letter)
-                    cell.value = _ratio_formula(fc_col, ac_col, current_row)
+                    # 直接写入完成比数值（不再写公式，避免手机端不重算显示0）
+                    suffix = "amount" if col_letter in _AMOUNT_COLS else "units"
+                    field = f"{group}_{suffix}"
+                    fc_val = float(fc.get(field, 0) or 0)
+                    ac_val = float(st.get(field, 0) or 0)
+                    cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
                     cell.number_format = FMT_RATIO
 
             # A/B列应用模板样式
@@ -168,6 +176,15 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
 
             seq += 1
             current_row += 1
+
+        # 累计该大区各列合计（读取已写入的数值）
+        for r in range(region_start_row, current_row):
+            for col_letter in value_cols:
+                if col_letter in ratio_cols:
+                    continue
+                v = ws.cell(row=r, column=column_index_from_string(col_letter)).value
+                if isinstance(v, (int, float)):
+                    region_totals[col_letter] = region_totals.get(col_letter, 0) + v
 
         # ---- 写子合计行 ----
         region_end_row = current_row - 1
@@ -199,18 +216,25 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
             bold_font.bold = True
             cell.font = bold_font
 
-            if col_letter in "EHK NQT":  # 完成比列
+            if col_letter in ratio_cols:  # 完成比列
                 fc_col, ac_col = _ratio_pair(col_letter)
-                cell.value = _ratio_formula(fc_col, ac_col, current_row)
+                fc_val = region_totals.get(fc_col, 0)
+                ac_val = region_totals.get(ac_col, 0)
+                cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
                 cell.number_format = FMT_RATIO
             else:
-                # SUM 公式覆盖该大区所有模块行
-                cell.value = f"=SUM({CL(col_idx)}{region_start_row}:{CL(col_idx)}{region_end_row})"
+                # 直接用累计值写入合计（不再写SUM公式，兼容手机端）
+                cell.value = region_totals.get(col_letter, 0)
+
+        # 累计到全国贸合计
+        for col_letter in value_cols:
+            grand_totals[col_letter] = grand_totals.get(col_letter, 0) + region_totals.get(col_letter, 0)
 
         current_row += 1
 
     # ---- 5. 写商贸配件 ----
     trade_start_row = current_row
+    trade_totals = {}  # 商贸配件各列合计（完成比列除外）
     for mod_name in TRADE_PARTS_MODULES:
         fc = forecast.get(mod_name, {})
         st = stats.get(mod_name, {})
@@ -242,12 +266,26 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
                 field = _col_to_field(col_letter)
                 cell.value = fc.get(field, 0) if field else 0
             elif rule == "formula":
+                # 直接写入完成比数值（不再写公式，兼容手机端）
                 fc_col, ac_col = _ratio_pair(col_letter)
-                cell.value = _ratio_formula(fc_col, ac_col, current_row)
+                fc_val = ws.cell(row=current_row, column=column_index_from_string(fc_col)).value
+                ac_val = ws.cell(row=current_row, column=column_index_from_string(ac_col)).value
+                fc_val = float(fc_val) if isinstance(fc_val, (int, float)) else 0
+                ac_val = float(ac_val) if isinstance(ac_val, (int, float)) else 0
+                cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
                 cell.number_format = FMT_RATIO
 
         seq += 1
         current_row += 1
+
+    # 累计商贸配件各列合计（读取已写入的数值）
+    for r in range(trade_start_row, current_row):
+        for col_letter in value_cols:
+            if col_letter in ratio_cols:
+                continue
+            v = ws.cell(row=r, column=column_index_from_string(col_letter)).value
+            if isinstance(v, (int, float)):
+                trade_totals[col_letter] = trade_totals.get(col_letter, 0) + v
 
     # ---- 6. 写商贸配件合计 ----
     trade_end_row = current_row - 1
@@ -276,12 +314,18 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
         bold_font.bold = True
         cell.font = bold_font
 
-        if col_letter in "EHK NQT":
+        if col_letter in ratio_cols:
             fc_col, ac_col = _ratio_pair(col_letter)
-            cell.value = _ratio_formula(fc_col, ac_col, current_row)
+            fc_val = trade_totals.get(fc_col, 0)
+            ac_val = trade_totals.get(ac_col, 0)
+            cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
             cell.number_format = FMT_RATIO
         else:
-            cell.value = f"=SUM({CL(col_idx)}{trade_start_row}:{CL(col_idx)}{trade_end_row})"
+            cell.value = trade_totals.get(col_letter, 0)
+
+    # 商贸配件合计并入全国贸合计
+    for col_letter in value_cols:
+        grand_totals[col_letter] = grand_totals.get(col_letter, 0) + trade_totals.get(col_letter, 0)
 
     current_row += 1
 
@@ -309,14 +353,15 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
         bold_font.bold = True
         cell.font = bold_font
 
-        if col_letter in "EHK NQT":
+        if col_letter in ratio_cols:
             fc_col, ac_col = _ratio_pair(col_letter)
-            cell.value = _ratio_formula(fc_col, ac_col, grand_row)
+            fc_val = grand_totals.get(fc_col, 0)
+            ac_val = grand_totals.get(ac_col, 0)
+            cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
             cell.number_format = FMT_RATIO
         else:
-            # 所有子合计行求和
-            parts = [f"{CL(col_idx)}{sr}" for sr in subtotal_rows]
-            cell.value = "=" + "+".join(parts)
+            # 直接用累计值写入（不再写公式，兼容手机端）
+            cell.value = grand_totals.get(col_letter, 0)
 
     # ---- 8. 日志：预算JSON中有但映射表中无的模块 ----
     extra_in_forecast = set(forecast.keys()) - all_filled_modules

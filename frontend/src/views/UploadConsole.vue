@@ -96,12 +96,12 @@
             <div class="system-info-card">
               <el-icon :size="48" color="#1a73e8"><InfoFilled /></el-icon>
               <h3>数据看板</h3>
-              <p>版本 v1.0.0 | 内部管理系统</p>
+              <p>版本 V2.0.0 | 内部管理系统</p>
               <el-divider />
               <div class="info-list">
-                <div>版本号：v1.0.0</div>
-                <div>技术栈：Vue 3 + Element Plus + Flask + SQLite</div>
-                <div>部署环境：局域网内部部署</div>
+                <div>版本号：V2.0.0</div>
+                <div>技术栈：Vue 3 + Element Plus + SQLite</div>
+                <div>部署环境：局域网内部部署 + <a href="http://101.200.52.49:8082/" target="_blank">外网及移动端访问</a></div>
               </div>
             </div>
           </div>
