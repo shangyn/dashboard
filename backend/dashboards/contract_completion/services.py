@@ -21,7 +21,7 @@ _two_year_fingerprint = None    # 缓存时的数据指纹
 def _get_data_fingerprint():
     """快速生成数据指纹（轻量 COUNT 查询），用于判断缓存是否失效"""
     from sqlalchemy import or_
-    from dashboards.contract_completion.models import TradeModuleData, OverseasDiff
+    from dashboards.contract_completion.models import TradeModuleData, OverseasDiff, ShipmentData
     ledger_count = LedgerContract.query.filter(
         LedgerContract.source.in_(['ledger', 'report_a', 'report_b']),
         or_(LedgerContract.product_status == None, LedgerContract.product_status != '已作废')
@@ -30,8 +30,9 @@ def _get_data_fingerprint():
     payment_count = PaymentCollection.query.count()
     trade_count = TradeModuleData.query.count()
     overseas_count = OverseasDiff.query.count()
+    shipment_count = ShipmentData.query.count()
     today_str = (date.today() - timedelta(days=1)).isoformat()
-    return f"{ledger_count}|{mapping_count}|{payment_count}|{trade_count}|{overseas_count}|{today_str}"
+    return f"{ledger_count}|{mapping_count}|{payment_count}|{trade_count}|{overseas_count}|{shipment_count}|{today_str}"
 
 
 def invalidate_two_year_cache():
@@ -1050,6 +1051,22 @@ def get_two_year_comparison(include_personal=False):
         d['ship_overseas_diff_curr'] = _round_wan(od_c.get('ship_diff'))
         d['overseas_payment_prev'] = _round_wan(od_p.get('payment_diff'))
         d['overseas_payment_curr'] = _round_wan(od_c.get('payment_diff'))
+
+    # ── 注入 2025 发货额/发货台数（来自 2025发货额.xlsx，按模块名匹配，不取日期） ──
+    # 必须放在行构建之前，否则 data 行用的是台账原值
+    from dashboards.contract_completion.models import ShipmentData
+    _shipment_by_module = {}
+    for (_sk_r, _sk_m), _sk_d in agg.items():
+        _shipment_by_module.setdefault(_sk_m, _sk_d)  # 模块名 → 条目；重复模块取第一个
+    for _sd in ShipmentData.query.filter_by(data_year=2025).all():
+        _entry = _shipment_by_module.get(_sd.module_name)
+        if _entry is None:
+            continue  # Excel 有、但当前映射/指标里没有的模块，安全跳过
+        _entry['ship_units_prev'] = int(_sd.ship_units or 0)
+        _entry['ship_amount_prev'] = float(_sd.ship_amount or 0)  # 元；_make_row 内 _wan 会 /10000 取整
+        # 改造模块的台数需从「国际总计」发货台数中排除（与签订/排产台数口径一致）
+        if _sd.module_name == '改造':
+            gaizao_true_units['ship_units_prev'] += int(_sd.ship_units or 0)
 
     # 大区排序
     region_order = ['俄罗斯', '中亚', '亚洲1', '亚洲2', '美洲', '中东', '非洲', '欧洲']

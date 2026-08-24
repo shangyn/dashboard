@@ -3,7 +3,7 @@ from flask_bcrypt import Bcrypt
 from models import db, Role, User
 from dashboards.contract_completion.models import (
     LedgerContract, CountryMapping, PaymentCollection, AnnualTarget,
-    ScheduleTracking
+    ScheduleTracking, ShipmentData
 )
 
 bcrypt = Bcrypt()
@@ -166,5 +166,20 @@ def _migrate_upload_configs():
             )
             db.session.add(budget)
             print(f'[Seed] 已新增上传配置: generate_data_budget (月度预算表)')
+
+    # 4. 新增 contract_shipment_2025（2025发货额）
+    cc_parent = UploadConfig.query.filter_by(code='contract_completion').first()
+    if cc_parent and not UploadConfig.query.filter_by(code='contract_shipment_2025').first():
+        shipment = UploadConfig(
+            parent_id=cc_parent.id,
+            code='contract_shipment_2025',
+            name='发货额(2025)',
+            permission=cc_parent.permission,
+            file_types='.xlsx,.xls',
+            is_active=True,
+            sort_order=60,
+        )
+        db.session.add(shipment)
+        print('[Seed] 已新增上传配置: contract_shipment_2025 (发货额2025)')
 
     db.session.commit()

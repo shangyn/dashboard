@@ -123,6 +123,27 @@ class TradeModuleData(db.Model):
                 if c.name not in ('id',)}
 
 
+class ShipmentData(db.Model):
+    """2025发货额数据 — 从 2025发货额.xlsx 上传（按模块全量替换指定年份）
+
+    每行 = 一个模块一年发货台数/发货额
+    单位：发货额（人民币，元）；台数（台）
+    """
+    __tablename__ = 'cc_shipment_data'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    data_year = db.Column(db.Integer, index=True, default=2025)           # 数据年份
+    module_name = db.Column(db.String(100), index=True)                    # 模块名（Excel E列）
+    ship_units = db.Column(db.Integer, default=0)                          # 发货台数（Excel G列）
+    ship_amount = db.Column(db.Float, default=0.0)                         # 发货额（人民币，元）（Excel I列）
+    uploaded_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name)
+                for c in self.__table__.columns
+                if c.name not in ('id',)}
+
+
 class OverseasDiff(db.Model):
     """海外差值数据 — 从海外差值.xlsx上传（全量替换当前年份）
 

@@ -990,6 +990,77 @@ def parse_trade_data_2025(file_path: str) -> dict:
     return _parse_trade_data_impl(file_path, 2025)
 
 
+# ── Handler 7b: 2025发货额 ──────────────────────────────
+
+def parse_shipment_data_2025(file_path: str) -> dict:
+    """解析 2025发货额.xlsx → cc_shipment_data（全量替换 2025 年）
+
+    Excel结构（Sheet1）:
+      E=模块, G=台数, I=合同额（人民币，元）
+    只取 模块/台数/合同额 三列，不读日期列，按模块聚合。
+    """
+    from dashboards.contract_completion.models import ShipmentData
+
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        ws = wb.active  # Sheet1
+
+        # 按表头关键字定位列（不依赖列位置写死）
+        col_map = {}
+        for c in range(1, ws.max_column + 1):
+            v = _safe_str(ws.cell(row=1, column=c).value)
+            if v and '模块' in v:
+                col_map['module'] = c
+            elif v and '台数' in v:
+                col_map['units'] = c
+            elif v and '人民币' in v:
+                # 「合同额（人民币）」精确匹配 I 列，避免误取 F 列「合同额（原币）」
+                col_map['amount_rmb'] = c
+
+        if 'module' not in col_map:
+            return {"success": False, "message": "未找到「模块」列", "rows": 0}
+        if 'units' not in col_map:
+            return {"success": False, "message": "未找到「台数」列", "rows": 0}
+        if 'amount_rmb' not in col_map:
+            return {"success": False, "message": "未找到「合同额（人民币）」列", "rows": 0}
+
+        # 按模块聚合：module_name -> [台数, 合同额(元)]
+        agg = {}
+        for r in range(2, ws.max_row + 1):
+            module_name = _safe_str(ws.cell(row=r, column=col_map['module']).value)
+            if not module_name:
+                continue
+            units = _safe_float(ws.cell(row=r, column=col_map['units']).value)
+            amount = _safe_float(ws.cell(row=r, column=col_map['amount_rmb']).value)
+            cur = agg.setdefault(module_name, [0, 0.0])
+            cur[0] += int(units)
+            cur[1] += amount
+
+        # 全量替换 2025 年数据（仅本表，不影响其他表）
+        from sqlalchemy import delete as sa_delete
+        db.session.execute(
+            sa_delete(ShipmentData).where(ShipmentData.data_year == 2025)
+        )
+
+        total = 0
+        for module_name, (units, amount) in agg.items():
+            db.session.add(ShipmentData(
+                data_year=2025,
+                module_name=module_name,
+                ship_units=units,
+                ship_amount=amount,
+            ))
+            total += 1
+
+        db.session.commit()
+        wb.close()
+        return {"success": True, "message": f"2025发货额导入 {total} 个模块", "rows": total}
+
+    except Exception as e:
+        db.session.rollback()
+        return {"success": False, "message": f"2025发货额解析失败: {str(e)}", "rows": 0}
+
+
 # ── Handler 8: 配件回款 ─────────────────────────────────
 
 def parse_accessories_payment(file_path: str) -> dict:
