@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发货合同收款统计看板</title>
+<script src="js/echarts.min.js"></script>
+<style>
+:root {
+  --primary: #409EFF;
+  --success: #67C23A;
+  --warning: #E6A23C;
+  --danger: #F56C6C;
+  --bg: #f0f2f5;
+  --card-bg: #ffffff;
+  --text: #303133;
+  --text-secondary: #909399;
+  --border: #ebeef5;
+  --shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 20px;
+  max-width: 1920px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  padding: 10px 0 16px;
+}
+.header h1 {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+/* 大区卡片 */
+.cards-wrap {
+  display: grid;
+  gap: 28px;
+  margin: 0 auto 36px;
+  max-width: 1920px;
+}
+.card {
+  background: var(--card-bg);
+  border-radius: 10px;
+  padding: 20px 16px;
+  box-shadow: var(--shadow);
+  text-align: center;
+  transition: transform 0.15s;
+}
+.card:hover { transform: translateY(-2px); }
+.card .region-name {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.card .row {
+  margin-bottom: 8px;
+}
+.card .row-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.card .row-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+}
+.card .row-value .unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+.card .row-value .slash { color: var(--text-secondary); font-weight: 400; margin: 0 2px; }
+.card .row-value .val { }
+.card .row-value .val.high { color: var(--danger); }
+.card .row-value .val.medium { color: var(--warning); }
+.card .row-value .val.low { color: var(--success); }
+.card .legend-line {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 10px;
+}
+
+/* 按钮栏 */
+.toolbar {
+  max-width: 1920px;
+  margin: 0 auto 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.toolbar-center {
+  display: flex;
+  gap: 10px;
+}
+.toolbar-right {
+  position: absolute;
+  right: 0;
+  display: flex;
+  gap: 10px;
+}
+.toolbar button {
+  padding: 9px 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  outline: none;
+}
+.toolbar button:focus,
+.toolbar button:focus-visible { outline: none; }
+.toolbar button:hover { border-color: var(--primary); color: var(--primary); }
+.toolbar button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.toolbar button.export-btn {
+  background: var(--success);
+  color: #fff;
+  border-color: var(--success);
+}
+.toolbar button.export-btn:hover { opacity: 0.85; }
+
+/* 图表区 */
+.content {
+  max-width: 1920px;
+  margin: 0 auto;
+}
+#chart-view { display: block; }
+.chart-box {
+  background: var(--card-bg);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-top: 4px;
+}
+.chart-title {
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 8px 8px;
+}
+.chart-toolbar select {
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+.chart-toolbar select:focus { border-color: var(--primary); }
+#barChart { min-height: 420px; }
+
+/* 表格视图 */
+.table-wrap {
+  background: var(--card-bg);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+  padding: 8px;
+  min-height: 200px;
+  width: 100%;
+  margin: 0 auto;
+}
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.table-wrap th {
+  background: var(--primary);
+  color: #fff;
+  padding: 5px 6px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  position: sticky; top: 0;
+}
+.table-wrap td {
+  padding: 3px 4px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+.table-wrap .module-row td:first-child { text-align: left; padding-left: 20px; }
+.table-wrap .subtotal-row td {
+  font-weight: 700;
+  background: #E8F0FE;
+}
+.table-wrap .total-row td {
+  font-weight: 700;
+  background: #D4E4FC;
+  font-size: 13px;
+}
+.num { text-align: center !important; font-variant-numeric: tabular-nums; }
+.pct-high { color: var(--danger); font-weight: 700; }
+.pct-medium { color: var(--warning); font-weight: 700; }
+.pct-low { color: var(--success); font-weight: 700; }
+
+#table-view { display: none; }
+
+@media (max-width: 900px) {
+  .cards-wrap { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>发货合同收款统计看板</h1>
+  <div style="color:#999;font-size:15px;margin-top:20px;">2026年08月24日</div>
+</div>
+
+<div class="cards-wrap" id="cardsWrap"></div>
+
+<div class="toolbar">
+  <div class="toolbar-center">
+    <button id="btnChart" class="active" onclick="switchView('chart')">看板</button>
+    <button id="btnTable" onclick="switchView('table')">图表</button>
+  </div>
+  <div class="toolbar-right">
+    <button class="export-btn" onclick="exportTableF()">按合同号导出</button>
+    <button class="export-btn" onclick="exportTableG()">按大区导出</button>
+  </div>
+</div>
+
+<div class="content">
+  <div id="chart-view">
+    <div class="chart-box">
+      <div class="chart-title">各大区合同回款统计</div>
+      <div class="chart-toolbar">
+        <select id="chartMetric" onchange="updateChart()">
+          <option value="pending">待回款金额</option>
+          <option value="rate">回款百分比</option>
+        </select>
+      </div>
+      <div id="barChart"></div>
+    </div>
+  </div>
+  <div id="table-view" class="table-wrap">
+    <table id="tableG"><thead><tr>
+      <th>模块</th>
+      <th>合同总额</th><th>已回款总额</th><th>待回款总额</th><th>回款百分比</th>
+      <th>T/T合同额</th><th>T/T已回款</th><th>T/T待回款</th><th>T/T回款百分比</th>
+      <th>O/A合同额</th><th>O/A已回款</th><th>O/A待回款</th><th>O/A回款百分比</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<script>
+const DATA = {"regions": [{"name": "亚洲2", "contract_amount": 7706.47, "payment": 6515.1, "pending": 1191.37, "rate": 84.54, "tt_contract_amount": 6417.0, "tt_payment": 5984.45, "tt_pending": 432.55, "tt_rate": 93.26, "oa_contract_amount": 1289.47, "oa_payment": 530.65, "oa_pending": 758.82, "oa_rate": 41.15}, {"name": "非洲", "contract_amount": 2545.02, "payment": 1162.17, "pending": 1382.85, "rate": 45.66, "tt_contract_amount": 1072.69, "tt_payment": 735.12, "tt_pending": 337.57, "tt_rate": 68.53, "oa_contract_amount": 1472.33, "oa_payment": 427.05, "oa_pending": 1045.28, "oa_rate": 29.01}, {"name": "美洲", "contract_amount": 1559.15, "payment": 831.42, "pending": 727.73, "rate": 53.33, "tt_contract_amount": 1261.79, "tt_payment": 819.82, "tt_pending": 441.97, "tt_rate": 64.97, "oa_contract_amount": 297.36, "oa_payment": 11.6, "oa_pending": 285.76, "oa_rate": 3.9}, {"name": "俄罗斯", "contract_amount": 1229.08, "payment": 468.92, "pending": 760.16, "rate": 38.15, "tt_contract_amount": 819.09, "tt_payment": 246.42, "tt_pending": 572.67, "tt_rate": 30.08, "oa_contract_amount": 409.99, "oa_payment": 222.5, "oa_pending": 187.49, "oa_rate": 54.27}, {"name": "中东", "contract_amount": 1033.29, "payment": 622.08, "pending": 411.21, "rate": 60.2, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 1033.29, "oa_payment": 622.08, "oa_pending": 411.21, "oa_rate": 60.2}, {"name": "中亚", "contract_amount": 766.46, "payment": 160.69, "pending": 605.77, "rate": 20.97, "tt_contract_amount": 299.01, "tt_payment": 94.85, "tt_pending": 204.16, "tt_rate": 31.72, "oa_contract_amount": 467.45, "oa_payment": 65.84, "oa_pending": 401.61, "oa_rate": 14.08}, {"name": "亚洲1", "contract_amount": 91.11, "payment": 36.43, "pending": 54.68, "rate": 39.98, "tt_contract_amount": 8.18, "tt_payment": 0.0, "tt_pending": 8.18, "tt_rate": 0.0, "oa_contract_amount": 82.93, "oa_payment": 36.43, "oa_pending": 46.5, "oa_rate": 43.93}], "table_g": [{"type": "module", "region": "亚洲2", "module": "越南-1", "contract_amount": 6259.33, "payment": 5946.36, "pending": 312.97, "rate": 95.0, "tt_contract_amount": 6259.33, "tt_payment": 5946.36, "tt_pending": 312.97, "tt_rate": 95.0, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "亚洲2", "module": "印度私营", "contract_amount": 1155.95, "payment": 528.65, "pending": 627.3, "rate": 45.73, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 1155.95, "oa_payment": 528.65, "oa_pending": 627.3, "oa_rate": 45.73}, {"type": "module", "region": "亚洲2", "module": "澳大利亚", "contract_amount": 191.35, "payment": 38.09, "pending": 153.26, "rate": 19.91, "tt_contract_amount": 64.48, "tt_payment": 38.09, "tt_pending": 26.39, "tt_rate": 59.07, "oa_contract_amount": 126.87, "oa_payment": 0.0, "oa_pending": 126.87, "oa_rate": 0.0}, {"type": "module", "region": "亚洲2", "module": "印度公建", "contract_amount": 93.19, "payment": 0.0, "pending": 93.19, "rate": 0.0, "tt_contract_amount": 93.19, "tt_payment": 0.0, "tt_pending": 93.19, "tt_rate": 0.0, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "亚洲2", "module": "印尼-1", "contract_amount": 6.65, "payment": 2.0, "pending": 4.65, "rate": 30.08, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 6.65, "oa_payment": 2.0, "oa_pending": 4.65, "oa_rate": 30.08}, {"type": "subtotal", "region": "亚洲2", "module": null, "contract_amount": 7706.47, "payment": 6515.1, "pending": 1191.37, "rate": 84.54, "tt_contract_amount": 6417.0, "tt_payment": 5984.45, "tt_pending": 432.55, "tt_rate": 93.26, "oa_contract_amount": 1289.47, "oa_payment": 530.65, "oa_pending": 758.82, "oa_rate": 41.15}, {"type": "module", "region": "非洲", "module": "埃及", "contract_amount": 2222.15, "payment": 1050.75, "pending": 1171.4, "rate": 47.29, "tt_contract_amount": 927.06, "tt_payment": 650.29, "tt_pending": 276.77, "tt_rate": 70.15, "oa_contract_amount": 1295.09, "oa_payment": 400.46, "oa_pending": 894.63, "oa_rate": 30.92}, {"type": "module", "region": "非洲", "module": "埃及-1", "contract_amount": 177.24, "payment": 26.59, "pending": 150.65, "rate": 15.0, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 177.24, "oa_payment": 26.59, "oa_pending": 150.65, "oa_rate": 15.0}, {"type": "module", "region": "非洲", "module": "阿尔及利亚", "contract_amount": 65.25, "payment": 10.43, "pending": 54.82, "rate": 15.98, "tt_contract_amount": 65.25, "tt_payment": 10.43, "tt_pending": 54.82, "tt_rate": 15.98, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "非洲", "module": "尼日利亚/埃塞俄比亚", "contract_amount": 55.0, "payment": 49.5, "pending": 5.5, "rate": 90.0, "tt_contract_amount": 55.0, "tt_payment": 49.5, "tt_pending": 5.5, "tt_rate": 90.0, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "非洲", "module": "南非/安格拉", "contract_amount": 25.38, "payment": 24.9, "pending": 0.48, "rate": 98.11, "tt_contract_amount": 25.38, "tt_payment": 24.9, "tt_pending": 0.48, "tt_rate": 98.11, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "subtotal", "region": "非洲", "module": null, "contract_amount": 2545.02, "payment": 1162.17, "pending": 1382.85, "rate": 45.66, "tt_contract_amount": 1072.69, "tt_payment": 735.12, "tt_pending": 337.57, "tt_rate": 68.53, "oa_contract_amount": 1472.33, "oa_payment": 427.05, "oa_pending": 1045.28, "oa_rate": 29.01}, {"type": "module", "region": "美洲", "module": "墨西哥-2", "contract_amount": 552.53, "payment": 374.07, "pending": 178.46, "rate": 67.7, "tt_contract_amount": 552.53, "tt_payment": 374.07, "tt_pending": 178.46, "tt_rate": 67.7, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "美洲", "module": "墨西哥-1", "contract_amount": 547.29, "payment": 302.37, "pending": 244.92, "rate": 55.25, "tt_contract_amount": 547.29, "tt_payment": 302.37, "tt_pending": 244.92, "tt_rate": 55.25, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "美洲", "module": "秘鲁", "contract_amount": 297.36, "payment": 11.6, "pending": 285.76, "rate": 3.9, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 297.36, "oa_payment": 11.6, "oa_pending": 285.76, "oa_rate": 3.9}, {"type": "module", "region": "美洲", "module": "哥伦比亚", "contract_amount": 155.15, "payment": 138.61, "pending": 16.54, "rate": 89.34, "tt_contract_amount": 155.15, "tt_payment": 138.61, "tt_pending": 16.54, "tt_rate": 89.34, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "美洲", "module": "加勒比海", "contract_amount": 6.82, "payment": 4.77, "pending": 2.05, "rate": 69.94, "tt_contract_amount": 6.82, "tt_payment": 4.77, "tt_pending": 2.05, "tt_rate": 69.94, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "subtotal", "region": "美洲", "module": null, "contract_amount": 1559.15, "payment": 831.42, "pending": 727.73, "rate": 53.33, "tt_contract_amount": 1261.79, "tt_payment": 819.82, "tt_pending": 441.97, "tt_rate": 64.97, "oa_contract_amount": 297.36, "oa_payment": 11.6, "oa_pending": 285.76, "oa_rate": 3.9}, {"type": "module", "region": "俄罗斯", "module": "俄罗斯（中部）", "contract_amount": 488.65, "payment": 122.16, "pending": 366.49, "rate": 25.0, "tt_contract_amount": 488.65, "tt_payment": 122.16, "tt_pending": 366.49, "tt_rate": 25.0, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "俄罗斯", "module": "俄罗斯（东部）", "contract_amount": 409.99, "payment": 222.5, "pending": 187.49, "rate": 54.27, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 409.99, "oa_payment": 222.5, "oa_pending": 187.49, "oa_rate": 54.27}, {"type": "module", "region": "俄罗斯", "module": "俄罗斯（西部）", "contract_amount": 274.13, "payment": 68.54, "pending": 205.59, "rate": 25.0, "tt_contract_amount": 274.13, "tt_payment": 68.54, "tt_pending": 205.59, "tt_rate": 25.0, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "俄罗斯", "module": "俄罗斯（西南）", "contract_amount": 56.31, "payment": 55.72, "pending": 0.59, "rate": 98.95, "tt_contract_amount": 56.31, "tt_payment": 55.72, "tt_pending": 0.59, "tt_rate": 98.95, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "subtotal", "region": "俄罗斯", "module": null, "contract_amount": 1229.08, "payment": 468.92, "pending": 760.16, "rate": 38.15, "tt_contract_amount": 819.09, "tt_payment": 246.42, "tt_pending": 572.67, "tt_rate": 30.08, "oa_contract_amount": 409.99, "oa_payment": 222.5, "oa_pending": 187.49, "oa_rate": 54.27}, {"type": "module", "region": "中东", "module": "阿联酋-2", "contract_amount": 970.73, "payment": 578.25, "pending": 392.48, "rate": 59.57, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 970.73, "oa_payment": 578.25, "oa_pending": 392.48, "oa_rate": 59.57}, {"type": "module", "region": "中东", "module": "沙特工厂", "contract_amount": 62.56, "payment": 43.83, "pending": 18.73, "rate": 70.06, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 62.56, "oa_payment": 43.83, "oa_pending": 18.73, "oa_rate": 70.06}, {"type": "subtotal", "region": "中东", "module": null, "contract_amount": 1033.29, "payment": 622.08, "pending": 411.21, "rate": 60.2, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 1033.29, "oa_payment": 622.08, "oa_pending": 411.21, "oa_rate": 60.2}, {"type": "module", "region": "中亚", "module": "阿塞拜疆", "contract_amount": 316.02, "payment": 32.67, "pending": 283.35, "rate": 10.34, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 316.02, "oa_payment": 32.67, "oa_pending": 283.35, "oa_rate": 10.34}, {"type": "module", "region": "中亚", "module": "塔吉克/哈萨克斯坦-2", "contract_amount": 151.43, "payment": 33.17, "pending": 118.26, "rate": 21.9, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 151.43, "oa_payment": 33.17, "oa_pending": 118.26, "oa_rate": 21.9}, {"type": "module", "region": "中亚", "module": "哈萨克斯坦-1", "contract_amount": 150.17, "payment": 49.81, "pending": 100.36, "rate": 33.17, "tt_contract_amount": 150.17, "tt_payment": 49.81, "tt_pending": 100.36, "tt_rate": 33.17, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "module", "region": "中亚", "module": "乌兹别克斯坦", "contract_amount": 148.84, "payment": 45.04, "pending": 103.8, "rate": 30.26, "tt_contract_amount": 148.84, "tt_payment": 45.04, "tt_pending": 103.8, "tt_rate": 30.26, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "subtotal", "region": "中亚", "module": null, "contract_amount": 766.46, "payment": 160.69, "pending": 605.77, "rate": 20.97, "tt_contract_amount": 299.01, "tt_payment": 94.85, "tt_pending": 204.16, "tt_rate": 31.72, "oa_contract_amount": 467.45, "oa_payment": 65.84, "oa_pending": 401.61, "oa_rate": 14.08}, {"type": "module", "region": "亚洲1", "module": "金三角", "contract_amount": 57.38, "payment": 28.69, "pending": 28.69, "rate": 50.0, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 57.38, "oa_payment": 28.69, "oa_pending": 28.69, "oa_rate": 50.0}, {"type": "module", "region": "亚洲1", "module": "马尔代夫", "contract_amount": 25.55, "payment": 7.74, "pending": 17.81, "rate": 30.29, "tt_contract_amount": 0.0, "tt_payment": 0.0, "tt_pending": 0.0, "tt_rate": 100.0, "oa_contract_amount": 25.55, "oa_payment": 7.74, "oa_pending": 17.81, "oa_rate": 30.29}, {"type": "module", "region": "亚洲1", "module": "马来西亚", "contract_amount": 8.18, "payment": 0.0, "pending": 8.18, "rate": 0.0, "tt_contract_amount": 8.18, "tt_payment": 0.0, "tt_pending": 8.18, "tt_rate": 0.0, "oa_contract_amount": 0.0, "oa_payment": 0.0, "oa_pending": 0.0, "oa_rate": 100.0}, {"type": "subtotal", "region": "亚洲1", "module": null, "contract_amount": 91.11, "payment": 36.43, "pending": 54.68, "rate": 39.98, "tt_contract_amount": 8.18, "tt_payment": 0.0, "tt_pending": 8.18, "tt_rate": 0.0, "oa_contract_amount": 82.93, "oa_payment": 36.43, "oa_pending": 46.5, "oa_rate": 43.93}, {"type": "total", "region": null, "module": null, "contract_amount": 14930.58, "payment": 9796.81, "pending": 5133.77, "rate": 65.62, "tt_contract_amount": 9877.76, "tt_payment": 7880.66, "tt_pending": 1997.1, "tt_rate": 79.78, "oa_contract_amount": 5052.82, "oa_payment": 1916.15, "oa_pending": 3136.67, "oa_rate": 37.92}], "__exports__": {"tableF": "UEsDBBQAAAAIAChRGF1Gx01IlQAAAM0AAAAQAAAAZG9jUHJvcHMvYXBwLnhtbE3PTQvCMAwG4L9SdreZih6kDkQ9ip68zy51hbYpbYT67+0EP255ecgboi6JIia2mEXxLuRtMzLHDUDWI/o+y8qhiqHke64x3YGMsRoPpB8eA8OibdeAhTEMOMzit7Dp1C5GZ3XPlkJ3sjpRJsPiWDQ6sScfq9wcChDneiU+ixNLOZcrBf+LU8sVU57mym/8ZAW/B7oXUEsDBBQAAAAIAChRGF0G7MpR7wAAACsCAAARAAAAZG9jUHJvcHMvY29yZS54bWzNksFOwzAMhl8F5d46zaYBUdcLaCeQkJgE4hYl3hataaLEqN3b04atE4IH4Bj7z+fPkmsdpPYRX6IPGMliuhlc2yWpw5odiIIESPqATqVyTHRjc+ejUzQ+4x6C0ke1RxCcr8AhKaNIwQQswkxkTW201BEV+XjGGz3jw2dsM8xowBYddpSgKitgzTQxnIa2hitgghFGl74LaGZirv6JzR1g5+SQ7Jzq+77sFzk37lDB+/PTa163sF0i1WkcfyUr6RRwzS6T3xYPj9sNawQXq4LfFWK55ULye1ndfkyuP/yuws4bu7P/2Pgi2NTw6y6aL1BLAwQUAAAACAAoURhdmVycIxAGAACcJwAAEwAAAHhsL3RoZW1lL3RoZW1lMS54bWztWltz2jgUfu+v0Hhn9m0LxjaBtrQTc2l227SZhO1OH4URWI1seWSRhH+/RzYQy5YN7ZJNups8BCzp+85FR+foOHnz7i5i6IaIlPJ4YNkv29a7ty/e4FcyJBFBMBmnr/DACqVMXrVaaQDDOH3JExLD3IKLCEt4FMvWXOBbGi8j1uq0291WhGlsoRhHZGB9XixoQNBUUVpvXyC05R8z+BXLVI1lowETV0EmuYi08vlsxfza3j5lz+k6HTKBbjAbWCB/zm+n5E5aiOFUwsTAamc/VmvH0dJIgILJfZQFukn2o9MVCDINOzqdWM52fPbE7Z+Mytp0NG0a4OPxeDi2y9KLcBwE4FG7nsKd9Gy/pEEJtKNp0GTY9tqukaaqjVNP0/d93+ubaJwKjVtP02t33dOOicat0HgNvvFPh8Ouicar0HTraSYn/a5rpOkWaEJG4+t6EhW15UDTIABYcHbWzNIDll4p+nWUGtkdu91BXPBY7jmJEf7GxQTWadIZljRGcp2QBQ4AN8TRTFB8r0G2iuDCktJckNbPKbVQGgiayIH1R4Ihxdyv/fWXu8mkM3qdfTrOa5R/aasBp+27m8+T/HPo5J+nk9dNQs5wvCwJ8fsjW2GHJ247E3I6HGdCfM/29pGlJTLP7/kK6048Zx9WlrBdz8/knoxyI7vd9lh99k9HbiPXqcCzIteURiRFn8gtuuQROLVJDTITPwidhphqUBwCpAkxlqGG+LTGrBHgE323vgjI342I96tvmj1XoVhJ2oT4EEYa4pxz5nPRbPsHpUbR9lW83KOXWBUBlxjfNKo1LMXWeJXA8a2cPB0TEs2UCwZBhpckJhKpOX5NSBP+K6Xa/pzTQPCULyT6SpGPabMjp3QmzegzGsFGrxt1h2jSPHr+BfmcNQockRsdAmcbs0YhhGm78B6vJI6arcIRK0I+Yhk2GnK1FoG2camEYFoSxtF4TtK0EfxZrDWTPmDI7M2Rdc7WkQ4Rkl43Qj5izouQEb8ehjhKmu2icVgE/Z5ew0nB6ILLZv24fobVM2wsjvdH1BdK5A8mpz/pMjQHo5pZCb2EVmqfqoc0PqgeMgoF8bkePuV6eAo3lsa8UK6CewH/0do3wqv4gsA5fy59z6XvufQ9odK3NyN9Z8HTi1veRm5bxPuuMdrXNC4oY1dyzcjHVK+TKdg5n8Ds/Wg+nvHt+tkkhK+aWS0jFpBLgbNBJLj8i8rwKsQJ6GRbJQnLVNNlN4oSnkIbbulT9UqV1+WvuSi4PFvk6a+hdD4sz/k8X+e0zQszQ7dyS+q2lL61JjhK9LHMcE4eyww7ZzySHbZ3oB01+/ZdduQjpTBTl0O4GkK+A226ndw6OJ6YkbkK01KQb8P56cV4GuI52QS5fZhXbefY0dH758FRsKPvPJYdx4jyoiHuoYaYz8NDh3l7X5hnlcZQNBRtbKwkLEa3YLjX8SwU4GRgLaAHg69RAvJSVWAxW8YDK5CifEyMRehw55dcX+PRkuPbpmW1bq8pdxltIlI5wmmYE2eryt5lscFVHc9VW/Kwvmo9tBVOz/5ZrcifDBFOFgsSSGOUF6ZKovMZU77nK0nEVTi/RTO2EpcYvOPmx3FOU7gSdrYPAjK5uzmpemUxZ6by3y0MCSxbiFkS4k1d7dXnm5yueiJ2+pd3wWDy/XDJRw/lO+df9F1Drn723eP6bpM7SEycecURAXRFAiOVHAYWFzLkUO6SkAYTAc2UyUTwAoJkphyAmPoLvfIMuSkVzq0+OX9FLIOGTl7SJRIUirAMBSEXcuPv75Nqd4zX+iyBbYRUMmTVF8pDicE9M3JD2FQl867aJguF2+JUzbsaviZgS8N6bp0tJ//bXtQ9tBc9RvOjmeAes4dzm3q4wkWs/1jWHvky3zlw2zreA17mEyxDpH7BfYqKgBGrYr66r0/5JZw7tHvxgSCb/NbbpPbd4Ax81KtapWQrET9LB3wfkgZjjFv0NF+PFGKtprGtxtoxDHmAWPMMoWY434dFmhoz1YusOY0Kb0HVQOU/29QNaPYNNByRBV4xmbY2o+ROCjzc/u8NsMLEjuHti78BUEsDBBQAAAAIAChRGF3ur/YTfyIAAPVGAQAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1stZ1vk9y2kca/ikqpcuXqYi7+A4xlVcUz9I5Vd5VU4rt7vbHHliqSVre7jnLf/kByuByiG+wGSOVFVrIaz2BmfgsC/QCNV5/vH/7x+PZ8fnrxrw/vPz5++/Lt09OnP97cPP709vzh7rG5/3T+GP/ll/uHD3dP8a8Pv948fno43/08NPrw/kYJ4W4+3L37+PL1q+G//eXh9av7357ev/t4/svDi8ffPny4e/i/787v7z9/+1K+nP7DX9/9+vap/w83r199uvv1/Lfz0399+stD/NvNs8rP7z6cPz6+u//44uH8y7cv/yT/+EbqocUQ8t/vzp8fr/78on8vf7+//0f/lx9+/val6Lt0fn/+6anXuIs//nk+nN+/76ViR/73ovry+UX7htd/ntS/H959fDd/v3s8H+7f/8+7n5/efvsyvHzx8/mXu9/eP/31/vPpfHlHttf76f794/D/Lz6PsUq9fPHTb49P9x8ujWMPPrz7OP68+9flk7hqIF2mgbo0UNwG+tJAcxuYSwPDbWAvDWzawGQauEsDlzYImQb+0sBzXyFcGgRug/bSoOU2kGL65sRA0PiVD7wc757uXr96uP/84qGPj3r9HwbohvYRk3cf+1+Qvz09xH99F9s9vf7qd0paqb4Zf7rhp2ntN69unqJ6H3Pz00Xpu1Il3QrXYkoHUskIK3olpXTof3pjDaZ0pJWM1RyljlQSMphnhfjTCSP7n0Zr9PP6nlRUKn4+8ac2PmAKt6SCl6OC0hb9pE90H4IaPh+phcMUfij+1qWT/eejrTcDT0Lin/gb9rsTQvlE4SZy/gy7eoZdDZIqI3k8/fi1ir2U6keM77GxHhr3D5Z/vvahcUHM/5Ovbv55zTFsoXTjkqgjjLK2EWEZ1Y1RJtP1/7g5YIitN+o/wiAGSFstUEhvyxS+lhhkpEb85HrIZNu2OGSUgg7GqwEuGWz/M8igUKj2UFrApZ/h0jRcLqIaULg0gMA0wSY8wSCRsMSR6XQNSuuNOCiVKeAokRokSpQCH6U9lBYomWeUDAclKSyKkgEMuMbqBCUYlKLEkelMDUrrjTgolSngKJEaJEqUAh+lPZQWKNlnlCwHJaUFipIFDEjTgMccjEpZYul0tgam9UYcmMoUcJhIDRImSoEP0x5KC5jcM0yOBZPHH3EOQKAtmA0dYFQKE0unczUwrTfiwFSmgMNEapAwUQp8mPZQWsDkn2HyLJhaj8LkkadT6xOWYFDKEkem8zUorTfioFSmgKNEapAoUQp8lPZQWqAUnlEKjHWdsAFHKUAGVGNdwhKMMroJyXzoCKNkaHw6awqrn8SPNz/++5//hDG13i4lAgPitkxiSLVoPyYA8CTEiVQkESMVpBNh7MOYpDFGaRQx+t2ZdkzSeDH8FFqniZEFYu0zYi0ndSAziLUQHtt4lSAGo9LhiqXTtTXj1XojFltlEhy2SEWSLVKBzRb97grZkmJOwgrOs1BbnK5L60VmSja2TfBCwlK+eErdJayQMKIVC7FCDQ5jtCQJGS1htB2SoE6Hdny0KfSh/4bxBksxu8r1Sw5m3kkcMwkfbgJOupAwgBlLqbuElWK23oqHWZkGCzNSksaMlGAPZow3WIrZnGWXzDQ7vkyUSNbcNB5gBsMAZiylTlal1olWKSIKxYyRjXY9E1qFYfzQXra5qT7dIRowUuJ5HOv7EfujrcuYN7sn2uWcaZfMVHuLAwaT5LptdJohRcIAYCylTlYl3IlWOThQzuqkMpxtz8HTEnzOds/CyzkNL1l5eCVwv1DCDLpvZLquRKIAZhyhTlbl4olWRZTVSWUo256epyX4lO2eoJdzhl7yUvRC45QhuXXZCDCa0Ul6nlInq9L0RKsizuqkMpxtz9zTEnzOds/dyzl5LxnZeyuEzYxmMO0eWtkEMJ7BOGt9Y9JdD0ic1qYxqVkt1zPQ+WQZ0TCHCT5Rq9P6GhM7kWIM5EgJp90w+dTxG+3746RBdwC9YUiZy0ad+H0PUt6kv5hL5OYUv2Tk+K1UzuHIwey88o0PKXFoEt+kvCFiAiRwO7mepY64/f7PN3/6NxQ4RoKbDVydVga47S4AQ0LJcauZUOOCWLboQvgNLVUM3GwESI4TIOP4iwMH0/dxwZgOXQckzDcqtQKQKBmnbem+LkmaAXngqHR3CXB1WhngtnsCDAk2cKRUMXCzLSBZvkAcjXHgYEJfucaBEQ6GxSifAoeICbjLQq4nsjMPUyr7XYJanVYGte0WAUOCjRopVYqamk0CxTAJrJQaz94qmNqP07LUgkKijG1E+jBFwqSCS1K1nsyOYxu6aZWRkDdjTjLYMekqtB3/LodJjxN6+Km0R+fZt1/+JU6clxjAVEIq1DD/gZaYFhbxgebHLLQX+LZXUkrrYUHxnDoWyq0uLNRsKyiWrRBag4MJzYD+oWtSMmlbgafUqfXcd45KRv6+ABmNYrnva6BYcm2IFSxpG0K6AcvQisHt0kaMR0ekSTfqX/AkJYvxnO0IxbAjnBQKN1cVNBFco1M3AokCdHKEOrWeN8/Bycj9b4Zz39dA4eRaGCtwkhLlcJKSxXDOVobiWBkyd2pAQQPCNRbASTsZLKFOrSfbc3AyDIPNcO77GiicXN9jBU5SohxOUrIYztn/UBz/Q+Z8NgVtC2kaDx7stAHCU+rUepY+hyfDadiM576vgeLJNUxW8CQlyvEkJYvxnI0TxTFO4geJn21Q0O6Ia2+R7ppCwgCeLKVOrSf3c3gyDIrNeO77GiieXJ9lBU9SohxPUrIYz9lvUZzTEvGDzKzXoT8idWNSXw8JA3iylDpFGi0ongwzYzOe+74GiifXk1nBk5Qox5OULMZz9mYU5/yFjO8WxxPaKb4RIJ2EWTMhTVwiUaKRqRGoSGcG5ZN0G6Qdv1ht/XROXV8zQyeT6JcY99DF70irLJaZs9Nc72YFTFLCGDUepG/d8GvUeoPnN3eRWgI5ezeK4d04oVRmvETsFqMBRgckzihoF2JyQqT50k6R7g0KJelIWD9uK/XtSIj0WuPZdFprC31cI2eFPlKCT98eUkv6ZiNHMYyc+Ik5/My1QrwX30iw1oFhFjyJj5iYbHxq5Kh1syGy94f87giiMRcbdPc0rR0fLIuxdtC+YbOKOkH0q9Ks0hJSivH3UuL79zdJLAtLzM6PZh0PMQFfh2vErAmNTzfuIGG68cnwecTELDQZNen8ZLgkGm7iktb+ElzSr0pyyZCguNwkseRyNn40y/ixCje/NbRrHFLzBDkrAtLmRyQqDqzpXgtNOj85KmnLo55KUvuLULndB2JIkFRukVhSOfs9muP3CO/whY2GNo0WcNMZFgaKNh2RqH4HGxgtSdMnxyXtdtRzSWp/ES63W0AMCZLLLRJLLq/qQ7FOrYTM3jQNHRplwa6zAxJmmrZNuUTE4uImTajrdXMhwyRtctQzSWp/ESa3Oz8MCZLJLRJLJmeHR3McnshkpmgZ9GWUahxgEoYZUErqiETFaaoEY+W6o5BhknY26pkktb8Ik9vtHoYEyeQWiSWTs62jWedh2symcY2YMQLsYDsgYVKABOaRF9bpdR8hAyXtZ9RDSWp/ESi3mzwMCRLKLRJLKGczR3MOz0ib2USkoQWjdKPSjeVYWKMBk0iUaEJqN2rOwZkxQ3SD80mfDHFDyVsjhLMLlvpvF+eSe5Am8qkG/KwejrRrIQK6ffdEd5OGju5VCJdSvPGXAIVui8QSutmi0awSWSKX90EtmtTfRqIEWKEckSjXaLC+Ji2alYwk0bgON+4xmgLcthsyjF6RuG2RWOI2GzCaZcBomXnwIo5JXKCANCNyxgZQecTENDw8o0n7ZQ04+lxIOXDcYzQFwG33YBi9IoHbIrEEbvZcNM9zkZmHKrRJInAwr42ENandhwWZRqcHGvQWy4VoXMcb9yxNAW/bfRRGr0jetkgsqyrPPorh+SiZzbYGsT7iJC7d84CFNW1C0hGLkmC07Eytj0I0rIKN1CyHje4mCRujVxRsmySWsM3miOEV2/L409QgZ1kE3P6FhTUCwIZ4KAGePTC19gjR8KpcgRL6UlXKo8fRb2mpcsa2Wx2MXpGMbZFYMjZbHYZVacsLfAesge5Ev606deCwsMakDhwWFUdHwFit1UE0rADjdn/JEynJYI3uFcnaFokla7N9YZhFtzLjGXQcbOPAsxM5qdJYJ0T+kpUjqpwOgZ0hj64Q2RBCoIq/3SVPpCSDP7pXJH9bJJb8Xd2JwbIqZGZ1ajAPAri6SJQA2wiOqBa4GWM9Nb4y0FE59QrQdpc8kZIM0OhekaBtkViCNvsPhuU/SJO5fYVXjwsLa8DQBoPapk3NB0OeK8mRxi2kVUDa7pInUpJBGt0rkrQtEkvSZlPB8E6I2Mz0DTnXEQzYXn9A4xqb2gpYmHONTvfhm9qCXETDKtz2txNISQZu2+2ETRJL3GY7wfBOfLT4xigDLQDrgQdwQMJUaFya4OWFdYZ0FHKwkQly5cfbA632aI3kW1rC62G7uWxb3x870lbhV1+cSKkRpsGStLil+wOtMVUDab0Z7E3jBF7zbRepJWWzi2A4LkIc1DJJNjTxr1OnFAkzjQBrUhjVgi1Tnam9joNo2OfUtBs+Pt2b7XhOjcyrt1ZfaryM55PEWESyv5kTPTV2orvFgI3UaK0ffn2CGA6zqbYNuB3P+JQupcbleCMoVhx/CdvsIBhW+S2r8dIzBsn6K7AN7oCEaVh+C4kKsISCIR2EHGxkQrwUlNv9JU+kJIc9+mgKDcyFvT2klhfrzW6C5V3aIXD2LDQAFLhLAQmSJlKVoMcL62zVtR1EqytKnBmeqNrGB+LaBOl2f8kTKckAj9SYvBIj7LAnSrdS44V8d5Fagjc7C5ZXb8vgT1gLzYAAnPUDEgUudeQIdbaq2hbRqgq63SVPpCQHOlJjftKOV3HHEQU/Lk5KlUM3Ww2WdaqiVZnRDit+5VKnAYlKV6lIiGlcmu21tS4D0TCd0qGclUlk7hNlHEC4IgvbjfkDrTHN8r1R7pvff/V843zsWPwHrObsm0LRNbZma8EyrAUr4iyuQ9mCBkAAB7oPSBQY0DhCna0qgkW0uqLCxF9wHKwyiZ6RMJbFMFriZS9oSQZmpMaFiDjq4LPGN5skllDNfoFl+AVWxJUoDhXM8WvbCDBiIYZBShVLqbOkX4BiRabhaazKJFhY0eYAjRWpQWO1RWKJ1dV92gx3wAqVwwpm9E0LqvAiUYAqjlBnq0pOEa1YUJVJsKBibOsnoeJe1bEC1RaJJVSzEWBZV3OoTBrDIldzyDi7ypvmB6RJXyo3zdIiYdbD0jy21hIgGqaYoBm0Qo1hM9I4y9FBofnREy3JQI3UmOb1op8o9cuN1qCWxBtGd+gC5Uv0ZlPAcq7oiHMv/IyBxW7VgPsYD0hc/BaakFrrSFww8KCBrbUFiIY84Mo0WMCV+QM4cKQGH7g9bvtYAjf7A5Z3WbfBTU8LU/rWAo4OSFjELd31jUTpFpaNsLUGAdGQR1uZBou2MoMAp41tENC07XHVx5K22SCwHIMg0oYXFbNIJSYThy2wuMSOD2iwv+2IxQm4h7yz9DmDDHF0wpsmrkyDRVyZLYATR2rwidvjxo8FcW62BRznmg4RAj6+OSSVHwlJr0U7IHFagsMvRyTMx7AEN1d7yoBoyMKtUIODGy1J48boFteFYnSnFLfZDHAMM8CK1uO3Rzokh68bny5IkTBl4clkJMwGcH9W52rPGRANebiVabBwK7MBcNzobrFxo7tTittsAzjOiYOIG75SdTB7HyJH/d1Mz/9L0UOaNFa1+SZHpIl3jW/z6+HO1RoGREMekmUaLCR38A9ojemB2zqjnn+iSNLdKUVydg8c72CCzCCJFEwScMMREpam5HhKneOcREBRK8v/46iVeggM1HbwEGiN57mdssNBsvg7jOfnGN0pRW32FBzDU3Airidw1KATYBXMlWBhwFc/IlHGgwp0nVvPgWf2fBCteKiV+goM1HbwFRga3Nv+dpFaojb7DI7hMxgRJwE4aog94MCe7wMSJnXTpvuLkDCt4N42V3sQgWjIw63UcWDgtoPjwOgWe15HdwfD7avfOavCcDuAE8MGl/7vq7t53exMOIYzYaQWeHrYITZDWtHtgATJOJSl+yuRMKfBsStXa0UQDXkM7m9F0JIMBtlWBD2Rq7MiahicLQrHKoOkMjdVOKwMUpsmjJEoML/jCHVuPXeee+CSGXet2/EmADlur0E+vwuEdVL4PiRajIEf7ZcIOVyE4sbtxdpo/BzFm12klpjNxoRjlT/yuScu9BLADtwDEiTAGfkjKgWOLbj1tHkE7Q8Zf59oWQRbnVQGth18CVqDD9seUkvYZl/CsUoftT6TJUZ8BA1tCSQMDGospc6tZ8xzoxqZZ+eDVieVAW0HO4LW4IO2h9QCND/bEZ5zSkEKYdH9Sh45pWDAiHVAwlLQeEqdrzqjQLQqAa1SCgeNFqNBozXYoO0itQRtNiI851SClFrhoCElijws24uEIQ9QTMw1HrC2nijPsca4q5rLWp1UhrUdXAhag8/aHlJL1mYXwrOu9I666NPTQ3/AgkLjByQKjGkcoc6vJ79zmDFuneZiVieVwWwHZ4HW4GO2h9QSs9lZ8AxnIb7dgNen9NhxApn6W0iUh9leJErCW5f8eu77siTIbB0hGhcBVyeVAW4Hf4HW4AO3h9QSuNlf8Ax/wYo2ZMY1aAnEKVaazT3gYaAeCBIGCxB2vspfIFoNaSJxKdGOfw+3tESwz4eVh3NzUujVuh0nWpJBGu16sEmjpLQO42+RH0v292fw01IWS9Jme8HzLlnIVA70aJEjD8Y2+hwDT6nz67nvHGZkxpzGjJQox2wHW4HU4LBxwWwPqSVms33gOfaBMBa3DzxM+XsDbxnGwjTIzB6RMHgxSOfXM9w50ui7EkjSSIly0nYwDxjvzPhLrRiNb7ckJcoJm80BzzAHjBQG3/3h0TJEac2rAx6mAGHYXQrCL8pXwklb1b3WRCsWcKREOXA72AWMd0YCR1ZuKgZutgk8wyaIH5TEd5R75MiBa2RaHhAJa5uQ1gdEopQD2zI7X3VJNdGqAo/b/SVPtCSDODrR74aqcUpGcAZT06jMw5Qs51RM3uwZeIZnEB+mLrMcxc4eIHdUI3Fg0saT6vx6YjuzDiWz4eXc7S55oiUZ3NEXQpAjHVnCqZS3MFsHgWEdGBm/eZS3ABP+Bl55hUSltLGEurCe28ZZIxrVsLa/5ImWpFmjNUjWSIly1mb3IDDcg8iaxmsaBSThb+F2NyQMwMZS6sJ6djtDG5kSL6dtd8kTLcmgjdSgaSPLNRXTNvsHgeEfKKEzV/EGpJiRsm2j01kcEtifSQP3Ch2RQC1Vk9aD6wJ5TAHljrwOwKnxWo44v0H3Ht4WSuCZXFKEQxbDyxiuGsHqD13IYl/u7KQZN52H9eqnYbYMAsMyMNnVQYBpfhWHnwAGMsQO6FMegCvkSIIEFaK7UHskgWg4lMZth2ynMGrY8Bh/T4aPdLhNFCWNTvdjUvMOw+kltRfDT2yn4YXHupdCsaQdD6OHdK82YvxApMFLP1dKVWyxDLPxEBjGQ5+ny2ALrQLZmkam20SQuL5MZXosH5MzFtwr3YX1BPkKtlRmvQJb2jvYDdu6l0KxJaX42NZJ1WA7uxiB5WL4kHmOI1dFewl3NyFxzjdh5dTiEZNGjnF3oapAE9HqunQlm1/alFjndyqLz+C37qVQfhmHPobpbvw4HH6Ih5Tov+ZhQqGDWJ9fzrZH4FzsELnMrGawAxES3laDxGnbGDCcInIiTkLTbE0gj06gLJLJ/XIWadtiNxbrXgplkXH4g2KRkuCzOBskgXfrQ+YET0AOPcT18Mrx6wPSRIYGjJDIdRIOVKYIVeYI0aqKSdrZ2I3JupdCmWSUqqKYpCT4TM4eSmDVgIqfGM4kUgPKwSPbWJgFtS2OSJiIgKcgVnkoRKvcV4mtfG8rtWYCn6EfluirBNa9FEogaYjYYIbfD3vZEhakw88/0r163lqjxlzXcFh8jcjZWwms8xg+ZIhE7n5QjQsrFRiRJkrAWyWQMKfgzr9AFoxC8aRNDOx7Rs8+VmpBPBkDZN1LoXgyal1RA+QWiQWO7Wy9tKy7JXyLL2xa7HJpDWZ8BySu3/2QTiCRsJAuZFqyhBQGINGqCMBKrRoAK18KA5CWIgHcJLEEcPZjWt5pDpEBELooPsAt9kiYbBurU/7QslI2PXnbVt00QbQqQ7BOqwrBupdCEWRUxKIQ3CKxRHA2aVrWIQ/h8C2qLXbjBEikI1EGHBQ6IlEKVnBvq8wZolX/0fnRsbuwop0fTtQb4ezouPR76FEcaenL9nsZp0r9T+9GK224agTFjvSB1KVXg4WD4kZK6DgV7N+o0GOtn2xFjF2klvjNTk7LKivlM4X1WsShiauPtHT2AYvToXHpVi8szoGhsmtJJwdlkC6/5JT/ZnaPdb86+2bNmKYlJ6xFnK5fs5c1pklJBntkr5y5VGFxo50ZlxKZIY/sjbhswNSXS9OGn2vszXZMy7Bj+iuI8dVIi/gnAhYjQMJaAYv/YGq+sWD0I80YlDzSNVButEWeF689NihxdVK4VU2KMVijDRF7yQzZMKx8s7fB7iK1ZG32UFqehyI8ZqV91yLnN4RpRJoUROKUBYWPj0hYnDim5b27tso2IVoVwVYnlYGNtHNo2Mj+8GHbQ2oJ22yMtDxjRODGSIsZIwbWvUDiHLSjj0hYgCmYrq3yRYhWRbDVSWVgI/0aGjayP3zY9pBawjY7Hy2rbpSXmTUsNCjaOOlfOcpxQJp4WCUZiZKNBzO5KueDaFVEXZ1Uhjr6Om6SOrquFZu6PaSW1M3eRssrI5WpVtYiF1d4UPzpgIUpeN8AEmZAVNdWeRtEqyLU6qQyqJGOA40aXdWKjdoeUkvUZtOi5ZkWCr83sYXWgjVgYn9Awgy8FvGIqSGoVfkURKsi1OqkMqiRpy9o1Oi6VmzU9pBaoCbF7Ej0f2bAFgSeD5maJyOWTvdaYXEKbP07YmEtfIhOYYW8Uc1KgKvVwomj1WjkGD1iM7ePVgKdvIKOd9V1xoaYmi8XDHCfPhanQdgRlUud2CmoGDkyhV6AXJ1WDjnyJAYDObrSFR+5PbQS5NQVcqyLrkNmiTo1TzwtmRoPaJwBcUcszjTpnqtuCiumjrQICqir08pRt91pYPSogLo9tBLq9BV1LLchSNzsmpovH4fxk1nZpoe18aCo+xELi8tVOOxVOQ9UszIA67RyAG63Gxg9KgBwD60EQHMFIMtyCDI3vUPMhCaEtWwJ1iY0Mj3DhIVJsI2vm8KKAdzPgajVygG43YNg9KgAwN1dCCnsFYAsHyJY/LT51HyxblCNgesLGGdhZQ0sTDqYG57iiqnbz4qo1cpRt92MYPSogLrd7Qgp3BV1LEMi+NxsDztbAbZnHrC40PiwdosZqg2vCp3Cigncz5+o1coRuN2hYPSogMDdPQop/BWBLJciBDxfPDVPCuil07gDFqcan2bxsLDQBJhXqXInqGZl0O3pT9BqHOj2cyj20UqgC1fQsUwKqXPQIfZDf5FjmjtGA10LLnQ/ooEWFkCY4orBq3MY0F2etWJfY8c6TrQah7z9DAtOf1oZnjW+GiqZrh7YlaK9Io/lWRiDH0ebmicPXAcXt8jxCnj2BwvzGHVVtgXVrJC6SuciQ91264LRowLq6P6UUievzAvJO08hWtQpm5ovhzHZGJDVQwLjuGjAcIfEeQtMtW6KKwWPaFYGXqVYBjxSjQEe3SM+eIz+FIN3ZWBIloHhFb6Tc2q+2MmkkecsEtdvDwbTOyTOOLD87aa4Yu7qjIcMd5UuRoa7HVwMukcF3NH9KebuysWQTBcjM8GTSEEqCwreHrA4FdcLADvsMEY6KnZTWDF1dcZDhrpKFyND3Q4uBt2jAuro/hRTd+ViSJ6LkakYOTVfJpEtSKYgYb4RIG+MhClYgWUKK4auzmzIQFfpXGSg28G5oHtUAB3dn2LorpwLyXMujMcqt383NV8khH3j4FAH44wG97kcsThpGgMcW1nnVxDNCrmrNCwy3O1gWNA9KuCO7k8xd1eGheQZFj6zN0UiDgMok3JAwxwYxo5YHDra1fkVRLNC6ioNiwx1OxgWdI8KqKP7U0zdlWEheYZF5oqgqXmSP0EWFDDOYNTBMJsy3E1RxdDV2QoZ6Co9igx0O3gUdI8KoKP7UwzdlUchGR6FFja3DU9iHoUC5UoPWGBaoJkr1k2Buc8ELw1Jtfqqv7O97Q+sGiHwQjW3O2icGBoMwujyT+PFBlqFQUtrjR++fcPQmo7OCtcOB3uDvhzoDU6sk3ZlTEiGMdGTlltBINdrhEbDpypiN8gGLiHQCzbA7VRTXClqZKadgdpmjRNDg4Ea9w4NDmqkVj1qV06EZDgRPWoZ618iToRxiPePBMJBjSfWTYGlpJHZdQZpmzVODA0GaXS9JT5pjBs4KklTV+6D4rkPNjNnU/jRCbBCxeMUWKEicQKc2O6msNJZG9FsnILo5wnWVyv3iDK0LrXsdPBWfHNzJe5cMGviJ1p8FF2FkdHBsSadVn05+v6XI1iPw7iLVgLhlROhGE6Ejb86mR3GCnEYwDkKLEjBYiZYnABP6W4KKyaQTNP7dig9rYwY698Y4fxAUQjonQG3DM0tJJJeAINEUsMpqS8z/6EeiRMtfokV580Wk3jlTSiGNxEVFX5l39R8CVlrYc0JLDI+nBoD5nlIYGgNrDg/Ba4QmSk5T7Xs15/GjTV2TPyu0RKgpSI4bKQFwICN1OgLhgzPSTlAtzbs7aGVwHZlSSiGJREV29ywh1gSyjfCrhysQNo4K7AHMeJQeAfqj3VTYPFASNsKDObKRHDmSAeAwRxdcInP3B5aCXNXjoRiOBJxXeFyAxziIHjfqLTMCRYYl6dp7eIjKhiBdCA7rEhPIju80U4CA7UykcxWTlKFAxupUQDbHloJbFc2hGLYEBG2NrOhTkHfwAjgph6wOGXA9clHLE46cGdzN8XlPpXMPctUsxQRjXNWJpLJAZMqHM4Yt0+4dpxpjWXygrV4Qbp9tBLOrowHxTIebKYe4tR8ubGcOKGItAGZk3LdbmpTzB5tIVyw6csGDr/QYw1WsrbhLUNbO6nGaft4v9niIr+bDS9+ol+cQzKpYVpjL4stdB30ZptGQu6Ve6FYJyyszz2OccMhfXoesECIK0+smwKLGaVPRdQzSp9J+IKMkn4Ig1FSg8HoFo2E0SvfQ7EOZFifSxEiRoXGEEUuuwCIsrS6Ka6YUPr0RD2h9DmIL0goaaMwCCU1GIRu0UgIvbJLFOf2calkZkepQupDQTyRWlNtWrj2iGqlUd0UVbxoJj2B1ewhvvuAFv2SYJKuCwNMUoMB5haNJZj6yl3RDHdFCZHbYq+hG+JsowCbSJwUjQFFgpA4a0Dl+W6KK8WTaNZ/mcYN5Gg7XrE8rGFSolBKv5z2iaNNQkhqcG4AusBIauGrpd8Pb3pYrpMXVUp9Zb/oMaduV/puhxEgfrQG7fN3k4ZbrK2F9IDCAxoq+srMYMGORNpWarC076ZI+JFd40nG3DJiToyYHxgxb9Zjxm/r5vHt+fx0vHu6e/3q7ren++/fvX86P7x4OP/Sf29/HDRuXr/6dPfr+T/vHn599/HxxfvzL1FOND5+nQ/vfn37/Jen+0/xe3/54u/3T0/3H4Y/vj3f/Xx+6APiv/9yf/80/SVq3ny+f/jH8PKv/x9QSwMEFAAAAAgAKFEYXRp3F+DqAgAAgw0AAA0AAAB4bC9zdHlsZXMueG1s3VfdbtMwFH4VKw9A1gZCg5pKUGkSEqBJ2wW3buM0lhw7OM7U7p4H4Jp3gAdA8DZI7C3mY6fpz3zGhpiQSDXl+Hw+3/l1rE1bsxHsvGLMkHUtZJtHlTHNizhulxWraftENUxapFS6psYu9SpuG81o0YJRLeLxyUka15TLaDaVXX1am5YsVSdNHp1E8WxaKrnTjCOvsFtpzcglFXk0p4IvNHd7ac3FxqvHoFgqoTQxNhSWRyPQtFceHvkVRNnz1FwqDcrYezj28/PHl1/fv15//nj97RNsW/REt1l7AvdqLREX4jADq5hNG2oM0/LULpyNU96CSC9fbBqbwkrTzWj8LNoZuJd1slC6YPrAjVfNpoKVxhpovqrgbVQD0StjVG2FgtOVktTFsLXYtySuxXlkKtuiLc2x0nIeq7yDY+3gohds5EsmxDnsel8O4Y9s+OuS+Hl4XcAoEKjmVrQ596Kn8Qvg32fz3Hu0z/+IljT8UplXnc1HuvWHThl2plnJ1269Lgf/GPsIYbd62jRi81LwlayZz/3eDmdTurUjldL8ynqDMVxaBdMRuWTa8OWeBiq0Lh9ehMcJE8YrHNLTe4X0F/ryuOz/pOu/K+gdQT0g5bg/Wnvn9+D0DloCX9A8egcXgNhRkEXHheGyX1W8KJi8dYgtvaELe8Mc8Nv9BStpJ8zFAObRTn7LCt7V2bDrDNLqd+3kN/AhG6XDNWF9cVmwNSvm/VKvFk4kVrBe+8d9BI+QU/eEEczGY2EEMMwPFgFm460wP/9TPhM0H49hsU2CyAS1maA23iqEzN0P8xO2yewTzjTLkiRNsYrO58EI5ljd0hT+wmxYbGCB+QFPD6s13m18Qu6eA6ynd00Ilik+iVimeK0BCdcNLLIs3G3MD1hgXcBmB/yH/cBMhW2SBLqKxYadYBzJMgyBWQzPaJoi1UnhF+4PdkqSJMvCCGDhCJIEQ+A04ggWAcSAIUni7sGj+yje3lPx7t+u2Q1QSwMEFAAAAAgAKFEYXZeKuxzAAAAAEwIAAAsAAABfcmVscy8ucmVsc52SuW7DMAxAf8XQnjAH0CGIM2XxFgT5AVaiD9gSBYpFnb+v2qVxkAsZeT08EtweaUDtOKS2i6kY/RBSaVrVuAFItiWPac6RQq7ULB41h9JARNtjQ7BaLD5ALhlmt71kFqdzpFeIXNedpT3bL09Bb4CvOkxxQmlISzMO8M3SfzL38ww1ReVKI5VbGnjT5f524EnRoSJYFppFydOiHaV/Hcf2kNPpr2MitHpb6PlxaFQKjtxjJYxxYrT+NYLJD+x+AFBLAwQUAAAACAAoURhd29XRG5cBAAC9AgAADwAAAHhsL3dvcmtib29rLnhtbI1ST0vcQBT/Kumw4M1sbBW6bBak0lYpKlW8yiTzYh7OzAszs671E3gQqtB76clL6an0Uui3WevH6JvE1BURPM383ht+/5LxjNxxQXScnBptfS7qEJpRmvqyBiP9MjVgeVORMzIwdEepbxxI5WuAYHS6MhyupUaiFZNxz7Xr0kVAAcqAZHkYBwcIM3+/jzA5QY8FagyfctHeNYjEoEWDZ6ByMRSJr2n2nhyekQ1S75WOtM5F1i0OwAUsH433osl9Wfh2EmTxUbKRXKwNmbBC50P7ouWX7PEE+HGHpoHeog7gNmSAd46mDdqjSMMp0oUYbQ/92ZU4cs+pkaoKS9igcmrAhq5HBzoatL7GxovESgO5mH++uv15Pb88n19e3Hz5dfP9z9/fX29/fIsRWXNTdXED+1woz42QF25TdY57mwoqtKC2mfkhuhM7PNXWLB/+jy4L6ZlNUyy3l+N+alQKbFSeLD1lcOnFYH2QjQZbg+xlNk4XxCYPEBth9nLXJfFo86y8Ws1e8yeaav2GZzv2A0nVt9//OZN/UEsDBBQAAAAIAChRGF0kHpuirQAAAPgBAAAaAAAAeGwvX3JlbHMvd29ya2Jvb2sueG1sLnJlbHO1kT0OgzAMha8S5QA1UKlDBUxdWCsuEAXzIxISxa4Kty+FAZA6dGGyni1/78lOn2gUd26gtvMkRmsGymTL7O8ApFu0ii7O4zBPahes4lmGBrzSvWoQkii6QdgzZJ7umaKcPP5DdHXdaXw4/bI48A8wvF3oqUVkKUoVGuRMwmi2NsFS4stMlqKoMhmKKpZwWiDiySBtaVZ9sE9OtOd5Fzf3Ra7N4wmu3wxweHT+AVBLAwQUAAAACAAoURhdZZB5khkBAADPAwAAEwAAAFtDb250ZW50X1R5cGVzXS54bWytk01OwzAQha8SZVslLixYoKYbYAtdcAFjTxqr/pNnWtLbM07aSqASFYVNrHjevM+el6zejxGw6J312JQdUXwUAlUHTmIdIniutCE5SfyatiJKtZNbEPfL5YNQwRN4qih7lOvVM7Ryb6l46XkbTfBNmcBiWTyNwsxqShmjNUoS18XB6x+U6kSouXPQYGciLlhQiquEXPkdcOp7O0BKRkOxkYlepWOV6K1AOlrAetriyhlD2xoFOqi945YaYwKpsQMgZ+vRdDFNJp4wjM+72fzBZgrIyk0KETmxBH/HnSPJ3VVkI0hkpq94IbL17PtBTluDvpHN4/0MaTfkgWJY5s/4e8YX/xvO8RHC7r8/sbzWThp/5ovhP15/AVBLAQIUABQAAAAIAChRGF1Gx01IlQAAAM0AAAAQAAAAAAAAAAAAAACAAQAAAABkb2NQcm9wcy9hcHAueG1sUEsBAhQAFAAAAAgAKFEYXQbsylHvAAAAKwIAABEAAAAAAAAAAAAAAIABwwAAAGRvY1Byb3BzL2NvcmUueG1sUEsBAhQAFAAAAAgAKFEYXZlcnCMQBgAAnCcAABMAAAAAAAAAAAAAAIAB4QEAAHhsL3RoZW1lL3RoZW1lMS54bWxQSwECFAAUAAAACAAoURhd7q/2E38iAAD1RgEAGAAAAAAAAAAAAAAAtoEiCAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sUEsBAhQAFAAAAAgAKFEYXRp3F+DqAgAAgw0AAA0AAAAAAAAAAAAAAIAB1yoAAHhsL3N0eWxlcy54bWxQSwECFAAUAAAACAAoURhdl4q7HMAAAAATAgAACwAAAAAAAAAAAAAAgAHsLQAAX3JlbHMvLnJlbHNQSwECFAAUAAAACAAoURhd29XRG5cBAAC9AgAADwAAAAAAAAAAAAAAgAHVLgAAeGwvd29ya2Jvb2sueG1sUEsBAhQAFAAAAAgAKFEYXSQem6KtAAAA+AEAABoAAAAAAAAAAAAAAIABmTAAAHhsL19yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsBAhQAFAAAAAgAKFEYXWWQeZIZAQAAzwMAABMAAAAAAAAAAAAAAIABfjEAAFtDb250ZW50X1R5cGVzXS54bWxQSwUGAAAAAAkACQA+AgAAyDIAAAAA", "tableG": "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"}};
+
+function fmtInt(n) { return Math.round(Number(n)).toLocaleString('zh-CN'); }
+function fmtPct(n) { return Number(n).toFixed(2) + '%'; }
+
+// ---- 大区卡片 ----
+function renderCards(metric) {
+  var wrap = document.getElementById('cardsWrap');
+  wrap.style.gridTemplateColumns = 'repeat(' + DATA.regions.length + ', 1fr)';
+  wrap.innerHTML = DATA.regions.map(function(r, i) {
+    var isRate = metric === 'rate';
+    var label = isRate ? 'T/T回款百分比' : 'T/T待回款';
+    var val = isRate ? fmtPct(r.tt_rate) : fmtInt(r.tt_pending);
+    var unit = isRate ? '%' : '万元';
+    var palette = ['#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6', '#1ABC9C', '#E67E22'];
+    var color = palette[i % palette.length];
+    return '<div class="card">' +
+      '<div class="region-name">' + r.name + '</div>' +
+      '<div class="row">' +
+        '<div class="row-value"><span class="val" style="color:' + color + '">' + val + '</span><span class="unit">' + unit + '</span></div>' +
+        '<div class="row-label">' + label + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// ---- 表G ----
+function pctCls(v) { return v >= 70 ? 'pct-high' : (v >= 40 ? 'pct-medium' : 'pct-low'); }
+
+function renderTableG() {
+  var tbody = document.querySelector('#tableG tbody');
+  tbody.innerHTML = DATA.table_g.map(function(r) {
+    var rowClass = r.type === 'subtotal' ? 'subtotal-row' : (r.type === 'total' ? 'total-row' : 'module-row');
+    var label = r.type === 'module' ? r.module : (r.type === 'subtotal' ? r.region + ' 小计' : '全国贸合计');
+    if (r.type === 'module') label = '&nbsp;&nbsp;&nbsp;&nbsp;' + label;
+    return '<tr class="' + rowClass + '">' +
+      '<td>' + label + '</td>' +
+      '<td class="num">' + fmtInt(r.contract_amount) + '</td>' +
+      '<td class="num">' + fmtInt(r.payment) + '</td>' +
+      '<td class="num">' + fmtInt(r.pending) + '</td>' +
+      '<td class="' + pctCls(r.rate) + '">' + fmtPct(r.rate) + '</td>' +
+      '<td class="num">' + fmtInt(r.tt_contract_amount) + '</td>' +
+      '<td class="num">' + fmtInt(r.tt_payment) + '</td>' +
+      '<td class="num">' + fmtInt(r.tt_pending) + '</td>' +
+      '<td class="' + pctCls(r.tt_rate) + '">' + fmtPct(r.tt_rate) + '</td>' +
+      '<td class="num">' + fmtInt(r.oa_contract_amount) + '</td>' +
+      '<td class="num">' + fmtInt(r.oa_payment) + '</td>' +
+      '<td class="num">' + fmtInt(r.oa_pending) + '</td>' +
+      '<td class="' + pctCls(r.oa_rate) + '">' + fmtPct(r.oa_rate) + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ---- ECharts ----
+var barChart = null;
+
+function getChartOption(metric) {
+  var regionNames = DATA.regions.map(function(r) { return r.name; });
+  var isRate = metric === 'rate';
+
+  if (isRate) {
+    return {
+      tooltip: {
+        trigger: 'axis',
+        formatter: function(p) {
+          return p.map(function(s) { return s.marker + s.seriesName + ': ' + s.value.toFixed(2) + '%'; }).join('<br/>');
+        }
+      },
+      legend: { show: true, top: 0, data: ['全部', 'T/T', 'O/A'] },
+      grid: { left: 8, right: 8, top: 36, bottom: 8, containLabel: true },
+      xAxis: { type: 'category', data: regionNames, axisLabel: { rotate: regionNames.length > 6 ? 30 : 0 } },
+      yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
+      series: [
+        { name: '全部', type: 'bar', barMaxWidth: 50, data: DATA.regions.map(function(r) { return r.rate; }), itemStyle: { color: '#409EFF' } },
+        { name: 'T/T', type: 'bar', barMaxWidth: 50, data: DATA.regions.map(function(r) { return r.tt_rate; }), itemStyle: { color: '#67C23A' } },
+        { name: 'O/A', type: 'bar', barMaxWidth: 50, data: DATA.regions.map(function(r) { return r.oa_rate; }), itemStyle: { color: '#E6A23C' } },
+      ],
+    };
+  } else {
+    return {
+      tooltip: {
+        trigger: 'axis',
+        formatter: function(p) { return p.map(function(s) { return s.marker + s.seriesName + ': ' + fmtInt(s.value) + '万元'; }).join('<br/>'); }
+      },
+      legend: { show: true, top: 0, data: ['全部', 'T/T', 'O/A'] },
+      grid: { left: 8, right: 8, top: 36, bottom: 8, containLabel: true },
+      xAxis: { type: 'category', data: regionNames, axisLabel: { rotate: regionNames.length > 6 ? 30 : 0 } },
+      yAxis: { type: 'value' },
+      series: [
+        { name: '全部', type: 'bar', barMaxWidth: 50, data: DATA.regions.map(function(r) { return r.pending; }), itemStyle: { color: '#409EFF' } },
+        { name: 'T/T', type: 'bar', barMaxWidth: 50, data: DATA.regions.map(function(r) { return r.tt_pending; }), itemStyle: { color: '#67C23A' } },
+        { name: 'O/A', type: 'bar', barMaxWidth: 50, data: DATA.regions.map(function(r) { return r.oa_pending; }), itemStyle: { color: '#E6A23C' } },
+      ],
+    };
+  }
+}
+
+function initCharts() {
+  var barDom = document.getElementById('barChart');
+  barChart = echarts.init(barDom);
+  barChart.setOption(getChartOption('pending'));
+  window.addEventListener('resize', function() { barChart.resize(); });
+}
+
+function updateChart() {
+  var metric = document.getElementById('chartMetric').value;
+  renderCards(metric);
+  barChart.setOption(getChartOption(metric), true);
+}
+
+// ---- 视图切换 ----
+function switchView(view) {
+  document.getElementById('btnChart').classList.toggle('active', view === 'chart');
+  document.getElementById('btnTable').classList.toggle('active', view === 'table');
+  document.getElementById('chart-view').style.display = view === 'chart' ? 'block' : 'none';
+  document.getElementById('table-view').style.display = view === 'table' ? 'block' : 'none';
+  if (view === 'chart') window.dispatchEvent(new Event('resize'));
+}
+
+// ---- 导出 ----
+function downloadBase64(b64, filename) {
+  var byteChars = atob(b64);
+  var byteNums = new Array(byteChars.length);
+  for (var i = 0; i < byteChars.length; i++) {
+    byteNums[i] = byteChars.charCodeAt(i);
+  }
+  var byteArr = new Uint8Array(byteNums);
+  var blob = new Blob([byteArr], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function exportTableF() {
+  downloadBase64(DATA.__exports__.tableF, '表F_发货合同收款统计.xlsx');
+}
+
+function exportTableG() {
+  downloadBase64(DATA.__exports__.tableG, '表G_发货合同收款合计.xlsx');
+}
+
+// ---- 初始化 ----
+renderCards('pending');
+renderTableG();
+initCharts();
+</script>
+</body>
+</html>

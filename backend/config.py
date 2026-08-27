@@ -12,4 +12,6 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-change-in-production')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=8)
+    JWT_QUERY_STRING_NAME = 'token'
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+    DASHBOARD_OUTPUT_DIR = os.path.join(BASE_DIR, 'var', 'dashboards')

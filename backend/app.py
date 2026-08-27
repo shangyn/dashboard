@@ -1,7 +1,8 @@
 import os
+import shutil
 from flask import Flask, send_from_directory, request
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager
+from flask_jwt_extended import JWTManager, verify_jwt_in_request
 from config import Config
 from models import db
 from seed import seed_database
@@ -21,7 +22,30 @@ def create_app():
     # 确保上传目录存在
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(os.path.join(os.path.dirname(__file__), 'instance'), exist_ok=True)
-    os.makedirs(os.path.join(os.path.dirname(__file__), 'dashboards'), exist_ok=True)
+    dashboards_out = app.config['DASHBOARD_OUTPUT_DIR']
+    os.makedirs(dashboards_out, exist_ok=True)
+
+    # 一次性迁移：复制历史看板产物（跳过测试残留文件），多 worker 下幂等且容错
+    legacy_dir = os.path.join(os.path.dirname(__file__), 'dashboards')
+    if os.path.isdir(legacy_dir):
+        for rel in ('echarts.min.js', 'js/echarts.min.js'):
+            src = os.path.join(legacy_dir, rel)
+            dst = os.path.join(dashboards_out, rel)
+            if os.path.isfile(src) and not os.path.isfile(dst):
+                try:
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copyfile(src, dst)
+                except OSError:
+                    pass
+        for fname in os.listdir(legacy_dir):
+            if fname.endswith('.html') and fname != 'test_output.html':
+                src = os.path.join(legacy_dir, fname)
+                dst = os.path.join(dashboards_out, fname)
+                if os.path.isfile(src) and not os.path.isfile(dst):
+                    try:
+                        shutil.copyfile(src, dst)
+                    except OSError:
+                        pass
 
     # 扩展初始化
     CORS(app, resources={r"/api/*": {"origins": ["http://101.200.52.49:8082", "http://101.200.52.49", "http://localhost:5173", "http://127.0.0.1:5173"]}})
@@ -52,7 +76,22 @@ def create_app():
     # 托管 dashboard HTML 文件
     @app.route('/dashboards/<path:filename>')
     def serve_dashboard(filename):
-        dashboards_dir = os.path.join(os.path.dirname(__file__), 'dashboards')
+        dashboards_dir = app.config['DASHBOARD_OUTPUT_DIR']
+
+        # echarts 库是公开静态资源，两个历史路径都放行
+        if filename in ('echarts.min.js', 'js/echarts.min.js'):
+            return send_from_directory(dashboards_dir, filename)
+
+        # 鉴权：支持 Authorization header 或 ?token= 查询参数（iframe 场景）
+        try:
+            verify_jwt_in_request(locations=['headers', 'query_string'])
+        except Exception:
+            return {'error': '未登录或登录已过期'}, 401
+
+        # 白名单：只允许生成的 HTML 看板，其余一律 403
+        if not filename.endswith('.html'):
+            return {'error': '禁止访问'}, 403
+
         return send_from_directory(dashboards_dir, filename)
 
     # 生产环境：托管前端静态文件

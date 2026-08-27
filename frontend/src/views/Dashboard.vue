@@ -27,7 +27,9 @@ onMounted(async () => {
     const mod = (res.data || []).find(m => String(m.id) === String(moduleId))
     if (mod) {
       moduleInfo.value = mod
-      iframeUrl.value = mod.url || ''
+      const url = new URL(mod.url, window.location.origin)
+      url.searchParams.set('token', localStorage.getItem('token') || '')
+      iframeUrl.value = url.toString()
     }
   } finally {
     loading.value = false

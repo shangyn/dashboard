@@ -198,7 +198,7 @@ def generate_dashboard(parent_code):
 
         base = os.path.dirname(os.path.dirname(__file__))
         script_dir = os.path.join(base, parent.script_dir or 'dashboards/generate_dashboard')
-        output_path = os.path.join(os.path.dirname(script_dir), f'{parent_code}_dashboard.html')
+        output_path = os.path.join(current_app.config['DASHBOARD_OUTPUT_DIR'], f'{parent_code}_dashboard.html')
 
         budget_file = None
         try:
@@ -299,7 +299,7 @@ def generate_dashboard(parent_code):
 
     base = os.path.dirname(os.path.dirname(__file__))
     script_dir = os.path.join(base, parent.script_dir or 'dashboards/generate_dashboard')
-    output_path = os.path.join(os.path.dirname(script_dir), f'{parent_code}_dashboard.html')
+    output_path = os.path.join(current_app.config['DASHBOARD_OUTPUT_DIR'], f'{parent_code}_dashboard.html')
 
     # ── schedule_dashboard: 直接调用 Python 函数 ──
     if parent_code == 'schedule_dashboard':
