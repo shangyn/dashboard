@@ -143,3 +143,7 @@ Dockerfile.*
 backend/dashboards/generate_data_dashboard.html
 backend/dashboards/receivables_dashboard.html
 backend/dashboards/schedule_dashboard_dashboard.html
+backend/var/dashboards/generate_data_dashboard.html
+backend/var/dashboards/receivables_dashboard.html
+backend/var/dashboards/schedule_dashboard_dashboard.html
+backend/dashboards/generate_dashboard/budget_data/
