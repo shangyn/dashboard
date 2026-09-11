@@ -9,7 +9,7 @@
         <el-divider />
         <div class="info-list">
           <div>系统名称：国际运营数据管理系统</div>
-          <div>版本号：V2.0.1</div>
+          <div>版本号：V2.0.0</div>
           <div>技术栈：Vue 3 + Element Plus + SQLite</div>
           <div>部署环境：局域网内部部署 + <a href="http://101.200.52.49:8082/" target="_blank">外网及移动端访问</a></div>
           <div>&copy; 2026 企业内部管理系统</div>
