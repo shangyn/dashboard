@@ -89,16 +89,21 @@ def parse_ledger_contracts(file_path: str) -> dict:
     只导入2025年及之后的合同（用于当年统计+去年同期对比）
     """
     try:
-        # 使用 data_only=True 读取（不用 read_only，此文件 XML 维度标记有误）
-        wb = openpyxl.load_workbook(file_path, data_only=True)
+        # read_only=True 流式读取：该台账约 8 万行 × 91 列，全量载入内存峰值约 3GB，
+        # 内存不足时进程会被 OOM 杀掉（前端表现为 fail to post /api/upload/contract_ledger 0）
+        # 注意：此文件 XML 维度标记有误(A1:A1)，read_only 下必须 reset_dimensions() 才能读到全部行
+        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         ws = wb.active
+        ws.reset_dimensions()
 
         # 读取表头 → 1-indexed 列号映射
+        header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
         header_map = {}
-        for c in range(1, ws.max_column + 1):
-            v = _safe_str(ws.cell(row=1, column=c).value)
+        for c, v in enumerate(header_row, start=1):
+            v = _safe_str(v)
             if v:
                 header_map[v] = c  # 1-indexed column number
+        ncols = len(header_row)
 
         # 多表头名查找辅助（支持不同版本台账的列名差异）
         def _h(*names):
@@ -158,7 +163,9 @@ def parse_ledger_contracts(file_path: str) -> dict:
         skipped_old = 0
 
         # iter_rows(values_only=True) 返回 tuple，避免逐个 Cell 对象创建
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        # read_only 下短行按最后一个非空单元格截断，补 None 保证列索引安全
+        for raw_row in ws.iter_rows(min_row=2, max_col=ncols, values_only=True):
+            row = raw_row if len(raw_row) >= ncols else tuple(raw_row) + (None,) * (ncols - len(raw_row))
             # 快速日期预检
             sd = _safe_date_openpyxl(row[col_sign_date - 1]) if col_sign_date else None
             scd = _safe_date_openpyxl(row[col_schedule_date - 1]) if col_schedule_date else None
