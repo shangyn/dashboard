@@ -73,6 +73,10 @@ def create_app():
     app.register_blueprint(operations_bp)
     app.register_blueprint(cc_bp)
 
+    # 单月签排发填报（独立模块，见 docs/superpowers/specs/2026-09-21-monthly-sign-schedule-ship-fill-design.md）
+    from monthly_forecast import register as register_monthly_forecast
+    register_monthly_forecast(app)
+
     # 托管 dashboard HTML 文件
     @app.route('/dashboards/<path:filename>')
     def serve_dashboard(filename):

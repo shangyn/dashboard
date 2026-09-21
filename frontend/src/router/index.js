@@ -37,6 +37,7 @@ const routes = [
       { path: 'upload-console/:code', component: () => import('../views/UploadConsole.vue') },
       { path: 'contract-completion', component: () => import('../views/ContractCompletion.vue') },
       { path: 'two-year-comparison', component: () => import('../views/TwoYearComparison.vue') },
+      { path: 'monthly-forecast', component: () => import('../views/MonthlyForecast.vue') },
     ],
   },
   {

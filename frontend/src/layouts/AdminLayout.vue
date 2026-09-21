@@ -44,6 +44,10 @@
           <el-icon><Document /></el-icon>
           <span>操作日志</span>
         </el-menu-item>
+        <el-menu-item index="/monthly-forecast" v-if="authStore.hasPermission('monthly_forecast')">
+          <el-icon><EditPen /></el-icon>
+          <span>签排发填报</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -107,7 +111,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DataAnalysis, User, Lock, Grid, UploadFilled, Upload, Document, Trophy, Fold, Expand } from '@element-plus/icons-vue'
+import { DataAnalysis, User, Lock, Grid, UploadFilled, Upload, Document, Trophy, Fold, Expand, EditPen } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { changePassword } from '../api/auth'
