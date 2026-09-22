@@ -46,6 +46,12 @@ def seed_database(app):
                 conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN personal_module VARCHAR(100)"))
             if 'personal_region' not in lc_cols:
                 conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN personal_region VARCHAR(50)"))
+            # mf_monthly_input: 加 ship_manual_units / ship_manual_amount（无梯号发货预估）
+            mf_cols = [c['name'] for c in inspector.get_columns('mf_monthly_input')]
+            if 'ship_manual_units' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN ship_manual_units FLOAT DEFAULT 0'))
+            if 'ship_manual_amount' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN ship_manual_amount FLOAT DEFAULT 0'))
             conn.commit()
 
         # 数据架构迁移：停用重复的上传配置，新增预算上传入口

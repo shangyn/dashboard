@@ -27,6 +27,8 @@ class MonthlyInput(db.Model):
     sign_amount = db.Column(db.Float, default=0.0)                          # 签单金额（万元）
     prod_units = db.Column(db.Float, default=0.0)                           # 排产台数
     prod_amount = db.Column(db.Float, default=0.0)                          # 排产金额（万元）
+    ship_manual_units = db.Column(db.Float, default=0.0)                    # 无梯号发货预估：台数（手填）
+    ship_manual_amount = db.Column(db.Float, default=0.0)                   # 无梯号发货预估：金额（万元，手填）
     status = db.Column(db.String(20), default='draft')                      # draft / submitted
     submitted_at = db.Column(db.DateTime, nullable=True)
     updated_by = db.Column(db.Integer, nullable=True)                       # user.id（不建外键，避免耦合既有表）
@@ -41,6 +43,8 @@ class MonthlyInput(db.Model):
             'sign_amount': self.sign_amount or 0.0,
             'prod_units': self.prod_units or 0.0,
             'prod_amount': self.prod_amount or 0.0,
+            'ship_manual_units': self.ship_manual_units or 0.0,
+            'ship_manual_amount': self.ship_manual_amount or 0.0,
             'status': self.status or 'draft',
             'submitted_at': self.submitted_at.strftime('%Y-%m-%d %H:%M:%S') if self.submitted_at else '',
             'updated_by_name': self.updated_by_name or '',

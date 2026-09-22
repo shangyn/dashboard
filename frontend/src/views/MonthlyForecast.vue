@@ -67,13 +67,23 @@
           </div>
         </div>
         <div class="mf-card mf-card-ship">
-          <div class="mf-card-title">发货预计（候选勾选 + 手工添加）</div>
+          <div class="mf-card-title">发货预计（候选勾选 + 无梯号预估）</div>
           <div class="mf-ship-total">
             <span class="mf-ship-num">{{ shipUnits }}</span> 台
             <span class="mf-ship-sep">/</span>
             <span class="mf-ship-num">{{ shipAmount }}</span> 万元
           </div>
-          <div class="mf-hint">已选 {{ selectedCount }} 个梯号，默认全部不勾选</div>
+          <div class="mf-field">
+            <span>无梯号台数</span>
+            <el-input-number v-model="form.ship_manual_units" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-field">
+            <span>无梯号金额(万元)</span>
+            <el-input-number v-model="form.ship_manual_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-hint">
+            已选 {{ selectedCount }} 个梯号（{{ ladderUnits }} 台 / {{ ladderAmount }} 万元）＋ 无梯号预估 {{ manualUnits }} 台 / {{ manualAmount }} 万元
+          </div>
         </div>
       </div>
 
@@ -233,7 +243,10 @@ function syncTableHeight() {
 const fileInput = ref(null)
 const statusText = ref('')
 
-const form = ref({ sign_units: 0, sign_amount: 0, prod_units: 0, prod_amount: 0 })
+const form = ref({
+  sign_units: 0, sign_amount: 0, prod_units: 0, prod_amount: 0,
+  ship_manual_units: 0, ship_manual_amount: 0,
+})
 const candidates = ref([])
 // 已选发货梯号的唯一数据源：{ 梯号: 行数据(含 is_manual) }
 const selections = ref({})
@@ -248,12 +261,16 @@ function round2(value) {
 }
 
 const selectedCount = computed(() => Object.keys(selections.value).length)
-const shipUnits = computed(() =>
+const manualUnits = computed(() => round2(Number(form.value.ship_manual_units) || 0))
+const manualAmount = computed(() => round2(Number(form.value.ship_manual_amount) || 0))
+const ladderUnits = computed(() =>
   round2(Object.values(selections.value).reduce((sum, row) => sum + (Number(row.unit_count) || 0), 0))
 )
-const shipAmount = computed(() =>
+const ladderAmount = computed(() =>
   round2(Object.values(selections.value).reduce((sum, row) => sum + (Number(row.amount_wan) || 0), 0))
 )
+const shipUnits = computed(() => round2(ladderUnits.value + manualUnits.value))
+const shipAmount = computed(() => round2(ladderAmount.value + manualAmount.value))
 const manualOnly = computed(() => Object.values(selections.value).filter((row) => row.is_manual))
 
 const filteredCandidates = computed(() => {
@@ -301,6 +318,8 @@ function applyEntry(data) {
     sign_amount: data.sign_amount || 0,
     prod_units: data.prod_units || 0,
     prod_amount: data.prod_amount || 0,
+    ship_manual_units: data.ship_manual_units || 0,
+    ship_manual_amount: data.ship_manual_amount || 0,
   }
   const map = {}
   for (const row of data.ship_selections || []) {
@@ -391,6 +410,8 @@ function buildPayload() {
     sign_amount: form.value.sign_amount,
     prod_units: form.value.prod_units,
     prod_amount: form.value.prod_amount,
+    ship_manual_units: form.value.ship_manual_units,
+    ship_manual_amount: form.value.ship_manual_amount,
     ship_selections: Object.values(selections.value).map((row) => ({
       ladder_no: row.ladder_no,
       is_manual: !!row.is_manual,

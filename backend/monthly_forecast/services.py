@@ -277,6 +277,20 @@ def _sum_ships(ships):
     return units, amount
 
 
+def _ship_totals(data_month, module_name):
+    """发货合计 = 梯号明细合计 + 无梯号手工预估"""
+    ships = ShipSelection.query.filter_by(
+        data_month=data_month, module_name=module_name
+    ).all()
+    units, amount = _sum_ships(ships)
+    record = MonthlyInput.query.filter_by(
+        data_month=data_month, module_name=module_name
+    ).first()
+    manual_units = (record.ship_manual_units if record else 0.0) or 0.0
+    manual_amount = (record.ship_manual_amount if record else 0.0) or 0.0
+    return round(units + manual_units, 2), round(amount + manual_amount, 2)
+
+
 def get_entry(data_month, module_name):
     """读取某月某模块的填报内容"""
     record = MonthlyInput.query.filter_by(
@@ -285,11 +299,12 @@ def get_entry(data_month, module_name):
     ships = ShipSelection.query.filter_by(
         data_month=data_month, module_name=module_name
     ).order_by(ShipSelection.id).all()
-    ship_units, ship_amount = _sum_ships(ships)
+    ship_units, ship_amount = _ship_totals(data_month, module_name)
 
     base = record.to_dict() if record else {
         'data_month': data_month, 'module_name': module_name,
         'sign_units': 0.0, 'sign_amount': 0.0, 'prod_units': 0.0, 'prod_amount': 0.0,
+        'ship_manual_units': 0.0, 'ship_manual_amount': 0.0,
         'status': 'draft', 'submitted_at': '', 'updated_by_name': '', 'updated_at': '',
     }
     base['ship_units'] = ship_units
@@ -310,7 +325,8 @@ def _to_float(value):
 def save_draft(data_month, module_name, payload, user):
     """保存草稿：upsert 签排产 + 全量替换发货勾选明细
 
-    发货明细只接受梯号，台数与金额由服务端从台账重新快照，不信任前端数值。
+    发货明细只接受梯号，台数与金额由服务端从台账重新快照，不信任前端数值；
+    无梯号发货预估（ship_manual_units / ship_manual_amount）为纯手填，直接采用。
     不属于本模块或台账中不存在的梯号会被拒绝并返回 rejected 列表。
     """
     payload = payload or {}
@@ -326,6 +342,8 @@ def save_draft(data_month, module_name, payload, user):
     record.sign_amount = _to_float(payload.get('sign_amount'))
     record.prod_units = _to_float(payload.get('prod_units'))
     record.prod_amount = _to_float(payload.get('prod_amount'))
+    record.ship_manual_units = _to_float(payload.get('ship_manual_units'))
+    record.ship_manual_amount = _to_float(payload.get('ship_manual_amount'))
     record.updated_by = getattr(user, 'id', None)
     record.updated_by_name = getattr(user, 'real_name', '') or getattr(user, 'username', '') or ''
     record.updated_at = datetime.now()
@@ -413,6 +431,8 @@ def submit(data_month, module_name, payload, user):
             'sign_units': entry['sign_units'], 'sign_amount': entry['sign_amount'],
             'prod_units': entry['prod_units'], 'prod_amount': entry['prod_amount'],
             'ship_units': entry['ship_units'], 'ship_amount': entry['ship_amount'],
+            'ship_manual_units': entry.get('ship_manual_units', 0.0),
+            'ship_manual_amount': entry.get('ship_manual_amount', 0.0),
             'ship_selections': entry['ship_selections'],
         }, ensure_ascii=False),
         sign_units=entry['sign_units'], sign_amount=entry['sign_amount'],
@@ -451,6 +471,8 @@ def _module_row(data_month, module_name):
         data_month=data_month, module_name=module_name
     ).all()
     ship_units, ship_amount = _sum_ships(ships)
+    ship_units = round(ship_units + ((record.ship_manual_units if record else 0.0) or 0.0), 2)
+    ship_amount = round(ship_amount + ((record.ship_manual_amount if record else 0.0) or 0.0), 2)
     return {
         'module_name': module_name,
         'sign_units': (record.sign_units if record else 0.0) or 0.0,
