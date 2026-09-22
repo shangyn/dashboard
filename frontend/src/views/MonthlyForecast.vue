@@ -30,6 +30,9 @@
         <el-button v-if="!isScoped" size="small" type="success" plain @click="handleExportShipping">
           导出预计发货明细
         </el-button>
+        <el-button v-if="context.can_import_scope" size="small" plain @click="scopeVisible = true">
+          名单管理
+        </el-button>
         <el-button v-if="context.can_import_scope" size="small" plain @click="triggerImport">导入名单</el-button>
         <input
           ref="fileInput"
@@ -194,6 +197,7 @@
           <el-table-column prop="updated_by_name" label="填报人" width="100" align="center" />
         </el-table>
       </div>
+      <ScopeManageDrawer v-model="scopeVisible" />
     </div>
   </div>
 </template>
@@ -212,6 +216,7 @@ import {
   importScope,
   downloadExport,
 } from '../api/monthly-forecast'
+import ScopeManageDrawer from '../components/MonthlyForecast/ScopeManageDrawer.vue'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -241,6 +246,7 @@ function syncTableHeight() {
   tableHeight.value = Math.max(320, Math.min(640, viewport - 430))
 }
 const fileInput = ref(null)
+const scopeVisible = ref(false)
 const statusText = ref('')
 
 const form = ref({

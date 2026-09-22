@@ -45,6 +45,22 @@ export function importScope(file) {
   })
 }
 
+export function getScopeOptions() {
+  return request.get('/api/monthly-forecast/scope/options')
+}
+
+export function addScopeItem(payload) {
+  return request.post('/api/monthly-forecast/scope/item', payload)
+}
+
+export function removeScopeItem(id) {
+  return request.delete(`/api/monthly-forecast/scope/item/${id}`)
+}
+
+export function cleanupScope() {
+  return request.post('/api/monthly-forecast/scope/cleanup')
+}
+
 /** 下载导出的 Excel（需带 Authorization 头，故用 fetch 取 blob） */
 export function downloadExport(kind, month, filename) {
   const token = localStorage.getItem('token')

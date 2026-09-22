@@ -274,6 +274,13 @@ def api_export_shipping():
 
 # 名单
 
+def _user_status(owner):
+    """名单行的账号状态：active / inactive / missing"""
+    if owner is None:
+        return 'missing'
+    return 'active' if owner.is_active else 'inactive'
+
+
 @mf_bp.route('/api/monthly-forecast/scope', methods=['GET'])
 @jwt_required()
 @permission_required(PERMISSION)
@@ -292,6 +299,7 @@ def api_get_scope():
             owner = users.get(row.user_id)
             item['username'] = owner.username if owner else ''
             item['real_name'] = owner.real_name if owner else ''
+            item['user_status'] = _user_status(owner)
             data.append(item)
         return _ok(data)
     except Exception as exc:
@@ -323,3 +331,123 @@ def api_import_scope():
         return _ok(result, result.get('message', ''))
     except Exception as exc:
         return _fail(f'导入失败: {exc}', 500)
+
+
+# 名单管理（逐条维护归属；只写 mf_user_scope，不动 user 表与填报数据）
+
+@mf_bp.route('/api/monthly-forecast/scope/options', methods=['GET'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_scope_options():
+    """名单管理下拉数据：全部模块 + 全部账号"""
+    user = get_current_user()
+    if not _is_management(user):
+        return _fail('无权限查看名单', 403)
+    try:
+        from models import User
+        users = User.query.order_by(User.username).all()
+        return _ok({
+            'modules': svc.all_modules(),
+            'users': [
+                {
+                    'id': u.id,
+                    'username': u.username or '',
+                    'real_name': u.real_name or '',
+                    'is_active': bool(u.is_active),
+                }
+                for u in users
+            ],
+        })
+    except Exception as exc:
+        return _fail(f'读取人员失败: {exc}', 500)
+
+
+@mf_bp.route('/api/monthly-forecast/scope/item', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_add_scope_item():
+    """新增一条「账号 ↔ 模块」归属"""
+    user = get_current_user()
+    if not _is_management(user):
+        return _fail('无权限修改名单', 403)
+    from models import db, User
+    from sqlalchemy.exc import IntegrityError
+    from monthly_forecast.models import UserScope
+    payload = _payload()
+    try:
+        user_id = int(payload.get('user_id'))
+    except (TypeError, ValueError):
+        return _fail('请选择账号')
+    module_name = (payload.get('module_name') or '').strip()
+    if not module_name:
+        return _fail('请选择模块')
+    try:
+        owner = User.query.get(user_id)
+        if not owner:
+            return _fail('账号不存在')
+        if module_name not in svc.all_modules():
+            return _fail(f'模块不存在：{module_name}')
+        if UserScope.query.filter_by(user_id=user_id, module_name=module_name).first():
+            return _fail(f'该账号已在「{module_name}」模块')
+        row = UserScope(user_id=user_id, match_key=owner.username or '',
+                        module_name=module_name)
+        db.session.add(row)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return _fail(f'该账号已在「{module_name}」模块')
+        item = row.to_dict()
+        item['username'] = owner.username or ''
+        item['real_name'] = owner.real_name or ''
+        item['user_status'] = _user_status(owner)
+        return _ok(item, '已添加')
+    except Exception as exc:
+        db.session.rollback()
+        return _fail(f'添加失败: {exc}', 500)
+
+
+@mf_bp.route('/api/monthly-forecast/scope/item/<int:item_id>', methods=['DELETE'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_delete_scope_item(item_id):
+    """移除一条归属（只删名单行，不动账号与填报数据）"""
+    user = get_current_user()
+    if not _is_management(user):
+        return _fail('无权限修改名单', 403)
+    from models import db
+    from monthly_forecast.models import UserScope
+    try:
+        row = UserScope.query.get(item_id)
+        if not row:
+            return _fail('归属不存在', 404)
+        db.session.delete(row)
+        db.session.commit()
+        return _ok({'id': item_id}, '已移除')
+    except Exception as exc:
+        db.session.rollback()
+        return _fail(f'移除失败: {exc}', 500)
+
+
+@mf_bp.route('/api/monthly-forecast/scope/cleanup', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_cleanup_scope():
+    """清理「账号已不存在」的无效归属"""
+    user = get_current_user()
+    if not _is_management(user):
+        return _fail('无权限修改名单', 403)
+    from models import db, User
+    from monthly_forecast.models import UserScope
+    try:
+        valid_ids = {uid for (uid,) in db.session.query(User.id).all()}
+        orphans = [row for row in UserScope.query.all()
+                   if row.user_id is None or row.user_id not in valid_ids]
+        for row in orphans:
+            db.session.delete(row)
+        if orphans:
+            db.session.commit()
+        return _ok({'removed': len(orphans)}, f'已清理 {len(orphans)} 条无效归属')
+    except Exception as exc:
+        db.session.rollback()
+        return _fail(f'清理失败: {exc}', 500)
