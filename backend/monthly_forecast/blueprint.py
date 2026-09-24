@@ -183,11 +183,14 @@ def api_submissions():
 @permission_required(PERMISSION)
 def api_candidates():
     user = get_current_user()
+    month = _resolve_month()
+    if not month:
+        return _fail('月份格式不正确，应为 YYYY-MM')
     module, error = _resolve_target_module(user, request.args.get('module'))
     if error:
         return error
     try:
-        return _ok(svc.list_candidates(module, request.args.get('q')))
+        return _ok(svc.list_candidates(module, month, request.args.get('q')))
     except Exception as exc:
         return _fail(f'读取候选池失败: {exc}', 500)
 

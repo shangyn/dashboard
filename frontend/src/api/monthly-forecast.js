@@ -16,8 +16,8 @@ export function submitEntry(payload) {
   return request.post('/api/monthly-forecast/entry/submit', payload)
 }
 
-export function getCandidates(module, q) {
-  return request.get('/api/monthly-forecast/candidates', { params: { module, q } })
+export function getCandidates(module, month, q) {
+  return request.get('/api/monthly-forecast/candidates', { params: { module, month, q } })
 }
 
 export function validateLadder(payload) {

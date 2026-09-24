@@ -118,8 +118,16 @@ def _date_str(value):
     return value.strftime('%Y-%m-%d') if value else ''
 
 
-def list_candidates(module_name, keyword=None):
+def _ship_within_month(value, data_month):
+    """整梯发货日期（台账 AV 列）是否不晚于填报月份；None = 未确定，保留"""
+    if value is None:
+        return True
+    return value.strftime('%Y-%m') <= data_month
+
+
+def list_candidates(module_name, data_month=None, keyword=None):
     """发货候选池：组A日期为空 + 排产日期不为空 + 未作废 + 台账来源
+    额外：整梯发货日期（台账 AV 列）晚于填报月份的梯号不进候选（空值保留）
     排序：排产日期倒序（日期近的在前），同日按合同号 / 梯号升序
     """
     contracts = LedgerContract.query.filter(
@@ -131,6 +139,10 @@ def list_candidates(module_name, keyword=None):
 
     module_map = load_module_map()
     rows = [c for c in contracts if resolve_module(c, module_map) == module_name]
+
+    # 整梯发货日期（AV）不得晚于填报月份；与 delivery_date（AZ 组A日期）无关
+    if data_month:
+        rows = [c for c in rows if _ship_within_month(c.whole_ship_date, data_month)]
 
     # 稳定排序：先按合同号 / 梯号升序，再按排产日期倒序
     rows.sort(key=lambda c: (c.contract_no or '', c.ladder_no or ''))
@@ -150,6 +162,7 @@ def list_candidates(module_name, keyword=None):
         'unit_count': c.unit_count or 0,
         'amount_wan': round((c.contract_amount_rmb or 0) / 10000.0, 2),
         'schedule_date': _date_str(c.schedule_date),
+        'whole_ship_date': _date_str(c.whole_ship_date),
         'product_status': c.product_status or '',
     } for c in rows]
 

@@ -344,7 +344,7 @@ function applyEntry(data) {
 }
 
 async function loadCandidates() {
-  const res = await getCandidates(moduleName.value)
+  const res = await getCandidates(moduleName.value, month.value)
   candidates.value = res.data || []
   page.value = 1
 }

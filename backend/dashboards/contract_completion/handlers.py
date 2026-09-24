@@ -119,6 +119,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
         col_sign_date = header_map.get('签订日期')
         col_schedule_date = header_map.get('排产日期')
         col_delivery_date = _h('组A日期', '实际发货日期', '实际发运日期')
+        col_whole_ship_date = _h('整梯发货日期')
 
         # 所有需要读取的列 → (Excel列号, 模型字段, 类型)
         # 支持两种表头命名（不同版本台账可能不同）
@@ -170,6 +171,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
             sd = _safe_date_openpyxl(row[col_sign_date - 1]) if col_sign_date else None
             scd = _safe_date_openpyxl(row[col_schedule_date - 1]) if col_schedule_date else None
             dd = _safe_date_openpyxl(row[col_delivery_date - 1]) if col_delivery_date else None
+            wd = _safe_date_openpyxl(row[col_whole_ship_date - 1]) if col_whole_ship_date else None
 
             # 三个日期都 < 2025 则跳过
             if not ((sd and sd >= CUTOFF_DATE) or (scd and scd >= CUTOFF_DATE) or (dd and dd >= CUTOFF_DATE)):
@@ -181,7 +183,8 @@ def parse_ledger_contracts(file_path: str) -> dict:
             if not cn:
                 continue
 
-            row_data = {'source': 'ledger', 'sign_date': sd, 'schedule_date': scd, 'delivery_date': dd}
+            row_data = {'source': 'ledger', 'sign_date': sd, 'schedule_date': scd, 'delivery_date': dd,
+                        'whole_ship_date': wd}
 
             for col_idx, field_name, ftype in col_field_map:
                 if col_idx is None:
