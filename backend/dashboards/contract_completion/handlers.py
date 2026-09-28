@@ -118,6 +118,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
         col_contract_no = _h('合同编号', '合同号')
         col_sign_date = header_map.get('签订日期')
         col_schedule_date = header_map.get('排产日期')
+        col_schedule_finish_date = header_map.get('排产完工日期')
         col_delivery_date = _h('组A日期', '实际发货日期', '实际发运日期')
         col_whole_ship_date = _h('整梯发货日期')
 
@@ -148,6 +149,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
         date_cols = [
             ('sign_date',      header_map.get('签订日期')),
             ('schedule_date',  header_map.get('排产日期')),
+            ('schedule_finish_date', header_map.get('排产完工日期')),
             ('delivery_date',  _h('组A日期', '实际发货日期', '实际发运日期')),
         ]
         # 层站门
@@ -170,6 +172,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
             # 快速日期预检
             sd = _safe_date_openpyxl(row[col_sign_date - 1]) if col_sign_date else None
             scd = _safe_date_openpyxl(row[col_schedule_date - 1]) if col_schedule_date else None
+            sfd = _safe_date_openpyxl(row[col_schedule_finish_date - 1]) if col_schedule_finish_date else None
             dd = _safe_date_openpyxl(row[col_delivery_date - 1]) if col_delivery_date else None
             wd = _safe_date_openpyxl(row[col_whole_ship_date - 1]) if col_whole_ship_date else None
 
@@ -184,7 +187,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
                 continue
 
             row_data = {'source': 'ledger', 'sign_date': sd, 'schedule_date': scd, 'delivery_date': dd,
-                        'whole_ship_date': wd}
+                        'whole_ship_date': wd, 'schedule_finish_date': sfd}
 
             for col_idx, field_name, ftype in col_field_map:
                 if col_idx is None:

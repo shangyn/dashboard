@@ -162,6 +162,7 @@ def list_candidates(module_name, data_month=None, keyword=None):
         'unit_count': c.unit_count or 0,
         'amount_wan': round((c.contract_amount_rmb or 0) / 10000.0, 2),
         'schedule_date': _date_str(c.schedule_date),
+        'schedule_finish_date': _date_str(c.schedule_finish_date),
         'whole_ship_date': _date_str(c.whole_ship_date),
         'product_status': c.product_status or '',
     } for c in rows]
@@ -260,6 +261,7 @@ def validate_ladder(module_name, data_month, ladder_no):
         'unit_count': contract.unit_count or 0,
         'amount_wan': round((contract.contract_amount_rmb or 0) / 10000.0, 2),
         'schedule_date': _date_str(contract.schedule_date),
+        'schedule_finish_date': _date_str(contract.schedule_finish_date),
         'is_manual': True,
     }, 'suggestions': []}
 
@@ -279,6 +281,7 @@ def _enrich_ship_rows(ships):
         contract = contracts.get(s.ladder_no)
         row['project_name'] = (contract.project_name or '') if contract else ''
         row['schedule_date'] = _date_str(contract.schedule_date) if contract else ''
+        row['schedule_finish_date'] = _date_str(contract.schedule_finish_date) if contract else ''
         result.append(row)
     return result
 

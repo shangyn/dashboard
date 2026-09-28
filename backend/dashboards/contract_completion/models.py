@@ -34,6 +34,7 @@ class LedgerContract(db.Model):
     agent = db.Column(db.String(200))                                     # 代理商
     sign_date = db.Column(db.Date, index=True)                            # 签订日期 (col23)
     schedule_date = db.Column(db.Date, index=True)                        # 排产日期 (col42)
+    schedule_finish_date = db.Column(db.Date, index=True)                 # 排产完工日期 (col43 AQ)
     delivery_date = db.Column(db.Date, index=True)                        # 发货日期 (col51 实际发运日期)
     whole_ship_date = db.Column(db.Date, index=True)                      # 整梯发货日期 (col48 AV)
     product_status = db.Column(db.String(50))                             # 产品状态

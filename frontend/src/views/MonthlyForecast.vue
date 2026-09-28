@@ -130,6 +130,7 @@
           <el-table-column prop="unit_count" label="台数" width="70" align="right" />
           <el-table-column prop="amount_wan" label="金额(万元)" width="110" align="right" />
           <el-table-column prop="schedule_date" label="排产日期" width="110" align="center" />
+          <el-table-column prop="schedule_finish_date" label="排产完工日期" width="110" align="center" />
           <el-table-column label="来源" width="90" align="center">
             <template #default="{ row }">
               <span v-if="selections[row.ladder_no] && selections[row.ladder_no].is_manual" class="mf-tag-manual">
@@ -168,6 +169,7 @@
           <el-table-column prop="unit_count" label="台数" width="70" align="right" />
           <el-table-column prop="amount_wan" label="金额(万元)" width="110" align="right" />
           <el-table-column prop="schedule_date" label="排产日期" width="110" align="center" />
+          <el-table-column prop="schedule_finish_date" label="排产完工日期" width="110" align="center" />
         </el-table>
       </div>
     </div>
