@@ -29,6 +29,11 @@ class MonthlyInput(db.Model):
     prod_amount = db.Column(db.Float, default=0.0)                          # 排产金额（万元）
     ship_manual_units = db.Column(db.Float, default=0.0)                    # 无梯号发货预估：台数（手填）
     ship_manual_amount = db.Column(db.Float, default=0.0)                   # 无梯号发货预估：金额（万元，手填）
+    payment_amount = db.Column(db.Float, default=0.0)                       # 月回款额（万元，手填）
+    commission_amount = db.Column(db.Float, default=0.0)                    # 支付佣金（万元，手填）
+    install_amount = db.Column(db.Float, default=0.0)                       # 支付安装费（万元，手填）
+    travel_amount = db.Column(db.Float, default=0.0)                        # 差旅、招待费（万元，手填）
+    other_expense_amount = db.Column(db.Float, default=0.0)                 # 其他费用支出计划（万元，手填）
     status = db.Column(db.String(20), default='draft')                      # draft / submitted
     submitted_at = db.Column(db.DateTime, nullable=True)
     updated_by = db.Column(db.Integer, nullable=True)                       # user.id（不建外键，避免耦合既有表）
@@ -45,6 +50,11 @@ class MonthlyInput(db.Model):
             'prod_amount': self.prod_amount or 0.0,
             'ship_manual_units': self.ship_manual_units or 0.0,
             'ship_manual_amount': self.ship_manual_amount or 0.0,
+            'payment_amount': self.payment_amount or 0.0,
+            'commission_amount': self.commission_amount or 0.0,
+            'install_amount': self.install_amount or 0.0,
+            'travel_amount': self.travel_amount or 0.0,
+            'other_expense_amount': self.other_expense_amount or 0.0,
             'status': self.status or 'draft',
             'submitted_at': self.submitted_at.strftime('%Y-%m-%d %H:%M:%S') if self.submitted_at else '',
             'updated_by_name': self.updated_by_name or '',

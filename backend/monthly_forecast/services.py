@@ -321,6 +321,8 @@ def get_entry(data_month, module_name):
         'data_month': data_month, 'module_name': module_name,
         'sign_units': 0.0, 'sign_amount': 0.0, 'prod_units': 0.0, 'prod_amount': 0.0,
         'ship_manual_units': 0.0, 'ship_manual_amount': 0.0,
+        'payment_amount': 0.0, 'commission_amount': 0.0, 'install_amount': 0.0,
+        'travel_amount': 0.0, 'other_expense_amount': 0.0,
         'status': 'draft', 'submitted_at': '', 'updated_by_name': '', 'updated_at': '',
     }
     base['ship_units'] = ship_units
@@ -360,6 +362,11 @@ def save_draft(data_month, module_name, payload, user):
     record.prod_amount = _to_float(payload.get('prod_amount'))
     record.ship_manual_units = _to_float(payload.get('ship_manual_units'))
     record.ship_manual_amount = _to_float(payload.get('ship_manual_amount'))
+    record.payment_amount = _to_float(payload.get('payment_amount'))
+    record.commission_amount = _to_float(payload.get('commission_amount'))
+    record.install_amount = _to_float(payload.get('install_amount'))
+    record.travel_amount = _to_float(payload.get('travel_amount'))
+    record.other_expense_amount = _to_float(payload.get('other_expense_amount'))
     record.updated_by = getattr(user, 'id', None)
     record.updated_by_name = getattr(user, 'real_name', '') or getattr(user, 'username', '') or ''
     record.updated_at = datetime.now()
@@ -449,6 +456,11 @@ def submit(data_month, module_name, payload, user):
             'ship_units': entry['ship_units'], 'ship_amount': entry['ship_amount'],
             'ship_manual_units': entry.get('ship_manual_units', 0.0),
             'ship_manual_amount': entry.get('ship_manual_amount', 0.0),
+            'payment_amount': entry.get('payment_amount', 0.0),
+            'commission_amount': entry.get('commission_amount', 0.0),
+            'install_amount': entry.get('install_amount', 0.0),
+            'travel_amount': entry.get('travel_amount', 0.0),
+            'other_expense_amount': entry.get('other_expense_amount', 0.0),
             'ship_selections': entry['ship_selections'],
         }, ensure_ascii=False),
         sign_units=entry['sign_units'], sign_amount=entry['sign_amount'],
@@ -475,11 +487,13 @@ def list_submissions(data_month, module_name):
 
 # 汇总
 
-METRIC_KEYS = ('sign_units', 'sign_amount', 'prod_units', 'prod_amount', 'ship_units', 'ship_amount')
+METRIC_KEYS = ('sign_units', 'sign_amount', 'prod_units', 'prod_amount', 'ship_units', 'ship_amount',
+               'payment_amount', 'commission_amount', 'install_amount',
+               'travel_amount', 'other_expense_amount')
 
 
 def _module_row(data_month, module_name):
-    """单个模块的签排发 6 列"""
+    """单个模块的签排发 6 列 + 回款/费用 5 列"""
     record = MonthlyInput.query.filter_by(
         data_month=data_month, module_name=module_name
     ).first()
@@ -497,6 +511,11 @@ def _module_row(data_month, module_name):
         'prod_amount': (record.prod_amount if record else 0.0) or 0.0,
         'ship_units': ship_units,
         'ship_amount': ship_amount,
+        'payment_amount': (record.payment_amount if record else 0.0) or 0.0,
+        'commission_amount': (record.commission_amount if record else 0.0) or 0.0,
+        'install_amount': (record.install_amount if record else 0.0) or 0.0,
+        'travel_amount': (record.travel_amount if record else 0.0) or 0.0,
+        'other_expense_amount': (record.other_expense_amount if record else 0.0) or 0.0,
         'status': (record.status if record else '') or '',
         'updated_by_name': (record.updated_by_name if record else '') or '',
         'updated_at': record.updated_at.strftime('%Y-%m-%d %H:%M:%S') if record and record.updated_at else '',
@@ -504,7 +523,7 @@ def _module_row(data_month, module_name):
 
 
 def get_summary(data_month, modules=None):
-    """汇总：全部（或指定）模块的签排发 6 列 + 合计行"""
+    """汇总：全部（或指定）模块的签排发 6 列 + 回款/费用 5 列 + 合计行"""
     module_list = list(modules) if modules else all_modules()
     rows = [_module_row(data_month, m) for m in module_list]
 
@@ -520,7 +539,9 @@ def get_summary(data_month, modules=None):
 
 # 导出
 
-FORECAST_HEADERS = ['模块', '签单台数', '签单金额(万元)', '排产台数', '排产金额(万元)', '发货台数', '发货金额(万元)']
+FORECAST_HEADERS = ['模块', '签单台数', '签单金额(万元)', '排产台数', '排产金额(万元)', '发货台数', '发货金额(万元)',
+                    '月回款额(万元)', '支付佣金(万元)', '支付安装费(万元)',
+                    '差旅、招待费(万元)', '其他费用支出计划(万元)']
 SHIPPING_HEADERS = ['模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人']
 
 
@@ -565,6 +586,8 @@ def export_forecast(data_month, modules=None):
             row['sign_units'], row['sign_amount'],
             row['prod_units'], row['prod_amount'],
             row['ship_units'], row['ship_amount'],
+            row['payment_amount'], row['commission_amount'], row['install_amount'],
+            row['travel_amount'], row['other_expense_amount'],
         ])
 
     total = summary['total']
@@ -573,10 +596,12 @@ def export_forecast(data_month, modules=None):
         total['sign_units'], total['sign_amount'],
         total['prod_units'], total['prod_amount'],
         total['ship_units'], total['ship_amount'],
+        total['payment_amount'], total['commission_amount'], total['install_amount'],
+        total['travel_amount'], total['other_expense_amount'],
     ])
 
     _style_header(ws, len(FORECAST_HEADERS))
-    _set_widths(ws, [24, 12, 16, 12, 16, 12, 16])
+    _set_widths(ws, [24, 12, 16, 12, 16, 12, 16, 14, 14, 14, 14, 18])
 
     path = os.path.join(tempfile.gettempdir(), 'mf_forecast_' + data_month + '.xlsx')
     wb.save(path)

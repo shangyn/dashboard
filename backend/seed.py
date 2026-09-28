@@ -56,6 +56,16 @@ def seed_database(app):
                 conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN ship_manual_units FLOAT DEFAULT 0'))
             if 'ship_manual_amount' not in mf_cols:
                 conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN ship_manual_amount FLOAT DEFAULT 0'))
+            if 'payment_amount' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN payment_amount FLOAT DEFAULT 0'))
+            if 'commission_amount' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN commission_amount FLOAT DEFAULT 0'))
+            if 'install_amount' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN install_amount FLOAT DEFAULT 0'))
+            if 'travel_amount' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN travel_amount FLOAT DEFAULT 0'))
+            if 'other_expense_amount' not in mf_cols:
+                conn.execute(text('ALTER TABLE mf_monthly_input ADD COLUMN other_expense_amount FLOAT DEFAULT 0'))
             conn.commit()
 
         # 数据架构迁移：停用重复的上传配置，新增预算上传入口

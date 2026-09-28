@@ -88,6 +88,29 @@
             已选 {{ selectedCount }} 个梯号（{{ ladderUnits }} 台 / {{ ladderAmount }} 万元）＋ 无梯号预估 {{ manualUnits }} 台 / {{ manualAmount }} 万元
           </div>
         </div>
+        <div class="mf-card">
+          <div class="mf-card-title">回款与费用预计（万元）</div>
+          <div class="mf-field">
+            <span>月回款额</span>
+            <el-input-number v-model="form.payment_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-field">
+            <span>支付佣金</span>
+            <el-input-number v-model="form.commission_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-field">
+            <span>支付安装费</span>
+            <el-input-number v-model="form.install_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-field">
+            <span>差旅、招待费</span>
+            <el-input-number v-model="form.travel_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-field">
+            <span>其他费用支出计划</span>
+            <el-input-number v-model="form.other_expense_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+        </div>
       </div>
 
       <div class="mf-panel">
@@ -189,6 +212,11 @@
           <el-table-column prop="prod_amount" label="排产金额(万元)" width="130" align="right" />
           <el-table-column prop="ship_units" label="发货台数" width="100" align="right" />
           <el-table-column prop="ship_amount" label="发货金额(万元)" width="130" align="right" />
+          <el-table-column prop="payment_amount" label="月回款额(万元)" width="120" align="right" />
+          <el-table-column prop="commission_amount" label="支付佣金(万元)" width="120" align="right" />
+          <el-table-column prop="install_amount" label="支付安装费(万元)" width="130" align="right" />
+          <el-table-column prop="travel_amount" label="差旅、招待费(万元)" width="140" align="right" />
+          <el-table-column prop="other_expense_amount" label="其他费用支出计划(万元)" width="170" align="right" />
           <el-table-column label="状态" width="90" align="center">
             <template #default="{ row }">
               <span v-if="row.status === 'submitted'" class="mf-tag-picked">已提交</span>
@@ -254,6 +282,8 @@ const statusText = ref('')
 const form = ref({
   sign_units: 0, sign_amount: 0, prod_units: 0, prod_amount: 0,
   ship_manual_units: 0, ship_manual_amount: 0,
+  payment_amount: 0, commission_amount: 0, install_amount: 0,
+  travel_amount: 0, other_expense_amount: 0,
 })
 const candidates = ref([])
 // 已选发货梯号的唯一数据源：{ 梯号: 行数据(含 is_manual) }
@@ -328,6 +358,11 @@ function applyEntry(data) {
     prod_amount: data.prod_amount || 0,
     ship_manual_units: data.ship_manual_units || 0,
     ship_manual_amount: data.ship_manual_amount || 0,
+    payment_amount: data.payment_amount || 0,
+    commission_amount: data.commission_amount || 0,
+    install_amount: data.install_amount || 0,
+    travel_amount: data.travel_amount || 0,
+    other_expense_amount: data.other_expense_amount || 0,
   }
   const map = {}
   for (const row of data.ship_selections || []) {
@@ -420,6 +455,11 @@ function buildPayload() {
     prod_amount: form.value.prod_amount,
     ship_manual_units: form.value.ship_manual_units,
     ship_manual_amount: form.value.ship_manual_amount,
+    payment_amount: form.value.payment_amount,
+    commission_amount: form.value.commission_amount,
+    install_amount: form.value.install_amount,
+    travel_amount: form.value.travel_amount,
+    other_expense_amount: form.value.other_expense_amount,
     ship_selections: Object.values(selections.value).map((row) => ({
       ladder_no: row.ladder_no,
       is_manual: !!row.is_manual,
