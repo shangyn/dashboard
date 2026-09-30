@@ -1039,6 +1039,29 @@ def get_two_year_comparison(include_personal=False):
         if _sd.module_name == '改造':
             gaizao_true_units['ship_units_prev'] += int(_sd.ship_units or 0)
 
+    # ── 注入商贸模块汇总数据（从商贸数据.xlsx上传，两年） ──
+    from dashboards.contract_completion.models import TradeModuleData
+
+    def _inject_trade_data(year, suffix):
+        """注入指定年份的商贸模块数据到聚合表
+        仅覆盖非零字段，避免配件-1/2的payment-only记录覆盖合同级签单/排产/发货数据
+        """
+        for td in TradeModuleData.query.filter_by(data_year=year).all():
+            tmod = td.module_name
+            if tmod in MODULE_REGION:
+                d = _ensure(MODULE_REGION[tmod], tmod)
+                if td.sign_amount:
+                    d[f'sign_amount_{suffix}'] = td.sign_amount
+                if td.schedule_amount:
+                    d[f'schedule_amount_{suffix}'] = td.schedule_amount
+                if td.ship_amount:
+                    d[f'ship_amount_{suffix}'] = td.ship_amount
+                if td.payment_amount:
+                    d[f'payment_{suffix}'] = td.payment_amount
+
+    _inject_trade_data(year_prev, 'prev')
+    _inject_trade_data(year_curr, 'curr')
+
     # 大区排序
     region_order = list(REGION_ORDER)
 
@@ -1076,28 +1099,6 @@ def get_two_year_comparison(include_personal=False):
         rows.append(_make_row('subtotal', current_region,
                               f'{current_region}合计', subtotals[current_region]))
 
-    # ── 注入商贸模块汇总数据（从商贸数据.xlsx上传，两年） ──
-    from dashboards.contract_completion.models import TradeModuleData
-
-    def _inject_trade_data(year, suffix):
-        """注入指定年份的商贸模块数据到聚合表
-        仅覆盖非零字段，避免配件-1/2的payment-only记录覆盖合同级签单/排产/发货数据
-        """
-        for td in TradeModuleData.query.filter_by(data_year=year).all():
-            tmod = td.module_name
-            if tmod in MODULE_REGION:
-                d = _ensure(MODULE_REGION[tmod], tmod)
-                if td.sign_amount:
-                    d[f'sign_amount_{suffix}'] = td.sign_amount
-                if td.schedule_amount:
-                    d[f'schedule_amount_{suffix}'] = td.schedule_amount
-                if td.ship_amount:
-                    d[f'ship_amount_{suffix}'] = td.ship_amount
-                if td.payment_amount:
-                    d[f'payment_{suffix}'] = td.payment_amount
-
-    _inject_trade_data(year_prev, 'prev')
-    _inject_trade_data(year_curr, 'curr')
 
     # ── 国际总计（聚合原始数据，避免万元重复转换） ──
     grand_raw = {}
