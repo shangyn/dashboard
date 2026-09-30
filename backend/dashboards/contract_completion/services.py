@@ -43,8 +43,12 @@ def invalidate_two_year_cache():
 
 
 # ── 常量 ──────────────────────────────────────────────────
+# 大区 / 模块 / 类别 / 年度指标集中在 constants.py（2026-09-30 大区重构）
 
-REGION_ORDER = ['俄罗斯', '中亚', '亚洲1', '亚洲2', '美洲', '中东', '非洲', '欧洲', '商贸合计']
+from dashboards.contract_completion.constants import (  # noqa: E402,F401
+    REGION_ORDER, REGION_DISPLAY, MODULE_REGION,
+    CATEGORY_MAP, PERSON_MAP, ANNUAL_TARGETS, TRADE_MODULES_ORDER,
+)
 
 METRIC_CONFIG = [
     {"id": "sign_units",      "name": "年签单台",   "unit": "台",   "type": "count"},
@@ -66,8 +70,6 @@ RATIO_CONFIG = {
     "schedule_amount": "schedule_amount",
 }
 
-TRADE_MODULES = ['商贸1', '商贸2', '商贸3', '配件-1', '配件-2', '改造']
-
 
 # ── 工具函数 ──────────────────────────────────────────────
 
@@ -78,6 +80,14 @@ def _to_wan(val):
     return round(float(val) / 10000, 2)
 
 
+def _norm_target(val, metric_type):
+    """年度指标展示值：金额(万元)保留2位，台数取整"""
+    if val is None:
+        return 0
+    val = float(val)
+    return round(val, 2) if metric_type == 'amount' else round(val, 0)
+
+
 def _safe_ratio(numerator, denominator):
     """安全除法"""
     if not denominator or abs(denominator) < 0.001:
@@ -85,11 +95,23 @@ def _safe_ratio(numerator, denominator):
     return round(float(numerator) / float(denominator), 4)
 
 
+# 改造梯统一归属的大区（配件-1/2/3/4、改造 → 陈 = 大区1）
+_GAIZAO_REGION = MODULE_REGION.get('改造', '')
+
+
+def _normalize_region(region, module):
+    """大区名归一化：源表写法（陈/刘）→展示名；历史口径（如 '商贸合计'）按模块回落"""
+    region = REGION_DISPLAY.get(region, region)
+    if region in REGION_ORDER:
+        return region
+    return MODULE_REGION.get(module or '', region or '')
+
+
 def _load_mapping():
     """加载国家映射表 → {country: {region, module, manager, salesperson}}"""
     mappings = CountryMapping.query.all()
     return {m.country: {
-        'region': '商贸合计' if m.region == '商贸配件' else m.region,
+        'region': m.region,
         'module': m.module_name,
         'manager': m.module_manager, 'salesperson': m.salesperson,
     } for m in mappings}
@@ -110,10 +132,11 @@ def _load_targets(year, region_only=True):
 
 def _resolve_contract(c, mapping, unmatched_list):
     """解析合同 → (region, module, manager, salesperson) 或加入unmatched"""
-    # 商贸来源的行已经有 mapped_region 和 mapped_module
+    # 报表a/b 的行在上传时已写入 mapped_region/mapped_module，直接使用
     if c.source in ('report_a', 'report_b'):
-        return (c.mapped_region or '商贸合计', c.mapped_module or '',
-                '', '')
+        module = c.mapped_module or ''
+        region = _normalize_region(c.mapped_region or '', module)
+        return (region, module, '', '')
 
     country = c.country
     if not country:
@@ -129,13 +152,10 @@ def _resolve_contract(c, mapping, unmatched_list):
 
     region = cm['region']
     module = cm['module']
-    # "商贸配件"大区归一化到"商贸合计"
-    if region == '商贸配件':
-        region = '商贸合计'
-    # 产品型号含"改造" → 强制模块="改造"
+    # 产品型号含"改造" → 强制模块="改造"，大区取改造所属大区
     if c.product_type and '改造' in str(c.product_type):
         module = '改造'
-        region = '商贸合计'
+        region = _GAIZAO_REGION or region
 
     return (region, module, cm['manager'], cm['salesperson'])
 
@@ -262,7 +282,9 @@ def _compute_aggregations(year, mapping, unmatched_list):
             if cm:
                 contract_lookup[c.contract_no] = (cm['region'], cm['module'], cm['salesperson'])
             elif c.mapped_region:
-                contract_lookup[c.contract_no] = (c.mapped_region, c.mapped_module or '', '')
+                contract_lookup[c.contract_no] = (
+                    _normalize_region(c.mapped_region, c.mapped_module or ''),
+                    c.mapped_module or '', '')
 
     for p in payments:
         info = contract_lookup.get(p.contract_no)
@@ -300,13 +322,12 @@ def _build_region_summary(region_data, targets, year):
         entry = {'region': region, 'metrics': {}}
         for m in METRIC_CONFIG:
             mk = m['id']
-            t_val = targets.get((region, '', mk), 0)
+            # 指标（cc_annual_target）金额单位即为万元；实际值由元转万元
+            t_val = _norm_target(targets.get((region, '', mk), 0), m['type'])
             a_val = rd.get(mk, 0)
             if m['type'] == 'amount':
-                t_val = _to_wan(t_val)
                 a_val = _to_wan(a_val)
             else:
-                t_val = round(t_val, 0)
                 a_val = round(a_val, 0)
             ratio = _safe_ratio(a_val, t_val)
             entry['metrics'][mk] = {'target': t_val, 'actual': a_val, 'ratio': ratio}
@@ -378,13 +399,12 @@ def _build_module_detail(module_data, targets, region_filter):
         }
         for m in METRIC_CONFIG:
             mk = m['id']
-            t_val = targets.get((md['region'], md['module'], mk), 0)
+            # 指标（cc_annual_target）金额单位即为万元；实际值由元转万元
+            t_val = _norm_target(targets.get((md['region'], md['module'], mk), 0), m['type'])
             a_val = md.get(mk, 0)
             if m['type'] == 'amount':
-                t_val = _to_wan(t_val)
                 a_val = _to_wan(a_val)
             else:
-                t_val = round(t_val, 0)
                 a_val = round(a_val, 0)
             ratio = _safe_ratio(a_val, t_val)
             entry['metrics'][mk] = {'target': t_val, 'actual': a_val, 'ratio': ratio}
@@ -650,45 +670,6 @@ TWO_YEAR_GROUPS = [
     {"id": "payment_total",   "name": "回款额",         "has_growth": True},
 ]
 
-# 贸易模块顺序
-TRADE_MODULES_ORDER = ['商贸1', '商贸2', '商贸3', '配件-1', '配件-2', '改造']
-
-# 模块→市场类别 映射（匹配映射表实际模块名 → 模板类别）
-CATEGORY_MAP = {
-    # 俄罗斯（映射表用全角括号）
-    '俄罗斯（中部）': 'A', '俄罗斯（西部）': 'A', '俄罗斯（东部）': 'A', '罗斯托夫': 'A', '哈巴': 'A',
-    '俄罗斯（中南）': 'B', '俄罗斯（西南）': 'B',
-    '莫斯科': 'C', '叶卡': 'C', '新西': 'C',
-    # 兼容旧名
-    '俄罗斯中央部门': 'A', '俄罗斯新阿尔巴特': 'A', '俄罗斯东部': 'A',
-    # 中亚
-    '哈萨克斯坦-1': 'A', '塔吉克/哈萨克斯坦-2': 'B', '哈萨克斯坦-3': 'C',
-    '乌兹别克斯坦': 'D', '吉尔吉斯斯坦': 'D', '阿塞拜疆': 'C', '格鲁吉亚': 'D', '蒙古': 'C',
-    # 亚洲1
-    '朝鲜-韩国': 'D', '新加坡市政会': 'A', '新加坡HDB': 'A',
-    '泰国': 'D', '泰国2': 'D', '金三角': 'D',
-    '马来西亚': 'B', '马尔代夫': 'D', '香港-台湾': 'D',
-    # 亚洲2
-    '越南-2': 'C', '印度公建': 'B', '巴基斯坦': 'D',
-    '孟加拉-1': 'B', '澳大利亚': 'C', '菲律宾': 'C', '菲律宾-2': 'C',
-    '印尼-1': 'C', '印尼-2': 'C', '越南-1（工厂）': 'B', '印度私营': 'A',
-    # 美洲
-    '墨西哥-1': 'A', '墨西哥-2': 'A', '秘鲁': 'C', '智利': 'C',
-    '加勒比海': 'A', '多米尼加': 'C', '哥伦比亚': 'A',
-    '秘鲁2': 'D', '巴西': 'D',
-    # 中东
-    '阿联酋-2': 'B', '沙特工厂': 'A', '沙特-1': 'A',
-    '科威特': 'C', '阿联酋-1': 'A', '卡塔尔': 'C',
-    '伊拉克': 'D', '巴勒斯坦': 'C', '伊朗+阿曼': 'D', '阿联酋3': 'C',
-    # 非洲
-    '埃及-1': 'A', '埃及-2': 'D', '肯尼亚/坦桑尼亚': 'C',
-    '尼日利亚/埃塞俄比亚': 'C', '非洲法语区': 'D', '南非/安格拉': 'D',
-    # 欧洲
-    '德国西班牙': 'D', '东欧': 'D', '英国意大利': 'D',
-    # 商贸
-    '商贸1': '', '商贸2': '', '商贸3': '', '配件-1': '', '配件-2': '', '改造': '',
-}
-
 # AZT合同 → 模块映射（台账中不存在的合同，回款通过此映射归入对应模块）
 # 来源：安装合同台账.xlsx（2026-09-22 版），去梯号后缀 /N# 聚合到合同编号
 AZT_MODULE_MAP = {
@@ -720,7 +701,7 @@ def _get_category(module_name):
 def get_two_year_comparison(include_personal=False):
     """
     两年对比表 — 严格按照模板 Sheet 3 格式
-    include_personal: 为 True 时，额外把报表a签单/排产额按人名归属到 8 大区模块
+    include_personal: 为 True 时，额外把报表a签单/排产额按人名归属到各大区模块
     日期动态计算：当年1月1日~今日，去年1月1日~去年同日
     行结构：以国家映射表为准，按大区→模块分组，含小计行、商贸行、国际总计
 
@@ -753,25 +734,17 @@ def get_two_year_comparison(include_personal=False):
         LedgerContract.source == 'ledger'
     ).all():
         if c.contract_no and c.country:
-            # 改造梯回款归入商贸合计/改造（与签约/排产/发货逻辑一致）
+            # 改造梯回款归入「改造」模块所属大区（与签约/排产/发货逻辑一致）
             if c.product_type and '改造' in str(c.product_type):
-                contract_map[c.contract_no] = ('商贸合计', '改造')
+                contract_map[c.contract_no] = (_GAIZAO_REGION, '改造')
             else:
                 cm = mapping.get(c.country)
                 if cm:
                     contract_map[c.contract_no] = (cm['region'], cm['module'])
 
     # 补充 AZT 合同映射（这些合同台账中不存在，通过固定映射归入模块）
-    _azt_region_cache = {}
     for azt_cn, azt_module in AZT_MODULE_MAP.items():
-        if azt_module not in _azt_region_cache:
-            for cm in mapping.values():
-                if cm['module'] == azt_module:
-                    _azt_region_cache[azt_module] = cm['region']
-                    break
-            else:
-                _azt_region_cache[azt_module] = None
-        region = _azt_region_cache[azt_module]
+        region = MODULE_REGION.get(azt_module)
         if region:
             contract_map[azt_cn] = (region, azt_module)
 
@@ -808,16 +781,8 @@ def get_two_year_comparison(include_personal=False):
         if key not in seen_modules:
             seen_modules.add(key)
             agg[key] = _new_entry(r, m)
-    # 商贸模块也预填充
-    for tm in TRADE_MODULES_ORDER:
-        key = ('商贸合计', tm)
-        if key not in seen_modules:
-            seen_modules.add(key)
-            agg[key] = _new_entry('商贸合计', tm)
-    # 年度指标中有但映射表中没有的模块也预填充（如德国西班牙），确保即使无合同数据也展示
+    # 年度指标中的全部模块预填充（含无国家绑定的商贸/配件/新模块），确保即使无合同数据也展示
     for (region, module), targets in ANNUAL_TARGETS.items():
-        if region in ('商贸配件',):
-            continue  # 商贸配件的指标映射到商贸合计
         key = (region, module)
         if key not in seen_modules:
             seen_modules.add(key)
@@ -836,16 +801,16 @@ def get_two_year_comparison(include_personal=False):
     ).all():
         # 确定 region / module
         if c.source in ('report_a', 'report_b'):
-            region = c.mapped_region or '商贸合计'
             module = c.mapped_module or ''
+            region = _normalize_region(c.mapped_region or '', module)
         elif c.country and c.country in mapping:
             cm = mapping[c.country]
             region = cm['region']
             module = cm['module']
-            # 改造强制归入商贸合计
+            # 改造强制归入「改造」模块所属大区
             if c.product_type and '改造' in str(c.product_type):
-                region = '商贸合计'
                 module = '改造'
+                region = _GAIZAO_REGION
         else:
             continue  # 未匹配的跳过
 
@@ -895,9 +860,11 @@ def get_two_year_comparison(include_personal=False):
                 if is_true_gaizao:
                     gaizao_true_units['ship_units_curr'] += c.unit_count or 0
 
-        # 报表a个人业绩：额外按人名归属到 8 大区模块（不影响商贸合计原有统计）
-        if include_personal and c.source == 'report_a' and c.personal_module and c.personal_region:
-            pd = _ensure(c.personal_region, c.personal_module)
+        # 报表a个人业绩：额外按人名归属到大区模块
+        # 只认新模块体系：旧模块名/旧大区名的历史行跳过（重传报表a 后即为新名）
+        personal_region = MODULE_REGION.get(c.personal_module or '')
+        if include_personal and c.source == 'report_a' and personal_region:
+            pd = _ensure(personal_region, c.personal_module)
             # 签订（只加金额，不加台数）
             if c.sign_date:
                 if prev_start <= c.sign_date <= prev_end:
@@ -1073,10 +1040,10 @@ def get_two_year_comparison(include_personal=False):
             gaizao_true_units['ship_units_prev'] += int(_sd.ship_units or 0)
 
     # 大区排序
-    region_order = ['俄罗斯', '中亚', '亚洲1', '亚洲2', '美洲', '中东', '非洲', '欧洲']
+    region_order = list(REGION_ORDER)
 
-    # 收集非商贸模块并按大区排序
-    normal_entries = [(k, v) for k, v in agg.items() if v['region'] not in ('商贸合计', '商贸配件')]
+    # 收集所有模块并按大区排序（商贸/配件已并入大区，不再单列）
+    normal_entries = list(agg.items())
     normal_entries.sort(key=lambda x: (
         region_order.index(x[1]['region']) if x[1]['region'] in region_order else 99,
         x[1]['module']
@@ -1118,8 +1085,8 @@ def get_two_year_comparison(include_personal=False):
         """
         for td in TradeModuleData.query.filter_by(data_year=year).all():
             tmod = td.module_name
-            if tmod in TRADE_MODULES_ORDER:
-                d = _ensure('商贸合计', tmod)
+            if tmod in MODULE_REGION:
+                d = _ensure(MODULE_REGION[tmod], tmod)
                 if td.sign_amount:
                     d[f'sign_amount_{suffix}'] = td.sign_amount
                 if td.schedule_amount:
@@ -1131,29 +1098,6 @@ def get_two_year_comparison(include_personal=False):
 
     _inject_trade_data(year_prev, 'prev')
     _inject_trade_data(year_curr, 'curr')
-
-    # ── 商贸行 ──
-    trade_total = {}
-    for tmod in TRADE_MODULES_ORDER:
-        d = agg.get(('商贸合计', tmod))
-        if d:
-            if not trade_total:
-                trade_total = {k: 0 for k in d}
-            for k in d:
-                if isinstance(d[k], (int, float)):
-                    trade_total[k] += d[k]
-            row = _make_row('trade', '商贸合计', tmod, d)
-            # 商贸/配件行不显示金额增长率（2025年数据不完整，增长比例无意义）
-            for gf in ['sign_amount_growth', 'sign_total_growth',
-                       'schedule_amount_growth', 'schedule_total_growth',
-                       'ship_amount_growth', 'ship_total_growth',
-                       'payment_total_growth']:
-                row[gf] = None
-            rows.append(row)
-
-    # 商贸配件合计
-    if trade_total:
-        rows.append(_make_row('subtotal', '商贸合计', '商贸配件合计', trade_total))
 
     # ── 国际总计（聚合原始数据，避免万元重复转换） ──
     grand_raw = {}
@@ -1188,511 +1132,6 @@ def get_two_year_comparison(include_personal=False):
 
     return result
 
-
-
-# ── 年度指标 ──────────────────────────────────────────
-
-# 年度指标 — 从 2026年合同完成情况表 抄录
-# key: (region, module)
-ANNUAL_TARGETS = {
-    ('俄罗斯', '俄罗斯（中部）'): {
-        "sign_units": 1683, "sign_amount": 35680.0,
-        "payment": 13775.0,
-        "ship_units": 750, "ship_amount": 14500.0,
-        "schedule_units": 750, "schedule_amount": 14500.0,
-        "person": '丛峻', "backlog_units": 102,
-    },
-    ('俄罗斯', '俄罗斯（西部）'): {
-        "sign_units": 1683, "sign_amount": 35680.0,
-        "payment": 13775.0,
-        "ship_units": 750, "ship_amount": 14500.0,
-        "schedule_units": 750, "schedule_amount": 14500.0,
-        "person": '单一', "backlog_units": 107,
-    },
-    ('俄罗斯', '俄罗斯（东部）'): {
-        "sign_units": 400, "sign_amount": 6544.0,
-        "payment": 2524.15,
-        "ship_units": 160, "ship_amount": 2657.0,
-        "schedule_units": 160, "schedule_amount": 2657.0,
-        "person": '宋艾亭', "backlog_units": 30,
-    },
-    ('俄罗斯', '罗斯托夫'): {
-        "sign_units": 270, "sign_amount": 4428.0,
-        "payment": 1710.0,
-        "ship_units": 120, "ship_amount": 1800.0,
-        "schedule_units": 120, "schedule_amount": 1800.0,
-        "person": '张执玮', "backlog_units": 61,
-    },
-    ('俄罗斯', '哈巴'): {
-        "sign_units": 270, "sign_amount": 4428.0,
-        "payment": 1710.0,
-        "ship_units": 120, "ship_amount": 1800.0,
-        "schedule_units": 120, "schedule_amount": 1800.0,
-        "person": '张小帆', "backlog_units": 28,
-    },
-    ('俄罗斯', '俄罗斯（中南）'): {
-        "sign_units": 245, "sign_amount": 4200.0,
-        "payment": 1689.1,
-        "ship_units": 100, "ship_amount": 1778.0,
-        "schedule_units": 100, "schedule_amount": 1778.0,
-        "person": '张沁媛', "backlog_units": 2,
-    },
-    ('俄罗斯', '俄罗斯（西南）'): {
-        "sign_units": 489, "sign_amount": 7525.12,
-        "payment": 2823.4,
-        "ship_units": 210, "ship_amount": 2972.0,
-        "schedule_units": 210, "schedule_amount": 2972.0,
-        "person": '刘景伟', "backlog_units": 27,
-    },
-    ('俄罗斯', '莫斯科'): {
-        "sign_units": 72, "sign_amount": 1085.0,
-        "payment": 427.5,
-        "ship_units": 30, "ship_amount": 450.0,
-        "schedule_units": 30, "schedule_amount": 450.0,
-        "person": '张东辉', "backlog_units": 0,
-    },
-    ('俄罗斯', '叶卡'): {
-        "sign_units": 72, "sign_amount": 1085.0,
-        "payment": 427.5,
-        "ship_units": 30, "ship_amount": 450.0,
-        "schedule_units": 30, "schedule_amount": 450.0,
-        "person": '孙继伟', "backlog_units": 0,
-    },
-    ('俄罗斯', '新西'): {
-        "sign_units": 72, "sign_amount": 1085.0,
-        "payment": 427.5,
-        "ship_units": 30, "ship_amount": 450.0,
-        "schedule_units": 30, "schedule_amount": 450.0,
-        "person": '（空）', "backlog_units": 0,
-    },
-    ('中亚', '蒙古'): {
-        "sign_units": 81, "sign_amount": 1260.0,
-        "payment": 475.0,
-        "ship_units": 32, "ship_amount": 500.0,
-        "schedule_units": 32, "schedule_amount": 500.0,
-        "person": '逄顺福', "backlog_units": 7,
-    },
-    ('中亚', '哈萨克斯坦-1'): {
-        "sign_units": 581, "sign_amount": 5575.68,
-        "payment": 2188.8,
-        "ship_units": 239, "ship_amount": 2304.0,
-        "schedule_units": 239, "schedule_amount": 2304.0,
-        "person": '彭凤琴', "backlog_units": 65,
-    },
-    ('中亚', '塔吉克/哈萨克斯坦-2'): {
-        "sign_units": 207, "sign_amount": 2082.5,
-        "payment": 807.5,
-        "ship_units": 85, "ship_amount": 850.0,
-        "schedule_units": 85, "schedule_amount": 850.0,
-        "person": '于洋', "backlog_units": 31,
-    },
-    ('中亚', '哈萨克斯坦-3'): {
-        "sign_units": 145, "sign_amount": 1500.0,
-        "payment": 570.0,
-        "ship_units": 60, "ship_amount": 600.0,
-        "schedule_units": 60, "schedule_amount": 600.0,
-        "person": '秦力超', "backlog_units": 9,
-    },
-    ('中亚', '乌兹别克斯坦'): {
-        "sign_units": 81, "sign_amount": 735.0,
-        "payment": 285.0,
-        "ship_units": 33, "ship_amount": 300.0,
-        "schedule_units": 33, "schedule_amount": 300.0,
-        "person": '孙博伦', "backlog_units": 15,
-    },
-    ('中亚', '吉尔吉斯斯坦'): {
-        "sign_units": 127, "sign_amount": 980.0,
-        "payment": 380.0,
-        "ship_units": 52, "ship_amount": 400.0,
-        "schedule_units": 52, "schedule_amount": 400.0,
-        "person": '马月', "backlog_units": 0,
-    },
-    ('中亚', '阿塞拜疆'): {
-        "sign_units": 73, "sign_amount": 816.66666655,
-        "payment": 332.5,
-        "ship_units": 32, "ship_amount": 350.0,
-        "schedule_units": 32, "schedule_amount": 350.0,
-        "person": '韩宇', "backlog_units": 52,
-    },
-    ('中亚', '格鲁吉亚'): {
-        "sign_units": 44, "sign_amount": 490.0,
-        "payment": 190.0,
-        "ship_units": 20, "ship_amount": 200.0,
-        "schedule_units": 20, "schedule_amount": 200.0,
-        "person": '孙博伦', "backlog_units": 0,
-    },
-    ('亚洲1', '朝鲜-韩国'): {
-        "sign_units": 54, "sign_amount": 540.0,
-        "payment": 250.955281626998,
-        "ship_units": 32, "ship_amount": 264.163454344208,
-        "schedule_units": 32, "schedule_amount": 264.163454344208,
-        "person": '安鹏霖', "backlog_units": 10,
-    },
-    ('亚洲1', '新加坡市政会'): {
-        "sign_units": 277, "sign_amount": 6100.0,
-        "payment": 2045.35,
-        "ship_units": 101, "ship_amount": 2153.0,
-        "schedule_units": 101, "schedule_amount": 2153.0,
-        "person": '祁阳', "backlog_units": 2,
-    },
-    ('亚洲1', '新加坡HDB'): {
-        "sign_units": 566, "sign_amount": 20400.0,
-        "payment": 8075.0,
-        "ship_units": 260, "ship_amount": 8500.0,
-        "schedule_units": 260, "schedule_amount": 8500.0,
-        "person": '王珊珊', "backlog_units": 63,
-    },
-    ('亚洲1', '泰国'): {
-        "sign_units": 90, "sign_amount": 840.0,
-        "payment": 190.0,
-        "ship_units": 25, "ship_amount": 200.0,
-        "schedule_units": 25, "schedule_amount": 200.0,
-        "person": '张琬怡', "backlog_units": 5,
-    },
-    ('亚洲1', '泰国2'): {
-        "sign_units": 136, "sign_amount": 1200.0,
-        "payment": 285.0,
-        "ship_units": 36, "ship_amount": 300.0,
-        "schedule_units": 36, "schedule_amount": 300.0,
-        "person": '刘瑞', "backlog_units": 11,
-    },
-    ('亚洲1', '金三角'): {
-        "sign_units": 40, "sign_amount": 200.0,
-        "payment": 190.0,
-        "ship_units": 36, "ship_amount": 200.0,
-        "schedule_units": 36, "schedule_amount": 200.0,
-        "person": '张琬怡', "backlog_units": 0,
-    },
-    ('亚洲1', '马来西亚'): {
-        "sign_units": 109, "sign_amount": 900.0,
-        "payment": 494.95,
-        "ship_units": 61, "ship_amount": 521.0,
-        "schedule_units": 61, "schedule_amount": 521.0,
-        "person": '鲁鸿飞', "backlog_units": 9,
-    },
-    ('亚洲1', '马尔代夫'): {
-        "sign_units": 36, "sign_amount": 630.0,
-        "payment": 250.955281626998,
-        "ship_units": 17, "ship_amount": 264.163454344208,
-        "schedule_units": 17, "schedule_amount": 264.163454344208,
-        "person": '叶哲铭', "backlog_units": 4,
-    },
-    ('亚洲1', '香港-台湾'): {
-        "sign_units": 20, "sign_amount": 200.0,
-        "payment": 190.0,
-        "ship_units": 15, "ship_amount": 200.0,
-        "schedule_units": 15, "schedule_amount": 200.0,
-        "person": '王海娇', "backlog_units": 0,
-    },
-    ('亚洲2', '越南-2'): {
-        "sign_units": 235, "sign_amount": 1673.35,
-        "payment": 648.85,
-        "ship_units": 63, "ship_amount": 683.0,
-        "schedule_units": 63, "schedule_amount": 683.0,
-        "person": '韩月华', "backlog_units": 1,
-    },
-    ('亚洲2', '印度公建'): {
-        "sign_units": 66, "sign_amount": 930.0,
-        "payment": 414.432922440495,
-        "ship_units": 28, "ship_amount": 436.245181516311,
-        "schedule_units": 28, "schedule_amount": 436.245181516311,
-        "person": '张鹏', "backlog_units": 20,
-    },
-    ('亚洲2', '巴基斯坦'): {
-        "sign_units": 87, "sign_amount": 688.0,
-        "payment": 251.75,
-        "ship_units": 32, "ship_amount": 265.0,
-        "schedule_units": 32, "schedule_amount": 265.0,
-        "person": '耿建伟', "backlog_units": 0,
-    },
-    ('亚洲2', '孟加拉-1'): {
-        "sign_units": 238, "sign_amount": 1768.9,
-        "payment": 685.9,
-        "ship_units": 73, "ship_amount": 722.0,
-        "schedule_units": 73, "schedule_amount": 722.0,
-        "person": '刘晓虎', "backlog_units": 3,
-    },
-    ('亚洲2', '澳大利亚'): {
-        "sign_units": 136, "sign_amount": 964.0,
-        "payment": 361.0,
-        "ship_units": 32, "ship_amount": 380.0,
-        "schedule_units": 32, "schedule_amount": 380.0,
-        "person": '董永生', "backlog_units": 8,
-    },
-    ('亚洲2', '菲律宾'): {
-        "sign_units": 69, "sign_amount": 710.0,
-        "payment": 332.5,
-        "ship_units": 27, "ship_amount": 350.0,
-        "schedule_units": 27, "schedule_amount": 350.0,
-        "person": '吴旭东', "backlog_units": 0,
-    },
-    ('亚洲2', '印尼-1'): {
-        "sign_units": 263, "sign_amount": 1640.0,
-        "payment": 380.0,
-        "ship_units": 42, "ship_amount": 400.0,
-        "schedule_units": 42, "schedule_amount": 400.0,
-        "person": '张欢', "backlog_units": 1,
-    },
-    ('亚洲2', '越南-1（工厂）'): {
-        "sign_units": 148, "sign_amount": 1470.0,
-        "payment": 570.0,
-        "ship_units": 55, "ship_amount": 600.0,
-        "schedule_units": 55, "schedule_amount": 600.0,
-        "person": '于春光', "backlog_units": 106,
-    },
-    ('亚洲2', '印度私营'): {
-        "sign_units": 246, "sign_amount": 2934.0,
-        "payment": 1577.0,
-        "ship_units": 82, "ship_amount": 1660.0,
-        "schedule_units": 82, "schedule_amount": 1660.0,
-        "person": '任嘉庆', "backlog_units": 48,
-    },
-    ('亚洲2', '菲律宾-2'): {
-        "sign_units": 85, "sign_amount": 650.0,
-        "payment": 332.5,
-        "ship_units": 27, "ship_amount": 350.0,
-        "schedule_units": 27, "schedule_amount": 350.0,
-        "person": '吴永顺', "backlog_units": 0,
-    },
-    ('亚洲2', '印尼-2'): {
-        "sign_units": 250, "sign_amount": 1700.0,
-        "payment": 380.0,
-        "ship_units": 42, "ship_amount": 400.0,
-        "schedule_units": 42, "schedule_amount": 400.0,
-        "person": '岳亮', "backlog_units": 0,
-    },
-    ('美洲', '墨西哥-1'): {
-        "sign_units": 450, "sign_amount": 6270.0,
-        "payment": 2897.5,
-        "ship_units": 210, "ship_amount": 3050.0,
-        "schedule_units": 210, "schedule_amount": 3050.0,
-        "person": '尤健宇', "backlog_units": 36,
-    },
-    ('美洲', '墨西哥-2'): {
-        "sign_units": 450, "sign_amount": 6270.0,
-        "payment": 2897.5,
-        "ship_units": 210, "ship_amount": 3050.0,
-        "schedule_units": 210, "schedule_amount": 3050.0,
-        "person": '肖宇晗', "backlog_units": 35,
-    },
-    ('美洲', '秘鲁'): {
-        "sign_units": 100, "sign_amount": 1390.0,
-        "payment": 389.5,
-        "ship_units": 35, "ship_amount": 410.0,
-        "schedule_units": 35, "schedule_amount": 410.0,
-        "person": '李知源', "backlog_units": 21,
-    },
-    ('美洲', '智利'): {
-        "sign_units": 120, "sign_amount": 1670.0,
-        "payment": 456.0,
-        "ship_units": 40, "ship_amount": 480.0,
-        "schedule_units": 40, "schedule_amount": 480.0,
-        "person": '翟文龙', "backlog_units": 7,
-    },
-    ('美洲', '加勒比海'): {
-        "sign_units": 520, "sign_amount": 7248.8,
-        "payment": 2502.3,
-        "ship_units": 200, "ship_amount": 2634.0,
-        "schedule_units": 200, "schedule_amount": 2634.0,
-        "person": '范皓铭', "backlog_units": 61,
-    },
-    ('美洲', '多米尼加'): {
-        "sign_units": 72, "sign_amount": 1000.0,
-        "payment": 380.0,
-        "ship_units": 40, "ship_amount": 400.0,
-        "schedule_units": 40, "schedule_amount": 400.0,
-        "person": '梁国裕', "backlog_units": 1,
-    },
-    ('美洲', '哥伦比亚'): {
-        "sign_units": 800, "sign_amount": 11151.0,
-        "payment": 4132.5,
-        "ship_units": 360, "ship_amount": 4350.0,
-        "schedule_units": 360, "schedule_amount": 4350.0,
-        "person": '田媛媛', "backlog_units": 76,
-    },
-    ('美洲', '秘鲁2'): {
-        "sign_units": 50, "sign_amount": 700.0,
-        "payment": 285.0,
-        "ship_units": 30, "ship_amount": 300.0,
-        "schedule_units": 30, "schedule_amount": 300.0,
-        "person": '魏珍荣', "backlog_units": 0,
-    },
-    ('美洲', '巴西'): {
-        "sign_units": 60, "sign_amount": 840.0,
-        "payment": 190.0,
-        "ship_units": 20, "ship_amount": 200.0,
-        "schedule_units": 20, "schedule_amount": 200.0,
-        "person": '杨春', "backlog_units": 0,
-    },
-    ('中东', '阿联酋-2'): {
-        "sign_units": 122, "sign_amount": 3360.0,
-        "payment": 1330.0,
-        "ship_units": 62, "ship_amount": 1400.0,
-        "schedule_units": 62, "schedule_amount": 1400.0,
-        "person": '李军辉', "backlog_units": 5,
-    },
-    ('中东', '沙特工厂'): {
-        "sign_units": 733, "sign_amount": 6860.0,
-        "payment": 2242.0,
-        "ship_units": 200, "ship_amount": 2360.0,
-        "schedule_units": 200, "schedule_amount": 2360.0,
-        "person": '武永佳', "backlog_units": 0,
-    },
-    ('中东', '沙特-1'): {
-        "sign_units": 299, "sign_amount": 3710.0,
-        "payment": 1425.0,
-        "ship_units": 150, "ship_amount": 1500.0,
-        "schedule_units": 150, "schedule_amount": 1500.0,
-        "person": '陈科锦', "backlog_units": 108,
-    },
-    ('中东', '科威特'): {
-        "sign_units": 136, "sign_amount": 1820.0,
-        "payment": 695.4,
-        "ship_units": 64, "ship_amount": 732.0,
-        "schedule_units": 64, "schedule_amount": 732.0,
-        "person": '赵俊峰', "backlog_units": 0,
-    },
-    ('中东', '阿联酋-1'): {
-        "sign_units": 416, "sign_amount": 3710.0,
-        "payment": 1425.0,
-        "ship_units": 150, "ship_amount": 1500.0,
-        "schedule_units": 150, "schedule_amount": 1500.0,
-        "person": '陈科锦', "backlog_units": 8,
-    },
-    ('中东', '卡塔尔'): {
-        "sign_units": 50, "sign_amount": 700.0,
-        "payment": 475.0,
-        "ship_units": 42, "ship_amount": 500.0,
-        "schedule_units": 42, "schedule_amount": 500.0,
-        "person": '李军辉', "backlog_units": 0,
-    },
-    ('中东', '伊拉克'): {
-        "sign_units": 81, "sign_amount": 700.0,
-        "payment": 285.0,
-        "ship_units": 42, "ship_amount": 300.0,
-        "schedule_units": 42, "schedule_amount": 300.0,
-        "person": '吕超', "backlog_units": 1,
-    },
-    ('中东', '巴勒斯坦'): {
-        "sign_units": 181, "sign_amount": 1680.0,
-        "payment": 665.0,
-        "ship_units": 80, "ship_amount": 700.0,
-        "schedule_units": 80, "schedule_amount": 700.0,
-        "person": '吕超', "backlog_units": 5,
-    },
-    ('中东', '伊朗+阿曼'): {
-        "sign_units": 45, "sign_amount": 700.0,
-        "payment": 285.0,
-        "ship_units": 25, "ship_amount": 300.0,
-        "schedule_units": 25, "schedule_amount": 300.0,
-        "person": '张朕铭', "backlog_units": 17,
-    },
-    ('非洲', '埃及-1'): {
-        "sign_units": 900, "sign_amount": 6000.0,
-        "payment": 2470.0,
-        "ship_units": 400, "ship_amount": 2600.0,
-        "schedule_units": 400, "schedule_amount": 2600.0,
-        "person": '石云龙', "backlog_units": 494,
-    },
-    ('非洲', '埃及-2'): {
-        "sign_units": 100, "sign_amount": 800.0,
-        "payment": 285.0,
-        "ship_units": 30, "ship_amount": 300.0,
-        "schedule_units": 30, "schedule_amount": 300.0,
-        "person": '丁绎澎', "backlog_units": 0,
-    },
-    ('非洲', '肯尼亚/坦桑尼亚'): {
-        "sign_units": 101, "sign_amount": 980.0,
-        "payment": 381.749525320429,
-        "ship_units": 33, "ship_amount": 401.841605600452,
-        "schedule_units": 33, "schedule_amount": 401.841605600452,
-        "person": '史宇哲', "backlog_units": 5,
-    },
-    ('非洲', '尼日利亚/埃塞俄比亚'): {
-        "sign_units": 100, "sign_amount": 980.0,
-        "payment": 381.9,
-        "ship_units": 33, "ship_amount": 402.0,
-        "schedule_units": 33, "schedule_amount": 402.0,
-        "person": '袁帅', "backlog_units": 4,
-    },
-    ('非洲', '非洲法语区'): {
-        "sign_units": 90, "sign_amount": 800.0,
-        "payment": 285.0,
-        "ship_units": 30, "ship_amount": 300.0,
-        "schedule_units": 30, "schedule_amount": 300.0,
-        "person": '孙小婷', "backlog_units": 7,
-    },
-    ('非洲', '南非/安格拉'): {
-        "sign_units": 90, "sign_amount": 800.0,
-        "payment": 285.0,
-        "ship_units": 30, "ship_amount": 300.0,
-        "schedule_units": 30, "schedule_amount": 300.0,
-        "person": '刘纪龙', "backlog_units": 1,
-    },
-    ('欧洲', '德国西班牙'): {
-        "sign_units": 34, "sign_amount": 520.0,
-        "payment": 199.5,
-        "ship_units": 15, "ship_amount": 210.0,
-        "schedule_units": 15, "schedule_amount": 210.0,
-        "person": '（空）', "backlog_units": 0,
-    },
-    ('欧洲', '东欧'): {
-        "sign_units": 50, "sign_amount": 500.0,
-        "payment": 190.95,
-        "ship_units": 15, "ship_amount": 201.0,
-        "schedule_units": 15, "schedule_amount": 201.0,
-        "person": '吴雪明', "backlog_units": 0,
-    },
-    ('欧洲', '英国意大利'): {
-        "sign_units": 34, "sign_amount": 520.0,
-        "payment": 199.5,
-        "ship_units": 15, "ship_amount": 210.0,
-        "schedule_units": 15, "schedule_amount": 210.0,
-        "person": '王俊豪', "backlog_units": 0,
-    },
-    ('商贸配件', '商贸1'): {
-        "sign_units": 0, "sign_amount": 1402.0,
-        "payment": 570.0,
-        "ship_units": 0, "ship_amount": 600.0,
-        "schedule_units": 0, "schedule_amount": 600.0,
-        "person": '张涛', "backlog_units": 0,
-    },
-    ('商贸配件', '商贸2'): {
-        "sign_units": 0, "sign_amount": 720.0,
-        "payment": 285.0,
-        "ship_units": 0, "ship_amount": 300.0,
-        "schedule_units": 0, "schedule_amount": 300.0,
-        "person": '李成富', "backlog_units": 0,
-    },
-    ('商贸配件', '商贸3'): {
-        "sign_units": 0, "sign_amount": 720.0,
-        "payment": 285.0,
-        "ship_units": 0, "ship_amount": 300.0,
-        "schedule_units": 0, "schedule_amount": 300.0,
-        "person": '李美珊', "backlog_units": 0,
-    },
-    ('商贸配件', '配件-1'): {
-        "sign_units": 0, "sign_amount": 4800.0,
-        "payment": 1900.0,
-        "ship_units": 0, "ship_amount": 2000.0,
-        "schedule_units": 0, "schedule_amount": 2000.0,
-        "person": '赵莹', "backlog_units": 0,
-    },
-    ('商贸配件', '配件-2'): {
-        "sign_units": 0, "sign_amount": 2400.0,
-        "payment": 950.0,
-        "ship_units": 0, "ship_amount": 1000.0,
-        "schedule_units": 0, "schedule_amount": 1000.0,
-        "person": '吴航', "backlog_units": 0,
-    },
-    ('商贸配件', '改造'): {
-        "sign_units": 0, "sign_amount": 1960.0,
-        "payment": 950.0,
-        "ship_units": 0, "ship_amount": 1000.0,
-        "schedule_units": 0, "schedule_amount": 1000.0,
-        "person": '苏利', "backlog_units": 16,
-    },
-}
 
 
 # ── 年度完成情况 ──────────────────────────────────────
@@ -1738,12 +1177,8 @@ def get_annual_completion(include_personal=False):
             region_targets[r][k] += t.get(k, 0)
         region_targets[r]['_backlog'] += t.get('backlog_units', 0)
 
-    # 商贸合计 subtotal 使用 商贸配件 的指标汇总
-    if '商贸配件' in region_targets:
-        region_targets['商贸合计'] = region_targets['商贸配件']
-
     # 大区排序
-    region_order = ['俄罗斯', '中亚', '亚洲1', '亚洲2', '美洲', '中东', '非洲', '欧洲']
+    region_order = list(REGION_ORDER)
 
     result_rows = []
     seq = 0
@@ -1760,10 +1195,8 @@ def get_annual_completion(include_personal=False):
             'category': row.get('category', ''),
         }
 
-        # Look up target (商贸合计 rows use 商贸配件 targets)
+        # 取模块年度指标
         target = ANNUAL_TARGETS.get((region, module), {})
-        if not target and region == '商贸合计':
-            target = ANNUAL_TARGETS.get(('商贸配件', module), {})
 
         if typ in ('data', 'trade'):
             seq += 1
@@ -1775,8 +1208,8 @@ def get_annual_completion(include_personal=False):
                 entry[mk + '_target'] = tgt
                 entry[mk + '_actual'] = actual
                 entry[mk + '_ratio'] = _ratio(actual, tgt)
-            entry['person'] = target.get('person', '') if target else ''
-            entry['backlog_units'] = target.get('backlog_units', 0) if target else 0
+            entry['person'] = PERSON_MAP.get(module, '')
+            entry['backlog_units'] = 0
 
         elif typ == 'subtotal':
             # Subtota: actual from row, target from sum of children

@@ -109,7 +109,7 @@ const selectedRegion = ref(null)
 const selectedYear = ref(2026)
 const dataDate = ref('--')
 const unmatchedCount = ref(0)
-const regions = ref(['俄罗斯','亚洲','亚洲1','亚洲2','美洲','中东','非洲','欧洲','商贸合计'])
+const regions = ref([])
 
 const regionData = ref(null)
 const moduleData = ref(null)
@@ -123,6 +123,11 @@ async function fetchAll() {
   try {
     const year = selectedYear.value
     const region = selectedRegion.value || undefined
+
+    if (!regions.value.length) {
+      const regionsRes = await getRegions()
+      regions.value = regionsRes.data?.regions || []
+    }
 
     const [rRes, mRes, sRes, statusRes] = await Promise.all([
       getRegionSummary(year, region),

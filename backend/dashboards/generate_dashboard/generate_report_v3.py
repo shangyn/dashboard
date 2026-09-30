@@ -7,6 +7,7 @@ generate_report_v3.py - 国贸台账统计报表生成 (V3)
 """
 import os
 import re
+import sys
 import datetime
 from collections import OrderedDict
 
@@ -23,8 +24,14 @@ from generate_dashboard import read_dashboard_data, read_table_rows, generate_ht
 # 配置
 # ============================================================
 TEMPLATE_NAME = "签单排产发货_模板.xlsx"
-REGION_ORDER = ["俄罗斯", "亚洲1", "亚洲2", "中东", "中亚", "美洲", "非洲", "欧洲"]
-TRADE_PARTS_MODULES = ["商贸1", "商贸2", "商贸3", "配件-1", "配件-2", "改造"]
+
+# 大区/模块常量与「合同完成情况」共用一份
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+from dashboards.contract_completion.constants import (  # noqa: E402
+    REGION_ORDER, MODULE_REGION, TRADE_MODULES_ORDER,
+)
 
 # 预算 Excel 列名关键词（按列名搜索，兼容"签单"和"签订"两种命名）
 BUDGET_COL_KEYWORDS = {
@@ -219,7 +226,7 @@ def build_stats_from_db(target_month):
 
 
 def build_region_modules_from_db():
-    """从数据库映射表构建 {大区: [模块名列表]}。
+    """构建 {大区: [模块名列表]}（常量 MODULE_REGION 为准，映射表兜底）。
     返回: OrderedDict
     """
     from dashboards.contract_completion.models import CountryMapping
@@ -228,19 +235,33 @@ def build_region_modules_from_db():
     for region in REGION_ORDER:
         region_modules[region] = []
 
-    # 从 CountryMapping 收集每个大区下的模块
-    seen = set()
+    trade_order = list(TRADE_MODULES_ORDER)
+    by_region_normal = {r: [] for r in region_modules}
+    by_region_trade = {r: [] for r in region_modules}
+
+    # 1) 常量里的模块→大区（含暂无国家绑定的商贸/配件/新模块）
+    for module, region in MODULE_REGION.items():
+        bucket = by_region_trade if module in trade_order else by_region_normal
+        bucket.setdefault(region, [])
+        if module not in bucket[region]:
+            bucket[region].append(module)
+
+    for region in region_modules:
+        # 商贸/配件/改造排在各自大区末尾，便于阅读
+        trade = sorted(by_region_trade.get(region, []),
+                       key=lambda m: trade_order.index(m) if m in trade_order else 99)
+        region_modules[region] = by_region_normal.get(region, []) + trade
+
+    # 2) 映射表里出现、但常量未覆盖的模块（防漏）
+    covered = {(r, m) for r, mods in region_modules.items() for m in mods}
     for m in CountryMapping.query.order_by(CountryMapping.region, CountryMapping.module_name).all():
         region = m.region or ""
         module = m.module_name or ""
-        if not region or not module:
+        if not region or not module or (region, module) in covered:
             continue
-        if region not in region_modules:
-            region_modules[region] = []
-        key = (region, module)
-        if key not in seen:
-            region_modules[region].append(module)
-            seen.add(key)
+        region_modules.setdefault(region, [])
+        region_modules[region].append(module)
+        covered.add((region, module))
 
     # 去除空大区
     region_modules = OrderedDict((k, v) for k, v in region_modules.items() if v)

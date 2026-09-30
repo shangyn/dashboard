@@ -1,11 +1,11 @@
 #!py -3.11
 """
-fill_trade_parts.py - 商贸配件数据填充
+fill_trade_parts.py - 配件数据填充
 ============================================================
 用法: py -3.11 fill_trade_parts.py --month 2026-05
 
 先调用 generate_report.py 生成报表，
-再从 报表a.xls / 报表b.xls 匹配填充配件-1/配件-2的签单/排产/发货金额。
+再从 报表a.xls / 报表b.xls 匹配填充配件模块（配件-1/2/3/4）的签单/排产/发货金额。
 后续其他Excel匹配逻辑也在此文件中扩展。
 ============================================================
 """
@@ -16,6 +16,14 @@ import datetime
 import pandas as pd
 import openpyxl
 import generate_report
+
+# 共用常量（backend/dashboards/contract_completion/constants.py）
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+from dashboards.contract_completion.constants import (  # noqa: E402
+    ACCESSORY_MODULES, ACCESSORY_ALIASES,
+)
 
 
 def safe_float(v):
@@ -38,7 +46,7 @@ def match_date(col_values, target_month):
 
 
 def compute_trade_amounts_from_a(df_a, target_month):
-    """从报表a计算配件-1/配件-2的签单额(G)和排产额(M)
+    """从报表a计算配件模块（配件-1/2/3/4）的签单额(G)和排产额(M)
 
     报表a列:
       K(col 10): 签订日期
@@ -48,8 +56,8 @@ def compute_trade_amounts_from_a(df_a, target_month):
     返回: {('配件-1', 'sign'): 万元, ('配件-1', 'prod'): 万元, ...}
     """
     result = {}
-    for module_name in ["配件-1", "配件-2"]:
-        mask_mod = df_a.iloc[:, 54].astype(str).str.strip() == module_name
+    for module_name in ACCESSORY_MODULES:
+        mask_mod = df_a.iloc[:, 54].astype(str).str.strip().replace(ACCESSORY_ALIASES) == module_name
 
         # 签单额: K列日期匹配
         mask_sign = mask_mod & match_date(df_a.iloc[:, 10], target_month)
@@ -65,7 +73,7 @@ def compute_trade_amounts_from_a(df_a, target_month):
 
 
 def compute_trade_amounts_from_b(df_b, target_month):
-    """从报表b计算配件-1/配件-2的发货额(S)
+    """从报表b计算配件模块（配件-1/2/3/4）的发货额(S)
 
     报表b列:
       G(col 6):  实际发运时间
@@ -74,8 +82,8 @@ def compute_trade_amounts_from_b(df_b, target_month):
     返回: {('配件-1', 'ship'): 万元, ('配件-2', 'ship'): 万元}
     """
     result = {}
-    for module_name in ["配件-1", "配件-2"]:
-        mask_mod = df_b.iloc[:, 15].astype(str).str.strip() == module_name
+    for module_name in ACCESSORY_MODULES:
+        mask_mod = df_b.iloc[:, 15].astype(str).str.strip().replace(ACCESSORY_ALIASES) == module_name
         mask_date = match_date(df_b.iloc[:, 6], target_month)
         mask = mask_mod & mask_date
         ship_sum = df_b.loc[mask, df_b.columns[12]].apply(safe_float).sum()
@@ -95,7 +103,7 @@ def find_module_rows(ws, module_names):
 
 
 def fill_trade_cells(report_path, source_dir, target_month):
-    """打开报表，填充配件-1/配件-2的G/M/S列"""
+    """打开报表，填充配件模块（配件-1/2/3/4）的G/M/S列"""
     # 读取数据源
     df_a = pd.read_excel(os.path.join(source_dir, "报表a.xls"))
     df_b = pd.read_excel(os.path.join(source_dir, "报表b.xls"))
@@ -107,7 +115,7 @@ def fill_trade_cells(report_path, source_dir, target_month):
     wb = openpyxl.load_workbook(report_path)
     ws = wb.active
 
-    rows = find_module_rows(ws, {"配件-1", "配件-2"})
+    rows = find_module_rows(ws, set(ACCESSORY_MODULES))
 
     # 列映射: G=签单额, M=排产额, S=发货额
     # (模块名, 类型) → 模板列字母
@@ -118,7 +126,7 @@ def fill_trade_cells(report_path, source_dir, target_month):
     }
     type_to_col = {"sign": "G", "prod": "M", "ship": "S"}
 
-    for mod_name in ["配件-1", "配件-2"]:
+    for mod_name in ACCESSORY_MODULES:
         if mod_name not in rows:
             print(f"  [警告] 模板中未找到模块: {mod_name}")
             continue
@@ -135,7 +143,7 @@ def fill_trade_cells(report_path, source_dir, target_month):
             cell.value = amount
             print(f"  {mod_name} {col_letter}列({data_type}): {amount:.2f}万元")
 
-    # 配件数据变化后，重算模块行完成比与商贸配件合计/全国贸合计（静态值，兼容手机端）
+    # 配件数据变化后，重算模块行完成比与各大区合计/全国贸合计（静态值，兼容手机端）
     _refresh_totals(ws)
 
     wb.save(report_path)
@@ -144,7 +152,7 @@ def fill_trade_cells(report_path, source_dir, target_month):
 
 
 def _refresh_totals(ws):
-    """配件填充后，重算模块行完成比与商贸配件合计/全国贸合计为静态计算值。
+    """配件填充后，重算模块行完成比与各大区合计/全国贸合计为静态计算值。
 
     openpyxl 写公式不会缓存计算结果，手机端表格App多不自动重算，
     因此这里把数值直接算好写进去，保证任何端显示一致。
@@ -220,7 +228,7 @@ def _refresh_totals(ws):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="商贸配件数据填充")
+    parser = argparse.ArgumentParser(description="配件数据填充")
     parser.add_argument("--month", default=None, help="统计月份, 如 2026-05")
     parser.add_argument("--dir", default=os.getcwd(), help="输出目录")
     parser.add_argument("--source", default="数据源excel", help="数据源子目录（相对于--dir）")
@@ -236,7 +244,7 @@ def main():
     source_dir = os.path.join(work_dir, args.source)
 
     print(f"{'=' * 60}")
-    print(f"  商贸配件数据填充")
+    print(f"  配件数据填充")
     print(f"  月份: {target_month}")
     print(f"{'=' * 60}\n")
 
@@ -287,7 +295,7 @@ def main():
     print(f"[完成] {os.path.basename(report_path)}")
 
     # Step 2: 填充配件数据
-    print(f"\n[Step 2] 填充配件-1/配件-2数据...")
+    print(f"\n[Step 2] 填充配件数据（配件-1/2/3/4）...")
     fill_trade_cells(report_path, source_dir, target_month)
 
     # Step 3: Excel重算（确保手机端公式缓存值正确）

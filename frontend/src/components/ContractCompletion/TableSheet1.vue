@@ -24,10 +24,7 @@
           <tr
             v-for="(row, ri) in tableRows"
             :key="ri"
-            :class="{
-              'row-total': row.is_total,
-              'row-trade': row.region === '商贸合计'
-            }"
+            :class="{ 'row-total': row.is_total }"
             :style="row.is_total ? { background: '#B4C6E7', fontWeight: 'bold' } : {}"
           >
             <td class="fixed-col">{{ row.is_total ? '' : ri + 1 }}</td>

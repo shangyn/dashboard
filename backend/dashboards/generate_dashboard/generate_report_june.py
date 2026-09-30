@@ -40,15 +40,24 @@ from generate_report import (
 BUDGET_JSON = "预算预测_2026-07.json"
 BUDGET_KW = ["预算", "国际市场"]
 
-# 大区排列顺序（与模板一致）
-REGION_ORDER = ["俄罗斯", "亚洲1", "亚洲2", "中东", "中亚", "美洲", "非洲", "欧洲"]
-
-# 商贸配件模块（不在映射表中，固定输出）
-TRADE_PARTS_MODULES = ["商贸1", "商贸2", "商贸3", "配件-1", "配件-2", "改造"]
+# 大区排列顺序 / 大区→模块 / 商贸模块清单：与「合同完成情况」共用一份常量
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+from dashboards.contract_completion.constants import (  # noqa: E402
+    REGION_ORDER, MODULE_REGION, TRADE_MODULES_ORDER,
+)
 
 # 合计行颜色
 SUBTOTAL_FILL = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid")  # 大区合计=浅蓝
 GRAND_FILL = PatternFill(start_color="B4C6E7", end_color="B4C6E7", fill_type="solid")     # 全国贸合计=深蓝
+
+
+def _is_trade_module(mod_name):
+    """商贸/配件/改造：只有金额，台数留空；这些模块现在并入各自大区"""
+    if mod_name in TRADE_MODULES_ORDER:
+        return True
+    return any(kw in mod_name for kw in TRADE_PARTS_KW)
 
 
 def _ratio_formula(fc_col, ac_col, row_num):
@@ -115,8 +124,13 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
     total_rows = ws.max_row
     if total_rows >= 5:
         ws.delete_rows(5, total_rows - 4)
+        # 模板里预留的「XX合计」A:B 合并区固定落在第 5 行以下，openpyxl 的 delete_rows
+        # 不会跟着移动它们，若不清理会把后面写进去的模块名合并掉（B 列变空）。
+        # 合计行的合并由本函数按实际行号重新写入。
+        # （delete_rows 已把这些区域内的单元格删掉，unmerge_cells 会 KeyError，直接重建集合）
+        ws.merged_cells.ranges = {r for r in ws.merged_cells.ranges if r.min_row < 5}
 
-    # ---- 4. 动态生成8大区模块行 + 子合计 ----
+    # ---- 4. 动态生成各大区模块行 + 子合计（商贸/配件/改造并入各自大区）----
     current_row = 5
     seq = 1
     subtotal_rows = []  # 记录子合计行号，用于全国贸合计
@@ -124,7 +138,7 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
     trade_col_rules = _trade_col_rules()
     ratio_cols = ["E", "H", "K", "N", "Q", "T"]  # 完成比列
     value_cols = "CDEFGHIJKLMNOPQRST"
-    grand_totals = {}  # 全国贸合计：累计各大区/商贸配件合计
+    grand_totals = {}  # 全国贸合计：累计各大区合计
 
     all_filled_modules = set()  # 追踪已输出的模块，用于日志
 
@@ -147,28 +161,56 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
             # B列: 模块名
             ws.cell(row=current_row, column=2).value = mod_name
 
-            # C-T列: 按普通模块规则填充
-            for col_letter, (col_type, group) in normal_col_rules.items():
-                col_idx = column_index_from_string(col_letter)
-                cell = ws.cell(row=current_row, column=col_idx)
+            if _is_trade_module(mod_name):
+                # 商贸/配件/改造：台数写 "-"，金额按导入/实际填充（沿用原「商贸配件」列规则）
+                for col_letter, rule in trade_col_rules.items():
+                    col_idx = column_index_from_string(col_letter)
+                    cell = ws.cell(row=current_row, column=col_idx)
 
-                # 应用模板样式（数字格式/字体/对齐/边框）
-                _apply_style(cell, col_idx, ref_styles)
+                    # 应用模板样式（数字格式/字体/对齐/边框）
+                    _apply_style(cell, col_idx, ref_styles)
 
-                if col_type == "forecast":
-                    field = f"{group}_{'amount' if col_letter in _AMOUNT_COLS else 'units'}"
-                    cell.value = fc.get(field, 0)
-                elif col_type == "actual":
-                    field = f"{group}_{'amount' if col_letter in _AMOUNT_COLS else 'units'}"
-                    cell.value = st.get(field, 0)
-                elif col_type == "ratio":
-                    # 直接写入完成比数值（不再写公式，避免手机端不重算显示0）
-                    suffix = "amount" if col_letter in _AMOUNT_COLS else "units"
-                    field = f"{group}_{suffix}"
-                    fc_val = float(fc.get(field, 0) or 0)
-                    ac_val = float(st.get(field, 0) or 0)
-                    cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
-                    cell.number_format = FMT_RATIO
+                    if rule == "dash":
+                        cell.value = "-"
+                        cell.number_format = "@"
+                    elif rule == "zero":
+                        field = _col_to_field(col_letter)
+                        cell.value = st.get(field, 0) if field else 0
+                    elif rule == "import":
+                        field = _col_to_field(col_letter)
+                        cell.value = fc.get(field, 0) if field else 0
+                    elif rule == "formula":
+                        # 直接写入完成比数值（不再写公式，避免手机端不重算显示0）
+                        fc_col, ac_col = _ratio_pair(col_letter)
+                        fc_val = ws.cell(row=current_row, column=column_index_from_string(fc_col)).value
+                        ac_val = ws.cell(row=current_row, column=column_index_from_string(ac_col)).value
+                        fc_val = float(fc_val) if isinstance(fc_val, (int, float)) else 0
+                        ac_val = float(ac_val) if isinstance(ac_val, (int, float)) else 0
+                        cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
+                        cell.number_format = FMT_RATIO
+            else:
+                # C-T列: 按普通模块规则填充
+                for col_letter, (col_type, group) in normal_col_rules.items():
+                    col_idx = column_index_from_string(col_letter)
+                    cell = ws.cell(row=current_row, column=col_idx)
+
+                    # 应用模板样式（数字格式/字体/对齐/边框）
+                    _apply_style(cell, col_idx, ref_styles)
+
+                    if col_type == "forecast":
+                        field = f"{group}_{'amount' if col_letter in _AMOUNT_COLS else 'units'}"
+                        cell.value = fc.get(field, 0)
+                    elif col_type == "actual":
+                        field = f"{group}_{'amount' if col_letter in _AMOUNT_COLS else 'units'}"
+                        cell.value = st.get(field, 0)
+                    elif col_type == "ratio":
+                        # 直接写入完成比数值（不再写公式，避免手机端不重算显示0）
+                        suffix = "amount" if col_letter in _AMOUNT_COLS else "units"
+                        field = f"{group}_{suffix}"
+                        fc_val = float(fc.get(field, 0) or 0)
+                        ac_val = float(st.get(field, 0) or 0)
+                        cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
+                        cell.number_format = FMT_RATIO
 
             # A/B列应用模板样式
             _apply_style(ws.cell(row=current_row, column=1), 1, ref_styles)
@@ -187,7 +229,6 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
                     region_totals[col_letter] = region_totals.get(col_letter, 0) + v
 
         # ---- 写子合计行 ----
-        region_end_row = current_row - 1
         subtotal_rows.append(current_row)
 
         # 子合计A列：标签 + 浅蓝背景 + 样式
@@ -202,7 +243,6 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
         except Exception:
             pass
 
-        CL = get_column_letter
         for col_letter in "CDEFGHIJKLMNOPQRST":
             col_idx = column_index_from_string(col_letter)
             cell = ws.cell(row=current_row, column=col_idx)
@@ -231,100 +271,6 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
             grand_totals[col_letter] = grand_totals.get(col_letter, 0) + region_totals.get(col_letter, 0)
 
         current_row += 1
-
-    # ---- 5. 写商贸配件 ----
-    trade_start_row = current_row
-    trade_totals = {}  # 商贸配件各列合计（完成比列除外）
-    for mod_name in TRADE_PARTS_MODULES:
-        fc = forecast.get(mod_name, {})
-        st = stats.get(mod_name, {})
-        all_filled_modules.add(mod_name)
-
-        ws.cell(row=current_row, column=1).value = seq
-        ws.cell(row=current_row, column=2).value = mod_name
-        # A/B列应用模板样式
-        _apply_style(ws.cell(row=current_row, column=1), 1, ref_styles)
-        _apply_style(ws.cell(row=current_row, column=2), 2, ref_styles)
-
-        for col_letter, rule in trade_col_rules.items():
-            col_idx = column_index_from_string(col_letter)
-            cell = ws.cell(row=current_row, column=col_idx)
-
-            # 应用模板样式（数字格式/字体/对齐/边框）
-            _apply_style(cell, col_idx, ref_styles)
-
-            if rule == "dash":
-                cell.value = "-"
-                cell.number_format = "@"
-            elif rule == "zero":
-                field = _col_to_field(col_letter)
-                cell.value = st.get(field, 0) if field else 0
-            elif rule == "import":
-                field = _col_to_field(col_letter)
-                cell.value = fc.get(field, 0) if field else 0
-            elif rule == "formula":
-                # 直接写入完成比数值（不再写公式，兼容手机端）
-                fc_col, ac_col = _ratio_pair(col_letter)
-                fc_val = ws.cell(row=current_row, column=column_index_from_string(fc_col)).value
-                ac_val = ws.cell(row=current_row, column=column_index_from_string(ac_col)).value
-                fc_val = float(fc_val) if isinstance(fc_val, (int, float)) else 0
-                ac_val = float(ac_val) if isinstance(ac_val, (int, float)) else 0
-                cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
-                cell.number_format = FMT_RATIO
-
-        seq += 1
-        current_row += 1
-
-    # 累计商贸配件各列合计（读取已写入的数值）
-    for r in range(trade_start_row, current_row):
-        for col_letter in value_cols:
-            if col_letter in ratio_cols:
-                continue
-            v = ws.cell(row=r, column=column_index_from_string(col_letter)).value
-            if isinstance(v, (int, float)):
-                trade_totals[col_letter] = trade_totals.get(col_letter, 0) + v
-
-    # ---- 6. 写商贸配件合计 ----
-    trade_end_row = current_row - 1
-    subtotal_rows.append(current_row)
-
-    # 商贸配件合计A列：标签 + 浅蓝背景 + 样式
-    trade_sub_a = ws.cell(row=current_row, column=1)
-    trade_sub_a.value = "商贸配件合计"
-    trade_sub_a.fill = SUBTOTAL_FILL
-    _apply_style(trade_sub_a, 1, ref_styles)
-    try:
-        ws.merge_cells(start_row=current_row, start_column=1,
-                       end_row=current_row, end_column=2)
-    except Exception:
-        pass
-
-    CL = get_column_letter
-    for col_letter in "CDEFGHIJKLMNOPQRST":
-        col_idx = column_index_from_string(col_letter)
-        cell = ws.cell(row=current_row, column=col_idx)
-        cell.fill = SUBTOTAL_FILL
-
-        # 应用模板样式（含边框）+ 粗体
-        _apply_style(cell, col_idx, ref_styles)
-        bold_font = cell.font.copy() if cell.font else openpyxl.styles.Font()
-        bold_font.bold = True
-        cell.font = bold_font
-
-        if col_letter in ratio_cols:
-            fc_col, ac_col = _ratio_pair(col_letter)
-            fc_val = trade_totals.get(fc_col, 0)
-            ac_val = trade_totals.get(ac_col, 0)
-            cell.value = ac_val / fc_val if fc_val else (1 if ac_val else 0)
-            cell.number_format = FMT_RATIO
-        else:
-            cell.value = trade_totals.get(col_letter, 0)
-
-    # 商贸配件合计并入全国贸合计
-    for col_letter in value_cols:
-        grand_totals[col_letter] = grand_totals.get(col_letter, 0) + trade_totals.get(col_letter, 0)
-
-    current_row += 1
 
     # ---- 7. 写全国贸合计 ----
     grand_row = current_row
@@ -360,21 +306,20 @@ def fill_template_dynamic(template_path, forecast, stats, region_modules,
             # 直接用累计值写入（不再写公式，兼容手机端）
             cell.value = grand_totals.get(col_letter, 0)
 
-    # ---- 8. 日志：预算JSON中有但映射表中无的模块 ----
+    # ---- 9. 日志：预算JSON中有但映射表中无的模块 ----
     extra_in_forecast = set(forecast.keys()) - all_filled_modules
     if extra_in_forecast:
         print(f"  [信息] 预算预测中有但未输出的模块 ({len(extra_in_forecast)}):")
         for m in sorted(extra_in_forecast):
             print(f"    - {m}")
 
-    # ---- 9. 保存 ----
+    # ---- 8. 保存 ----
     wb.save(output_path)
     wb.close()
     normal_count = sum(
         len(region_modules.get(r, [])) for r in REGION_ORDER
     )
-    print(f"[填充] 普通模块: {normal_count}, 商贸配件: {len(TRADE_PARTS_MODULES)}, "
-          f"子合计: {len(subtotal_rows)}")
+    print(f"[填充] 模块: {normal_count}, 子合计: {len(subtotal_rows)}")
 
 
 def find_budget_file(directory):

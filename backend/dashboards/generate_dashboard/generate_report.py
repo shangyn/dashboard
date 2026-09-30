@@ -19,6 +19,11 @@ import re
 import datetime
 from collections import defaultdict, OrderedDict
 
+# 保证以脚本方式运行（py generate_report.py）时也能 import 到 dashboards.*
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
 # ============================================================
 # 配置 (可按需修改)
 # ============================================================
@@ -107,26 +112,35 @@ def safe_float(v):
 # 数据处理
 # ============================================================
 def build_mapping(wb):
-    """从映射文件读取 国家→模块→大区"""
+    """从映射文件读取 国家→模块→大区
+
+    大区名经 REGION_DISPLAY 归一（源表写法 陈/刘 → 展示名 大区1/大区2）；
+    模块清单以常量 MODULE_REGION 为准（含暂无国家绑定的模块），映射表只做兜底补充。
+    """
+    from dashboards.contract_completion.constants import (
+        REGION_DISPLAY, REGION_ORDER, MODULE_REGION, TRADE_MODULES_ORDER,
+    )
+
     ws = wb[MAPPING_SHEET]
     print(f"[映射] Sheet: {MAPPING_SHEET}")
 
     header_map = {
         "country": ["国家"],
         "module": ["2026年对应模块", "对应模块"],
-        "region": ["2026九大区"],
+        "region": ["2026对应大区", "2026九大区"],
     }
     cols = find_columns_by_header(ws, header_map)
     print(f"[映射] 列定位: country={cols.get('country')}, module={cols.get('module')}, region={cols.get('region')}")
 
     country_to_module = {}
     country_to_region = {}
-    region_modules = OrderedDict()
+    mapping_modules = {}  # {大区: [模块]} 来自映射表，用于兜底
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
         country = str(row[cols["country"] - 1]).strip() if row[cols["country"] - 1] else ""
         module = str(row[cols["module"] - 1]).strip() if row[cols["module"] - 1] else ""
         region = str(row[cols["region"] - 1]).strip() if row[cols["region"] - 1] else ""
+        region = REGION_DISPLAY.get(region, region)  # 陈/刘 → 大区1/大区2
 
         if not country or not module or not region:
             continue
@@ -137,9 +151,20 @@ def build_mapping(wb):
 
         country_to_module[country] = module
         country_to_region[country] = region
-        region_modules.setdefault(region, [])
-        if module not in region_modules[region]:
-            region_modules[region].append(module)
+        mapping_modules.setdefault(region, [])
+        if module not in mapping_modules[region]:
+            mapping_modules[region].append(module)
+
+    # 常量表为准：普通模块在前、商贸/配件/改造在后；映射表兜底补充常量未覆盖的模块
+    trade_order = list(TRADE_MODULES_ORDER)
+    region_modules = OrderedDict()
+    for region in REGION_ORDER:
+        normal = [m for m, r in MODULE_REGION.items() if r == region and m not in trade_order]
+        trade = sorted((m for m, r in MODULE_REGION.items() if r == region and m in trade_order),
+                       key=lambda m: trade_order.index(m))
+        extra = [m for m in mapping_modules.get(region, []) if m not in MODULE_REGION]
+        if normal or trade or extra:
+            region_modules[region] = normal + trade + extra
 
     print(f"[映射] 有效国家: {len(country_to_module)}, 大区: {len(region_modules)}")
     return country_to_module, country_to_region, region_modules

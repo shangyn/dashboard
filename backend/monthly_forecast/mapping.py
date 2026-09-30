@@ -26,6 +26,11 @@ MAPPING_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'uploads', 'contract_completion', 'contract_mapping',
 )
+# 回退目录：尚未上传新表时，直接用项目「数据源/」下的最新一份
+SOURCE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    '数据源',
+)
 MAPPING_PREFIX = '国家-市场-业务员'
 
 GAZAO_MODULE = '改造'
@@ -53,23 +58,18 @@ _SLASH_MAP = {'／': '/'}
 _PAREN_MAP = {'（': '(', '）': ')'}
 _ONE = '一'
 
-# 源表里的固定别名写法 -> 系统正式模块名
-# 每一条都用「模主+助理对应模块」交叉验证过（同一个人在那张表里指向同一个模块）
+# 源表里的固定别名写法 -> 系统正式模块名（仅保留写法确实不同、无法由
+# 破折号/斜杠/括号归一自动对上的；其余一律由 _variants 自动匹配）
 _MODULE_ALIASES = {
-    '秘鲁－1': '秘鲁',
-    '秘鲁－2': '秘鲁2',
     '泰国－1': '泰国',
-    '泰国－2': '泰国2',
-    '孟加拉': '孟加拉-1',
-    '菲律宾－1': '菲律宾',
-    '菲律宾－2': '菲律宾-2',
-    '日港台': '香港-台湾',
     '哈萨克斯坦－2／塔吉克斯坦': '塔吉克/哈萨克斯坦-2',
     '更新改造': '改造',
 }
 
 # 模主/模块对应关系的权威 sheet：逐人一行、专表专用；其它 sheet 只做补充
-AUTHORITATIVE_SHEET = '任命令模块-模主'
+# 2026-09-30 起源表改名为「模块-模主-助理」，旧名保留兼容
+AUTHORITATIVE_SHEET = '模块-模主-助理'
+AUTHORITATIVE_SHEET_ALIASES = ('模块-模主-助理', '任命令模块-模主')
 
 
 def _text(value):
@@ -121,7 +121,9 @@ class ModuleResolver:
         for alias, target in _ALIAS_TABLE:
             if base == alias:
                 canonical = self._keys.get(_base(target))
-                return {canonical} if canonical else set()
+                if canonical:
+                    return {canonical}
+                break  # 别名目标在当前模块表里不存在 → 退回自动匹配，避免整行丢失
         hits = set()
         for variant in _variants(raw):
             canonical = self._keys.get(variant)
@@ -153,30 +155,33 @@ def clean_person(raw):
 
 
 def canonical_modules():
-    '''系统正式模块名：国家映射表 + 商贸模块 + 改造'''
+    '''系统正式模块名：国家映射表 + 商贸模块 + 改造 + 常量模块表（含暂无国家绑定的模块）'''
     from dashboards.contract_completion.models import CountryMapping, TradeModuleData
+    from dashboards.contract_completion.constants import MODULE_REGION
 
     names = {item.module_name for item in CountryMapping.query.all() if item.module_name}
     names.update(item.module_name for item in TradeModuleData.query.all() if item.module_name)
+    names.update(MODULE_REGION)
     names.add(GAZAO_MODULE)
     return names
 
 
 def latest_mapping_file():
-    '''最新的「国家-市场-业务员」表；找不到返回 None'''
-    if not os.path.isdir(MAPPING_DIR):
-        return None
+    '''最新的「国家-市场-业务员」表：上传目录与 数据源/ 里取最新一份；找不到返回 None'''
     candidates = []
-    for name in os.listdir(MAPPING_DIR):
-        if not name.startswith(MAPPING_PREFIX):
+    for directory in (MAPPING_DIR, SOURCE_DIR):
+        if not os.path.isdir(directory):
             continue
-        if not name.lower().endswith(('.xlsx', '.xls')):
-            continue
-        path = os.path.join(MAPPING_DIR, name)
-        try:
-            candidates.append((os.path.getmtime(path), path))
-        except OSError:
-            continue
+        for name in os.listdir(directory):
+            if not name.startswith(MAPPING_PREFIX):
+                continue
+            if not name.lower().endswith(('.xlsx', '.xls')):
+                continue
+            path = os.path.join(directory, name)
+            try:
+                candidates.append((os.path.getmtime(path), path))
+            except OSError:
+                continue
     if not candidates:
         return None
     return max(candidates)[1]
@@ -226,7 +231,7 @@ def _is_module_row(value):
 def extract_person_modules(path, resolver=None):
     '''从业务员表里抽出 人名 → 正式模块名集合，以及未解析的模块写法
 
-    模主对应关系以「任命令模块-模主」为准：这张表里命中的人只认它的结果，
+    模主对应关系以「模块-模主-助理」为准：这张表里命中的人只认它的结果，
     即使模块名没认出来也不算其它 sheet 的推断值（宁可漏，不可错）；
     其余 sheet 只用来补这张表没覆盖到的人。
     '''
@@ -237,7 +242,7 @@ def extract_person_modules(path, resolver=None):
     unresolved = set()
 
     for sheet_name, rows in _load_sheet_rows(path).items():
-        is_authoritative = sheet_name == AUTHORITATIVE_SHEET
+        is_authoritative = sheet_name in AUTHORITATIVE_SHEET_ALIASES
         target = authoritative if is_authoritative else fallback
         header_index = _header_index(rows)
         if header_index is None:

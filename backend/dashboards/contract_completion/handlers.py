@@ -13,6 +13,9 @@ from models import db
 from dashboards.contract_completion.models import (
     LedgerContract, CountryMapping, PaymentCollection, ScheduleTracking
 )
+from dashboards.contract_completion.constants import (
+    MODULE_REGION, REGION_DISPLAY, ACCESSORY_MODULES, ACCESSORY_ALIASES,
+)
 
 
 # ── 工具函数 ──────────────────────────────────────────────
@@ -284,7 +287,7 @@ def parse_country_mapping(file_path: str) -> dict:
         # ── 定位列 ──
         col_country = 1   # A列
         col_module = 4    # D列（2026年对应模块）
-        col_region = 5    # E列（2026九大区）
+        col_region = 5    # E列（2026对应大区）
 
         header_a = _safe_str(ws.cell(row=1, column=1).value)
         header_d = _safe_str(ws.cell(row=1, column=4).value)
@@ -332,7 +335,8 @@ def parse_country_mapping(file_path: str) -> dict:
             mapping = CountryMapping(
                 country=country,
                 module_name=_safe_str(raw_d),
-                region=_safe_str(raw_e),
+                # 源表大区写法（陈/刘）→ 展示名（大区1/大区2）
+                region=REGION_DISPLAY.get(_safe_str(raw_e), _safe_str(raw_e)),
                 module_manager='',
                 salesperson='',
             )
@@ -562,56 +566,131 @@ def _parse_payment_openpyxl(file_path: str) -> dict:
     return {"success": True, "message": msg, "rows": total}
 
 
-# ── Handler 4: 报表a（商贸配件签单+排产） ──────────────
+# ── Handler 4: 报表a（配件签单+排产） ──────────────
 
-# 商贸配件6模块（个人业绩跳过集合，含名称变体）
+# 商贸/配件/改造模块（个人业绩跳过集合，含名称变体）
 _TRADE_SKIP_MODULES = {
-    '商贸-1', '商贸1', '商贸-2', '商贸2', '商贸-3', '商贸3',
-    '配件-1', '配件-2', '改造', '更新改造',
+    '商贸-1', '商贸1', '商贸-2', '商贸2', '商贸-3', '商贸3', '商贸-4', '商贸4',
+    '配件-1', '配件-2', '配件-3', '配件3', '配件-4', '配件4',
+    '改造', '更新改造',
 }
 
 
+def _normalize_accessory(name):
+    """配件模块名归一化；非配件模块返回原值"""
+    return ACCESSORY_ALIASES.get(name, name)
+
+
 def _build_module_region_map():
-    """从 ANNUAL_TARGETS 建立 模块 -> 大区 映射（判定报表a个人业绩归属哪个大区）"""
-    from dashboards.contract_completion.services import ANNUAL_TARGETS
-    return {module: region for (region, module) in ANNUAL_TARGETS}
+    """模块 -> 大区（判定报表a个人业绩归属哪个大区）；来源 constants.MODULE_REGION"""
+    return dict(MODULE_REGION)
+
+
+_PERSON_SHEET_NAMES = ('模块-模主-助理', '任命令模块-模主', '模主+助理对应模块')
+_PERSON_EMPTY = ('', '（空）', '(空)', '空', '无', '待定', '/', '-', '—', '0', '#N/A')
+_PERSON_SPLIT = '／/、,，;；'
+
+
+def _person_dirs():
+    """业务员表所在目录：上传目录与 数据源/（未上传新表时可直接用源表）"""
+    here = os.path.abspath(os.path.dirname(__file__))                  # backend/dashboards/contract_completion
+    root = os.path.dirname(os.path.dirname(os.path.dirname(here)))     # 项目根
+    return (
+        os.path.join(root, 'backend', 'uploads', 'contract_completion', 'contract_mapping'),
+        os.path.join(root, '数据源'),
+    )
+
+
+def _latest_person_file():
+    """最新一份「国家-市场-业务员」表路径；找不到返回 None"""
+    candidates = []
+    for directory in _person_dirs():
+        if not os.path.isdir(directory):
+            continue
+        for name in os.listdir(directory):
+            if not name.startswith('国家-市场-业务员'):
+                continue
+            if not name.lower().endswith(('.xlsx', '.xls')):
+                continue
+            path = os.path.join(directory, name)
+            try:
+                candidates.append((os.path.getmtime(path), path))
+            except OSError:
+                continue
+    if not candidates:
+        return None
+    return max(candidates)[1]
+
+
+def _clean_person_name(value):
+    """人名归一化：去空白 + 拆分 '张三/李四'；返回候选列表"""
+    text = '' if value is None else str(value).strip()
+    if not text:
+        return []
+    out = []
+    for part in re.split('[' + re.escape(_PERSON_SPLIT) + ']', text):
+        part = part.strip()
+        if part in _PERSON_EMPTY:
+            continue
+        out.append(part)
+    return out
 
 
 def _load_person_module_map():
-    """读取 数据源/模块对应表.xlsx 的 D(姓名)->E(模块) 映射，返回 dict；失败返回空"""
+    """读取业务员表「模块-模主-助理」→ {人名: 模块}；失败返回空
+
+    值与旧「整梯模块对应表」口径一致：模主 + 助理 都算模块归属人，
+    因为报表a 的 col56（订单备注）可能写模主，也可能写助理。
+    """
     import openpyxl
-    here = os.path.abspath(os.path.dirname(__file__))                  # backend/dashboards/contract_completion
-    base = os.path.dirname(os.path.dirname(os.path.dirname(here)))     # 项目根
-    path = os.path.join(base, '数据源', '模块对应表.xlsx')
-    if not os.path.isfile(path):
+    path = _latest_person_file()
+    if not path:
         return {}
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     try:
-        ws = wb['整梯模块对应表']
+        sheet_name = next((n for n in _PERSON_SHEET_NAMES if n in wb.sheetnames), None)
+        if sheet_name is None:
+            return {}
+        ws = wb[sheet_name]
         mapping = {}
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            d = row[3] if len(row) > 3 else None   # D列=姓名
-            e = row[4] if len(row) > 4 else None   # E列=模块
-            if d and str(d).strip():
-                mapping[str(d).strip()] = str(e).strip() if e is not None else ''
+        header = None
+        col_module = col_person = None
+        person_cols = []
+        for row in ws.iter_rows(values_only=True):
+            cells = [str(c).strip() if c is not None else '' for c in row]
+            if header is None:
+                if '模块' in cells:
+                    header = cells
+                    col_module = cells.index('模块')
+                    person_cols = [i for i, c in enumerate(cells)
+                                   if c in ('模主', '助理', '助理2', '业务员', '姓名')]
+                continue
+            module = cells[col_module] if col_module < len(cells) else ''
+            if not module or module == '模块':
+                continue
+            for idx in person_cols:
+                person = cells[idx] if idx < len(cells) else ''
+                for name in _clean_person_name(person):
+                    if name not in mapping:
+                        mapping[name] = module
         return mapping
     finally:
         wb.close()
 
 
 def _resolve_personal_target(person2mod, mod2region, person_name):
-    """根据报表a col56 人名，返回 (module, region)；商贸配件/无法判定时返回 (None, None)"""
+    """根据报表a col56 人名，返回 (module, region)；商贸/配件/无法判定时返回 (None, None)"""
     target_mod = person2mod.get(person_name, '')
     if not target_mod or target_mod in _TRADE_SKIP_MODULES:
         return None, None
     region = mod2region.get(target_mod)
-    if not region or region == '商贸配件':
+    if not region:
         return None, None
     return target_mod, region
 
 
 def parse_report_a(file_path: str) -> dict:
-    """解析报表a.xls → 提取配件-1/配件-2的签单额、排产额 → 写入ledger表"""
+    """解析报表a.xls → 提取配件模块（配件-1/2/3/4）的签单额、排产额 → 写入ledger表"""
     try:
         wb = xlrd.open_workbook(file_path)
         ws = wb.sheet_by_index(0)
@@ -628,8 +707,8 @@ def parse_report_a(file_path: str) -> dict:
 
         trade_rows = []
         for r in range(1, ws.nrows):
-            module_name = _safe_str(ws.cell_value(r, 54))
-            if module_name not in ('配件-1', '配件-2'):
+            module_name = _normalize_accessory(_safe_str(ws.cell_value(r, 54)))
+            if module_name not in ACCESSORY_MODULES:
                 continue
 
             sign_date = _safe_date_xlrd(wb, ws.cell_value(r, 10))
@@ -670,7 +749,7 @@ def parse_report_a(file_path: str) -> dict:
                     contract_no=tr['contract_no'],
                     project_name=tr['project_name'],
                     mapped_module=tr['module_name'],
-                    mapped_region='商贸合计',
+                    mapped_region=MODULE_REGION.get(tr['module_name'], ''),
                     product_status='',
                     sign_date=tr['sign_date'],
                     contract_amount_rmb=tr['contract_amount_rmb'],
@@ -688,7 +767,7 @@ def parse_report_a(file_path: str) -> dict:
                     contract_no=tr['contract_no'],
                     project_name=tr['project_name'],
                     mapped_module=tr['module_name'],
-                    mapped_region='商贸合计',
+                    mapped_region=MODULE_REGION.get(tr['module_name'], ''),
                     product_status='',
                     schedule_date=tr['schedule_date'],
                     contract_amount_rmb=tr['contract_amount_rmb'],
@@ -716,10 +795,10 @@ def parse_report_a(file_path: str) -> dict:
         return {"success": False, "message": f"报表a解析失败: {str(e)}", "rows": 0}
 
 
-# ── Handler 5: 报表b（商贸配件发货） ──────────────
+# ── Handler 5: 报表b（配件发货） ──────────────
 
 def parse_report_b(file_path: str) -> dict:
-    """解析报表b.xls → 提取配件-1/配件-2的发货额 → 写入ledger表"""
+    """解析报表b.xls → 提取配件模块（配件-1/2/3/4）的发货额 → 写入ledger表"""
     try:
         wb = xlrd.open_workbook(file_path)
         ws = wb.sheet_by_index(0)
@@ -731,8 +810,8 @@ def parse_report_b(file_path: str) -> dict:
 
         trade_rows = []
         for r in range(1, ws.nrows):
-            module_name = _safe_str(ws.cell_value(r, 15))
-            if module_name not in ('配件-1', '配件-2'):
+            module_name = _normalize_accessory(_safe_str(ws.cell_value(r, 15)))
+            if module_name not in ACCESSORY_MODULES:
                 continue
 
             ship_date = _safe_date_xlrd(wb, ws.cell_value(r, 6))
@@ -762,7 +841,7 @@ def parse_report_b(file_path: str) -> dict:
                     contract_no=tr['contract_no'],
                     project_name=tr['project_name'],
                     mapped_module=tr['module_name'],
-                    mapped_region='商贸合计',
+                    mapped_region=MODULE_REGION.get(tr['module_name'], ''),
                     product_status='',
                     delivery_date=tr['delivery_date'],
                     contract_amount_rmb=tr['contract_amount_rmb'],

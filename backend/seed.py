@@ -119,35 +119,55 @@ def seed_database(app):
 
 
 def _seed_annual_targets():
-    """种子合同完成情况表的年度指标数据"""
-    if AnnualTarget.query.first() is not None:
-        return  # 已种子
+    """同步合同完成情况表的年度指标（2026-09-30 大区重构：2 大区 + 模块级指标）
 
-    # 从模板 Excel 提取的大区级年度指标
-    # 单位：台数(台)、金额(万元)
-    region_targets = {
-        '俄罗斯':   {'sign_units':5256,'sign_amount':101740.12,'payment_amount':39289.15,'ship_units':2300,'ship_amount':41357,'schedule_units':2300,'schedule_amount':41357},
-        '亚洲':     {'sign_units':1339,'sign_amount':13439.85,'payment_amount':5228.8,'ship_units':553,'ship_amount':5504,'schedule_units':553,'schedule_amount':5504},
-        '亚洲1':    {'sign_units':1328,'sign_amount':31010,'payment_amount':11972.21,'ship_units':583,'ship_amount':12602.33,'schedule_units':583,'schedule_amount':12602.33},
-        '亚洲2':    {'sign_units':1823,'sign_amount':15128.25,'payment_amount':5933.93,'ship_units':503,'ship_amount':6246.25,'schedule_units':503,'schedule_amount':6246.25},
-        '美洲':     {'sign_units':2622,'sign_amount':36539.8,'payment_amount':14130.3,'ship_units':1145,'ship_amount':14874,'schedule_units':1145,'schedule_amount':14874},
-        '中东':     {'sign_units':2063,'sign_amount':23240,'payment_amount':8827.4,'ship_units':815,'ship_amount':9292,'schedule_units':815,'schedule_amount':9292},
-        '非洲':     {'sign_units':1381,'sign_amount':10360,'payment_amount':4088.65,'ship_units':555.62,'ship_amount':4303.84,'schedule_units':555.62,'schedule_amount':4303.84},
-        '欧洲':     {'sign_units':118,'sign_amount':1540,'payment_amount':589.95,'ship_units':45,'ship_amount':621,'schedule_units':45,'schedule_amount':621},
-        '商贸合计': {'sign_units':0,'sign_amount':12002,'payment_amount':4940,'ship_units':0,'ship_amount':5200,'schedule_units':0,'schedule_amount':5200},
-    }
+    数据来源: dashboards/contract_completion/constants.py 的 ANNUAL_TARGETS
+    （由 数据源/模块任务划分9.30.xlsx 生成）。
+    表内 2026 年数据与当前大区/模块口径不一致时整体重建，保证「指标」列与任务表一致。
+    写入两类行：
+      模块级 (region, module_name=模块)  → 模块明细、年度完成比
+      大区级 (region, module_name='')    → 大区汇总
+    """
+    from dashboards.contract_completion.constants import (
+        REGION_ORDER, ANNUAL_TARGETS, ANNUAL_TARGET_METRIC_KEYS,
+    )
 
-    count = 0
-    for region, metrics in region_targets.items():
-        for mk, tv in metrics.items():
+    expected = {(region, '') for region in REGION_ORDER}
+    expected |= {(region, module) for (region, module) in ANNUAL_TARGETS}
+
+    existing = AnnualTarget.query.filter_by(target_year=2026).all()
+    if {(t.region, t.module_name or '') for t in existing} == expected:
+        return  # 已是当前口径，无需重建
+
+    AnnualTarget.query.filter_by(target_year=2026).delete()
+    db.session.flush()
+
+    # 模块级指标
+    for (region, module), targets in ANNUAL_TARGETS.items():
+        for field, metric_key in ANNUAL_TARGET_METRIC_KEYS.items():
             db.session.add(AnnualTarget(
-                target_year=2026, region=region,
-                module_name='', metric_key=mk, target_value=tv
+                target_year=2026, region=region, module_name=module,
+                metric_key=metric_key, target_value=targets.get(field, 0) or 0,
             ))
-            count += 1
+
+    # 大区级指标 = 该大区各模块求和
+    for region in REGION_ORDER:
+        sums = {metric_key: 0 for metric_key in ANNUAL_TARGET_METRIC_KEYS.values()}
+        for (r, _module), targets in ANNUAL_TARGETS.items():
+            if r != region:
+                continue
+            for field, metric_key in ANNUAL_TARGET_METRIC_KEYS.items():
+                sums[metric_key] += targets.get(field, 0) or 0
+        for metric_key, total in sums.items():
+            db.session.add(AnnualTarget(
+                target_year=2026, region=region, module_name='',
+                metric_key=metric_key, target_value=round(total, 2),
+            ))
 
     db.session.commit()
-    print(f'[Seed] 年度指标已种子: {count} 条记录')
+    print('[Seed] 年度指标已按新口径重建: %d 大区 × %d 大区级 + %d 模块级 = %d 条'
+          % (len(REGION_ORDER), len(ANNUAL_TARGET_METRIC_KEYS),
+             len(ANNUAL_TARGETS), len(expected) * len(ANNUAL_TARGET_METRIC_KEYS)))
 
 
 def _migrate_upload_configs():

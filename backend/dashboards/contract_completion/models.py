@@ -2,7 +2,7 @@
 合同完成情况表 - 数据库模型
 
 4张核心表：
-- cc_ledger_contract: 台账合同 + 商贸配件（来自报表a/b）
+- cc_ledger_contract: 台账合同 + 配件（来自报表a/b，商贸/配件已并入各自大区）
 - cc_country_mapping: 国家→大区/模块/业务员映射
 - cc_payment_collection: 回款明细
 - cc_annual_target: 年度指标（预种子，不随上传覆盖）
@@ -47,7 +47,7 @@ class LedgerContract(db.Model):
     mapped_region = db.Column(db.String(50))                              # 映射后的大区
     mapped_module = db.Column(db.String(100))                             # 映射后的模块
     mapped_manager = db.Column(db.String(50))                             # 映射后的模块经理
-    personal_module = db.Column(db.String(100))                           # 报表a个人归属模块（8大区模块；商贸配件为空）
+    personal_module = db.Column(db.String(100))                           # 报表a个人归属模块（业务员所属模块；商贸/配件行为空）
     personal_region = db.Column(db.String(50))                            # 报表a个人归属大区
 
     uploaded_at = db.Column(db.DateTime, default=datetime.now)
@@ -65,7 +65,7 @@ class CountryMapping(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     country = db.Column(db.String(100), unique=True, index=True)          # 国家
     module_name = db.Column(db.String(100))                                # 模块
-    region = db.Column(db.String(50))                                      # 大区（九大区）
+    region = db.Column(db.String(50))                                      # 大区（大区1 / 大区2）
     module_manager = db.Column(db.String(50))                              # 模块经理
     salesperson = db.Column(db.String(50))                                 # 业务负责人
     uploaded_at = db.Column(db.DateTime, default=datetime.now)

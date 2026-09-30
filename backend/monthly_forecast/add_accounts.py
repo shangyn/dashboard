@@ -37,13 +37,14 @@ try:
 except Exception:
     pass
 
+from monthly_forecast import mapping  # noqa: E402
 from monthly_forecast.handlers import (  # noqa: E402
     ACCOUNT_KEYS, NAME_KEYS, _cell_text, _find_col, _read_table,
 )
 
 DEFAULT_ROLE = '单月签排发填报'
 PERMISSION = 'monthly_forecast'
-AUTHORITATIVE_SHEET = '任命令模块-模主'
+AUTHORITATIVE_SHEET = mapping.AUTHORITATIVE_SHEET
 
 
 def log(text=''):
@@ -154,9 +155,10 @@ def main():
         if args.only_mapping_sheet:
             sheet_names = set()
             sheets = mapping._load_sheet_rows(mapping.latest_mapping_file())
-            for row in sheets.get(AUTHORITATIVE_SHEET, [])[1:]:
-                for person in mapping.clean_person(row[2] if len(row) > 2 else ''):
-                    sheet_names.add(person)
+            for sheet_name in mapping.AUTHORITATIVE_SHEET_ALIASES:
+                for row in sheets.get(sheet_name, [])[1:]:
+                    for person in mapping.clean_person(row[2] if len(row) > 2 else ''):
+                        sheet_names.add(person)
             before = len(rows)
             rows = [x for x in rows if x[1] in sheet_names]
             log('只保留「%s」里的人：%d → %d 条' % (AUTHORITATIVE_SHEET, before, len(rows)))

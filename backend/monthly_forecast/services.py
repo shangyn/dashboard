@@ -89,15 +89,33 @@ def resolve_module(contract, module_map):
     return contract.mapped_module or ''
 
 
+def _module_sort_key(item):
+    """排序键：大区顺序 → 普通模块在前、商贸/配件/改造在后 → 名称"""
+    module, region = item
+    from dashboards.contract_completion.constants import REGION_ORDER, TRADE_MODULES_ORDER
+
+    region_idx = REGION_ORDER.index(region) if region in REGION_ORDER else 99
+    if module in TRADE_MODULES_ORDER:
+        return (region_idx, 1, TRADE_MODULES_ORDER.index(module), module)
+    return (region_idx, 0, 0, module)
+
+
 def all_modules():
-    """全部模块名：映射表模块 + 商贸模块 + 改造 + 已填报过的模块"""
-    modules = {m.module_name for m in CountryMapping.query.all() if m.module_name}
+    """全部模块名：常量模块表 + 映射表模块 + 商贸模块 + 改造 + 已填报过的模块"""
+    from dashboards.contract_completion.constants import MODULE_REGION
+
+    modules = set(MODULE_REGION)
+    modules.update(m.module_name for m in CountryMapping.query.all() if m.module_name)
     modules.update(t.module_name for t in TradeModuleData.query.all() if t.module_name)
     modules.add(GAIZAO_MODULE)
     modules.update(
         row[0] for row in db.session.query(MonthlyInput.module_name).distinct().all() if row[0]
     )
-    return sorted(modules)
+
+    ordered = [name for name, _region in sorted(MODULE_REGION.items(), key=_module_sort_key)]
+    # 常量表之后补进来的模块（历史数据里的旧模块名等）排在最后
+    extra = sorted(modules - set(MODULE_REGION))
+    return ordered + extra
 
 
 # 名单（scope）
