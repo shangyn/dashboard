@@ -170,10 +170,12 @@ def import_budget(excel_path, target_month=None):
     skipped_empty = 0
 
     for r in range(header_row + 1, ws.max_row):  # 0-based
-        # 序号列不是纯数字 → 跳过（合计行/项目明细行/空行）
-        seq_val = str(ws.cell(row=r + 1, column=1).value or "").strip()
-        if seq_val and not seq_val.isdigit():
-            continue
+        # 仅当第1列是独立的"序号"列（模块名不在第1列）时，才用序号判断
+        # （兼容两种表格式：A列=序号+B列=模块，或 A列=模块）
+        if col_module != 0:
+            seq_val = str(ws.cell(row=r + 1, column=1).value or "").strip()
+            if seq_val and not seq_val.isdigit():
+                continue
 
         module_name = str(ws.cell(row=r + 1, column=col_module + 1).value or "").strip()
         if not module_name:

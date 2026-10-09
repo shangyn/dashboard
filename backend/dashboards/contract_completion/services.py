@@ -6,10 +6,11 @@
 import os
 from datetime import date, datetime, timedelta
 from flask import current_app
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from models import db
 from dashboards.contract_completion.models import (
-    LedgerContract, CountryMapping, PaymentCollection, AnnualTarget
+    LedgerContract, CountryMapping, PaymentCollection, AnnualTarget,
+    TradeModuleData, OverseasDiff, ShipmentData,
 )
 
 # ── 缓存 ──────────────────────────────────────────────────
@@ -19,20 +20,38 @@ _two_year_fingerprint = None    # 缓存时的数据指纹
 
 
 def _get_data_fingerprint():
-    """快速生成数据指纹（轻量 COUNT 查询），用于判断缓存是否失效"""
-    from sqlalchemy import or_
-    from dashboards.contract_completion.models import TradeModuleData, OverseasDiff, ShipmentData
-    ledger_count = LedgerContract.query.filter(
+    """快速生成数据指纹（行数 + 最近上传时间），用于判断缓存是否失效。
+
+    注意：必须包含「最近上传时间」。海外差额/商贸数据等上传是"同规模全量替换"
+    （先删该年再插回同样多的行），只比较行数时指纹不变，其它 worker 的进程内缓存
+    就永远不失效 → 刷新页面会回退到旧数据。加上 MAX(uploaded_at) 后，每次上传
+    都会改变指纹，所有 worker 都会重算。
+    （本函数在多 worker 下是唯一的跨进程失效手段，勿删。）
+    """
+
+    def _sig(model, *filters):
+        """返回 "行数@最近上传时间" """
+        q = db.session.query(func.count(model.id), func.max(model.uploaded_at))
+        if filters:
+            q = q.filter(*filters)
+        count, latest = q.one()
+        return "%s@%s" % (count, latest.isoformat() if latest else "-")
+
+    ledger_sig = _sig(
+        LedgerContract,
         LedgerContract.source.in_(['ledger', 'report_a', 'report_b']),
-        or_(LedgerContract.product_status == None, LedgerContract.product_status != '已作废')
-    ).count()
-    mapping_count = CountryMapping.query.count()
-    payment_count = PaymentCollection.query.count()
-    trade_count = TradeModuleData.query.count()
-    overseas_count = OverseasDiff.query.count()
-    shipment_count = ShipmentData.query.count()
-    today_str = (date.today() - timedelta(days=1)).isoformat()
-    return f"{ledger_count}|{mapping_count}|{payment_count}|{trade_count}|{overseas_count}|{shipment_count}|{today_str}"
+        or_(LedgerContract.product_status == None, LedgerContract.product_status != '已作废'),
+    )
+    parts = [
+        ledger_sig,
+        _sig(CountryMapping),
+        _sig(PaymentCollection),
+        _sig(TradeModuleData),
+        _sig(OverseasDiff),
+        _sig(ShipmentData),
+        (date.today() - timedelta(days=1)).isoformat(),
+    ]
+    return "|".join(parts)
 
 
 def invalidate_two_year_cache():
