@@ -83,6 +83,7 @@ def api_context():
         return _ok({
             'months': svc.month_options(),
             'default_month': svc.default_month(),
+            'special_months': sorted(svc.SPECIAL_MONTHS),
             'scoped': bool(scoped),
             'my_modules': scoped,
             'all_modules': [] if scoped else svc.all_modules(),
@@ -270,6 +271,25 @@ def api_export_shipping():
         path = svc.export_shipping(month, modules=modules)
         return send_file(path, as_attachment=True,
                          download_name=f'{month}_预计发货合同梯号明细.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    except Exception as exc:
+        return _fail(f'导出失败: {exc}', 500)
+
+
+@mf_bp.route('/api/monthly-forecast/export/detail', methods=['GET'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_export_detail():
+    """Excel 3（临时需求）：合同明细 5 列（模块人员仅本模块，角色外全量）"""
+    user = get_current_user()
+    month = _resolve_month()
+    if not month:
+        return _fail('月份格式不正确，应为 YYYY-MM')
+    modules, _ = _visible_modules(user)
+    try:
+        path = svc.export_detail(month, modules=modules)
+        return send_file(path, as_attachment=True,
+                         download_name=f'{month}_合同明细.xlsx',
                          mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as exc:
         return _fail(f'导出失败: {exc}', 500)

@@ -13,7 +13,9 @@ from datetime import date, datetime
 from sqlalchemy import or_
 
 from models import db
-from monthly_forecast.models import MonthlyInput, ShipSelection, Submission, UserScope
+from monthly_forecast.models import (
+    ContractDetail, MonthlyInput, ShipSelection, Submission, UserScope,
+)
 
 # 既有表 — 只读引用
 from dashboards.contract_completion.models import (
@@ -21,6 +23,16 @@ from dashboards.contract_completion.models import (
 )
 
 GAIZAO_MODULE = '改造'
+
+# 临时需求（2026-11 / 2026-12）：候选池特殊口径 + 合同明细手填
+# 回滚时只需清空 SPECIAL_MONTHS（或 revert 本次提交），其他月份行为不变。
+SPECIAL_MONTHS = {'2026-11', '2026-12'}
+SPECIAL_EXTRA_CONTRACT = 'DHT-230704T'
+
+
+def is_special_month(data_month):
+    """是否为临时特殊月份（2026-11 / 2026-12）"""
+    return (data_month or '') in SPECIAL_MONTHS
 
 
 # 月份工具
@@ -148,6 +160,9 @@ def list_candidates(module_name, data_month=None, keyword=None):
     额外：整梯发货日期（台账 AV 列）晚于填报月份的梯号不进候选（空值保留）
     排序：排产日期倒序（日期近的在前），同日按合同号 / 梯号升序
     """
+    if is_special_month(data_month):
+        return _list_candidates_special(module_name, data_month, keyword)
+
     contracts = LedgerContract.query.filter(
         LedgerContract.source == 'ledger',
         or_(LedgerContract.product_status.is_(None), LedgerContract.product_status != '已作废'),
@@ -182,6 +197,52 @@ def list_candidates(module_name, data_month=None, keyword=None):
         'schedule_date': _date_str(c.schedule_date),
         'schedule_finish_date': _date_str(c.schedule_finish_date),
         'whole_ship_date': _date_str(c.whole_ship_date),
+        'product_status': c.product_status or '',
+    } for c in rows]
+
+
+def _list_candidates_special(module_name, data_month=None, keyword=None):
+    """11 / 12 月临时候选池：
+    未作废 且 2026-01-01 起签订 且 未发货（组A日期为空），不限是否排产；
+    额外无条件带上合同号 SPECIAL_EXTRA_CONTRACT 的全部梯号。
+    排序：签订日期倒序（近的在前），同日按合同号 / 梯号升序。
+    """
+    rows = LedgerContract.query.filter(
+        LedgerContract.source == 'ledger',
+        or_(
+            db.and_(
+                or_(LedgerContract.product_status.is_(None),
+                    LedgerContract.product_status != '已作废'),
+                LedgerContract.sign_date >= date(2026, 1, 1),
+                LedgerContract.delivery_date.is_(None),
+            ),
+            LedgerContract.contract_no == SPECIAL_EXTRA_CONTRACT,
+        ),
+    ).all()
+
+    module_map = load_module_map()
+    rows = [c for c in rows if resolve_module(c, module_map) == module_name]
+
+    rows.sort(key=lambda c: (c.contract_no or '', c.ladder_no or ''))
+    rows.sort(key=lambda c: c.sign_date or date.min, reverse=True)
+
+    if keyword:
+        text = str(keyword).strip().lower()
+        if text:
+            rows = [c for c in rows if text in (
+                (c.contract_no or '') + ' ' + (c.ladder_no or '') + ' ' + (c.project_name or '')
+            ).lower()]
+
+    return [{
+        'contract_no': c.contract_no or '',
+        'ladder_no': c.ladder_no or '',
+        'project_name': c.project_name or '',
+        'unit_count': c.unit_count or 0,
+        'amount_wan': round((c.contract_amount_rmb or 0) / 10000.0, 2),
+        'schedule_date': _date_str(c.schedule_date),
+        'schedule_finish_date': _date_str(c.schedule_finish_date),
+        'whole_ship_date': _date_str(c.whole_ship_date),
+        'sign_date': _date_str(c.sign_date),
         'product_status': c.product_status or '',
     } for c in rows]
 
@@ -346,7 +407,17 @@ def get_entry(data_month, module_name):
     base['ship_units'] = ship_units
     base['ship_amount'] = ship_amount
     base['ship_selections'] = _enrich_ship_rows(ships)
+    base['contract_details'] = _list_contract_details(data_month, module_name)
+    base['is_special'] = is_special_month(data_month)
     return base
+
+
+def _list_contract_details(data_month, module_name):
+    """某月某模块的合同明细（不校验，原样返回）"""
+    rows = ContractDetail.query.filter_by(
+        data_month=data_month, module_name=module_name
+    ).order_by(ContractDetail.row_no, ContractDetail.id).all()
+    return [r.to_dict() for r in rows]
 
 
 def _to_float(value):
@@ -443,10 +514,42 @@ def save_draft(data_month, module_name, payload, user):
                 created_by_name=record.updated_by_name,
             ))
 
+    if is_special_month(data_month):
+        _replace_contract_details(data_month, module_name,
+                                  payload.get('contract_details'), record, user)
+
     db.session.commit()
     entry = get_entry(data_month, module_name)
     entry['rejected'] = rejected
     return entry
+
+
+def _replace_contract_details(data_month, module_name, details, record, user):
+    """全量替换合同明细；完全空白行跳过，其余原样保存（不校验）"""
+    ContractDetail.query.filter_by(
+        data_month=data_month, module_name=module_name
+    ).delete(synchronize_session=False)
+    for index, item in enumerate(details or []):
+        item = item or {}
+        contract_no = str(item.get('contract_no') or '').strip()
+        project_name = str(item.get('project_name') or '').strip()
+        unit_count = _to_float(item.get('unit_count'))
+        contract_amount = _to_float(item.get('contract_amount'))
+        plan_payment = _to_float(item.get('plan_payment'))
+        if not (contract_no or project_name or unit_count or contract_amount or plan_payment):
+            continue
+        db.session.add(ContractDetail(
+            data_month=data_month,
+            module_name=module_name,
+            row_no=index,
+            contract_no=contract_no[:100],
+            project_name=project_name[:300],
+            unit_count=unit_count,
+            contract_amount=contract_amount,
+            plan_payment=plan_payment,
+            created_by=getattr(user, 'id', None),
+            created_by_name=record.updated_by_name,
+        ))
 
 
 def submit(data_month, module_name, payload, user):
@@ -480,6 +583,7 @@ def submit(data_month, module_name, payload, user):
             'travel_amount': entry.get('travel_amount', 0.0),
             'other_expense_amount': entry.get('other_expense_amount', 0.0),
             'ship_selections': entry['ship_selections'],
+            'contract_details': entry.get('contract_details', []),
         }, ensure_ascii=False),
         sign_units=entry['sign_units'], sign_amount=entry['sign_amount'],
         prod_units=entry['prod_units'], prod_amount=entry['prod_amount'],
@@ -552,7 +656,27 @@ def get_summary(data_month, modules=None):
     total['module_name'] = '合计'
     total['is_total'] = True
 
-    return {'data_month': data_month, 'rows': rows, 'total': total}
+    result = {'data_month': data_month, 'rows': rows, 'total': total}
+    if is_special_month(data_month):
+        result['is_special'] = True
+        result['selected_payment_total'] = round(
+            sum((row.get('payment_amount') or 0.0) for row in rows), 2)
+        result['details'] = _summary_details(data_month, module_list)
+    return result
+
+
+def _summary_details(data_month, module_list):
+    """特殊月份：跨模块的合同明细汇总（原样展示，不做筛选）"""
+    rows = ContractDetail.query.filter(
+        ContractDetail.data_month == data_month,
+        ContractDetail.module_name.in_(module_list),
+    ).order_by(ContractDetail.module_name, ContractDetail.row_no, ContractDetail.id).all()
+    result = []
+    for row in rows:
+        item = row.to_dict()
+        item['module_name'] = row.module_name
+        result.append(item)
+    return result
 
 
 # 导出
@@ -561,6 +685,7 @@ FORECAST_HEADERS = ['模块', '签单台数', '签单金额(万元)', '排产台
                     '月回款额(万元)', '支付佣金(万元)', '支付安装费(万元)',
                     '差旅、招待费(万元)', '其他费用支出计划(万元)']
 SHIPPING_HEADERS = ['模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人']
+DETAIL_HEADERS = ['模块', '合同号', '项目名称', '台数', '合同额(万元)', '计划回款额(万元)', '填报人']
 
 
 def _new_workbook():
@@ -662,5 +787,92 @@ def export_shipping(data_month, modules=None):
     _set_widths(ws, [24, 18, 22, 32, 8, 14, 12, 12])
 
     path = os.path.join(tempfile.gettempdir(), 'mf_shipping_' + data_month + '.xlsx')
+    wb.save(path)
+    return path
+
+
+def export_detail(data_month, modules=None):
+    """Excel 3（临时需求）：合同明细（含模块 / 填报人）
+
+    合并两部分：
+    1) 勾选的发货候选 —— 一个合同号一行（台数 / 合同额按合同汇总）；
+       卡片「已选合同号计划回款」的填写值写在每个模块的最后一行；
+    2) 模块手填的合同明细 —— 原样输出。
+    """
+    module_list = list(modules) if modules else all_modules()
+    rows = []
+
+    ships = ShipSelection.query.filter(
+        ShipSelection.data_month == data_month,
+        ShipSelection.module_name.in_(module_list),
+    ).order_by(ShipSelection.module_name, ShipSelection.contract_no, ShipSelection.ladder_no).all()
+
+    selected = {}
+    order = []
+    for s in ships:
+        key = (s.module_name or '', s.contract_no or '')
+        if key not in selected:
+            selected[key] = {'unit_count': 0.0, 'amount_rmb': 0.0, 'created_by_name': s.created_by_name or ''}
+            order.append(key)
+        selected[key]['unit_count'] += s.unit_count or 0.0
+        selected[key]['amount_rmb'] += s.amount_rmb or 0.0
+        if s.created_by_name:
+            selected[key]['created_by_name'] = s.created_by_name
+
+    names = {}
+    contract_nos = {key[1] for key in order if key[1]}
+    if contract_nos:
+        for c in LedgerContract.query.filter(LedgerContract.contract_no.in_(contract_nos)).all():
+            if c.contract_no and c.contract_no not in names and c.project_name:
+                names[c.contract_no] = c.project_name
+
+    plan_by_module = {}
+    last_row_of_module = {}
+    for index, key in enumerate(order):
+        last_row_of_module[key[0]] = index
+    for module in last_row_of_module:
+        record = MonthlyInput.query.filter_by(data_month=data_month, module_name=module).first()
+        plan_by_module[module] = round((record.payment_amount if record else 0.0) or 0.0, 2)
+
+    for index, key in enumerate(order):
+        module, contract_no = key
+        item = selected[key]
+        plan = plan_by_module.get(module, 0.0) if last_row_of_module.get(module) == index else ''
+        rows.append([
+            module,
+            contract_no,
+            names.get(contract_no, ''),
+            item['unit_count'],
+            round(item['amount_rmb'] / 10000.0, 2),
+            plan,
+            item['created_by_name'],
+        ])
+
+    details = ContractDetail.query.filter(
+        ContractDetail.data_month == data_month,
+        ContractDetail.module_name.in_(module_list),
+    ).order_by(ContractDetail.module_name, ContractDetail.row_no).all()
+    for r in details:
+        rows.append([
+            r.module_name or '',
+            r.contract_no or '',
+            r.project_name or '',
+            r.unit_count or 0,
+            round(r.contract_amount or 0, 2),
+            round(r.plan_payment or 0, 2),
+            r.created_by_name or '',
+        ])
+
+    wb = _new_workbook()
+    ws = wb.active
+    ws.title = '合同明细'
+    ws.append(DETAIL_HEADERS)
+    for row in rows:
+        ws.append(row)
+
+    _style_header(ws, len(DETAIL_HEADERS))
+    _set_widths(ws, [22, 22, 40, 10, 16, 18, 12])
+
+    path = os.path.join(tempfile.gettempdir(), 'mf_detail_' + data_month + '.xlsx')
     wb.save(path)
     return path

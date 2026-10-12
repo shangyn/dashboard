@@ -151,3 +151,35 @@ class UserScope(db.Model):
             'module_name': self.module_name,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
         }
+
+
+class ContractDetail(db.Model):
+    """临时需求（2026-11 / 2026-12）：模块自填的合同明细
+
+    与既有 4 张表完全隔离；回滚时停止读写本表即可，老表与老数据零影响。
+    5 列：合同号 / 项目名称 / 台数 / 合同额(万元) / 计划回款额(万元)，不做任何筛选校验。
+    """
+    __tablename__ = 'mf_contract_detail'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    data_month = db.Column(db.String(7), index=True, nullable=False)        # YYYY-MM
+    module_name = db.Column(db.String(100), index=True, nullable=False)
+    row_no = db.Column(db.Integer, default=0)                              # 行序号（保持录入顺序）
+    contract_no = db.Column(db.String(100), default='')                    # 合同号（不校验）
+    project_name = db.Column(db.String(300), default='')                   # 项目名称（不校验）
+    unit_count = db.Column(db.Float, default=0.0)                          # 台数
+    contract_amount = db.Column(db.Float, default=0.0)                     # 合同额（万元）
+    plan_payment = db.Column(db.Float, default=0.0)                        # 计划回款额（万元）
+    created_by = db.Column(db.Integer, nullable=True)
+    created_by_name = db.Column(db.String(50), default='')
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            'row_no': self.row_no or 0,
+            'contract_no': self.contract_no or '',
+            'project_name': self.project_name or '',
+            'unit_count': self.unit_count or 0.0,
+            'contract_amount': self.contract_amount or 0.0,
+            'plan_payment': self.plan_payment or 0.0,
+        }

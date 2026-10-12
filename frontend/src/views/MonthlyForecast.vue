@@ -30,6 +30,9 @@
         <el-button v-if="!isScoped" size="small" type="success" plain @click="handleExportShipping">
           导出预计发货明细
         </el-button>
+        <el-button v-if="isSpecialMonth" size="small" type="warning" plain @click="handleExportDetail">
+          导出明细
+        </el-button>
         <el-button v-if="context.can_import_scope" size="small" plain @click="scopeVisible = true">
           名单管理
         </el-button>
@@ -88,7 +91,15 @@
             已选 {{ selectedCount }} 个梯号（{{ ladderUnits }} 台 / {{ ladderAmount }} 万元）＋ 无梯号预估 {{ manualUnits }} 台 / {{ manualAmount }} 万元
           </div>
         </div>
-        <div class="mf-card">
+        <div class="mf-card" v-if="isSpecialMonth">
+          <div class="mf-card-title">已选合同号计划回款（万元）</div>
+          <div class="mf-field">
+            <span>计划回款</span>
+            <el-input-number v-model="form.payment_amount" :min="0" :controls="false" size="small" class="mf-num" />
+          </div>
+          <div class="mf-hint">已勾选（现有）合同号的计划回款，汇总时展示合计</div>
+        </div>
+        <div class="mf-card" v-else>
           <div class="mf-card-title">回款与费用预计（万元）</div>
           <div class="mf-field">
             <span>月回款额</span>
@@ -195,6 +206,46 @@
           <el-table-column prop="schedule_finish_date" label="排产完工日期" width="110" align="center" />
         </el-table>
       </div>
+
+      <div class="mf-panel" v-if="isSpecialMonth">
+        <div class="mf-panel-head">
+          <span class="mf-panel-title">新增合同明细（手填，不校验）</span>
+          <span class="mf-panel-count">共 {{ details.length }} 行</span>
+          <el-button size="small" type="primary" plain @click="addDetailRow">添加一行</el-button>
+        </div>
+        <el-table :data="details" size="small" class="mf-table">
+          <el-table-column label="操作" width="72" align="center">
+            <template #default="{ $index }">
+              <el-button link type="danger" size="small" @click="removeDetailRow($index)">删除</el-button>
+            </template>
+          </el-table-column>
+          <el-table-column label="合同号" width="180">
+            <template #default="{ row }">
+              <el-input v-model="row.contract_no" size="small" placeholder="合同号" />
+            </template>
+          </el-table-column>
+          <el-table-column label="项目名称" min-width="240">
+            <template #default="{ row }">
+              <el-input v-model="row.project_name" size="small" placeholder="项目名称" />
+            </template>
+          </el-table-column>
+          <el-table-column label="台数" width="110" align="right">
+            <template #default="{ row }">
+              <el-input-number v-model="row.unit_count" :min="0" :controls="false" size="small" style="width:100%" />
+            </template>
+          </el-table-column>
+          <el-table-column label="合同额(万元)" width="140" align="right">
+            <template #default="{ row }">
+              <el-input-number v-model="row.contract_amount" :min="0" :controls="false" size="small" style="width:100%" />
+            </template>
+          </el-table-column>
+          <el-table-column label="计划回款额(万元)" width="150" align="right">
+            <template #default="{ row }">
+              <el-input-number v-model="row.plan_payment" :min="0" :controls="false" size="small" style="width:100%" />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </div>
 
     <!-- 只读汇总模式 -->
@@ -225,6 +276,20 @@
             </template>
           </el-table-column>
           <el-table-column prop="updated_by_name" label="填报人" width="100" align="center" />
+        </el-table>
+      </div>
+      <div class="mf-panel" v-if="isSpecialMonth">
+        <div class="mf-panel-head">
+          <span class="mf-panel-title">{{ month }} 新增合同明细汇总</span>
+          <span class="mf-panel-count">已选合同号计划回款合计：{{ selectedPaymentTotal }} 万元</span>
+        </div>
+        <el-table :data="summaryDetails" size="small" class="mf-table">
+          <el-table-column prop="module_name" label="模块" width="180" fixed />
+          <el-table-column prop="contract_no" label="合同号" width="180" />
+          <el-table-column prop="project_name" label="项目名称" min-width="240" show-overflow-tooltip />
+          <el-table-column prop="unit_count" label="台数" width="100" align="right" />
+          <el-table-column prop="contract_amount" label="合同额(万元)" width="140" align="right" />
+          <el-table-column prop="plan_payment" label="计划回款额(万元)" width="160" align="right" />
         </el-table>
       </div>
       <ScopeManageDrawer v-model="scopeVisible" />
@@ -291,8 +356,15 @@ const selections = ref({})
 
 const summaryRows = ref([])
 const summaryTotal = ref(null)
+// 临时需求（11/12 月）：模块自填合同明细 + 汇总明细
+const details = ref([])
+const summaryDetails = ref([])
+const selectedPaymentTotal = ref(0)
 
 const isScoped = computed(() => !!context.value.scoped)
+const isSpecialMonth = computed(() =>
+  (context.value.special_months || []).includes(month.value)
+)
 
 function round2(value) {
   return Math.round((Number(value) || 0) * 100) / 100
@@ -350,6 +422,18 @@ function removeSelection(ladderNo) {
   delete selections.value[ladderNo]
 }
 
+function emptyDetailRow() {
+  return { contract_no: '', project_name: '', unit_count: 0, contract_amount: 0, plan_payment: 0 }
+}
+
+function addDetailRow() {
+  details.value.push(emptyDetailRow())
+}
+
+function removeDetailRow(index) {
+  details.value.splice(index, 1)
+}
+
 function applyEntry(data) {
   form.value = {
     sign_units: data.sign_units || 0,
@@ -369,6 +453,15 @@ function applyEntry(data) {
     if (row.ladder_no) map[row.ladder_no] = { ...row }
   }
   selections.value = map
+
+  details.value = (data.contract_details || []).map((row) => ({
+    contract_no: row.contract_no || '',
+    project_name: row.project_name || '',
+    unit_count: row.unit_count || 0,
+    contract_amount: row.contract_amount || 0,
+    plan_payment: row.plan_payment || 0,
+  }))
+  if (!details.value.length) details.value.push(emptyDetailRow())
 
   const status = data.status || ''
   if (status === 'submitted') {
@@ -396,6 +489,8 @@ async function loadSummary() {
   const res = await getSummary(month.value)
   summaryRows.value = res.data?.rows || []
   summaryTotal.value = res.data?.total || null
+  summaryDetails.value = res.data?.details || []
+  selectedPaymentTotal.value = res.data?.selected_payment_total || 0
 }
 
 async function loadPage() {
@@ -464,6 +559,13 @@ function buildPayload() {
       ladder_no: row.ladder_no,
       is_manual: !!row.is_manual,
     })),
+    contract_details: details.value.map((row) => ({
+      contract_no: row.contract_no || '',
+      project_name: row.project_name || '',
+      unit_count: row.unit_count || 0,
+      contract_amount: row.contract_amount || 0,
+      plan_payment: row.plan_payment || 0,
+    })),
   }
 }
 
@@ -514,6 +616,14 @@ async function handleExportForecast() {
 async function handleExportShipping() {
   try {
     await downloadExport('shipping', month.value, `${month.value}_预计发货合同梯号明细.xlsx`)
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
+}
+
+async function handleExportDetail() {
+  try {
+    await downloadExport('detail', month.value, `${month.value}_合同明细.xlsx`)
   } catch (error) {
     ElMessage.error('导出失败')
   }
