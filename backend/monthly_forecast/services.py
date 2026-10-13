@@ -685,7 +685,7 @@ FORECAST_HEADERS = ['模块', '签单台数', '签单金额(万元)', '排产台
                     '月回款额(万元)', '支付佣金(万元)', '支付安装费(万元)',
                     '差旅、招待费(万元)', '其他费用支出计划(万元)']
 SHIPPING_HEADERS = ['模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人']
-DETAIL_HEADERS = ['模块', '合同号', '项目名称', '台数', '合同额(万元)', '计划回款额(万元)', '填报人']
+DETAIL_HEADERS = ['模块', '合同号', '梯号', '项目名称', '台数', '合同额(万元)', '计划回款额(万元)', '填报人']
 
 
 def _new_workbook():
@@ -792,12 +792,12 @@ def export_shipping(data_month, modules=None):
 
 
 def export_detail(data_month, modules=None):
-    """Excel 3（临时需求）：合同明细（含模块 / 填报人）
+    """Excel 3（临时需求）：合同明细（含模块 / 梯号 / 填报人）
 
     合并两部分：
-    1) 勾选的发货候选 —— 一个合同号一行（台数 / 合同额按合同汇总）；
-       卡片「已选合同号计划回款」的填写值写在每个模块的最后一行；
-    2) 模块手填的合同明细 —— 原样输出。
+    1) 勾选的发货候选 —— 按勾选的梯号逐行输出（台数 / 金额不再按合同号汇总）；
+       卡片「已选合同号计划回款」的填写值写在每个模块的最后一个勾选梯号行；
+    2) 模块手填的合同明细 —— 原样输出，梯号留空。
     """
     module_list = list(modules) if modules else all_modules()
     rows = []
@@ -807,45 +807,40 @@ def export_detail(data_month, modules=None):
         ShipSelection.module_name.in_(module_list),
     ).order_by(ShipSelection.module_name, ShipSelection.contract_no, ShipSelection.ladder_no).all()
 
-    selected = {}
-    order = []
-    for s in ships:
-        key = (s.module_name or '', s.contract_no or '')
-        if key not in selected:
-            selected[key] = {'unit_count': 0.0, 'amount_rmb': 0.0, 'created_by_name': s.created_by_name or ''}
-            order.append(key)
-        selected[key]['unit_count'] += s.unit_count or 0.0
-        selected[key]['amount_rmb'] += s.amount_rmb or 0.0
-        if s.created_by_name:
-            selected[key]['created_by_name'] = s.created_by_name
+    ladders = [s.ladder_no for s in ships if s.ladder_no]
+    names_by_ladder = {}
+    if ladders:
+        for c in LedgerContract.query.filter(LedgerContract.ladder_no.in_(ladders)).all():
+            if c.ladder_no and c.project_name:
+                names_by_ladder[c.ladder_no] = c.project_name
 
-    names = {}
-    contract_nos = {key[1] for key in order if key[1]}
+    names_by_contract = {}
+    contract_nos = {s.contract_no or '' for s in ships if s.contract_no}
     if contract_nos:
         for c in LedgerContract.query.filter(LedgerContract.contract_no.in_(contract_nos)).all():
-            if c.contract_no and c.contract_no not in names and c.project_name:
-                names[c.contract_no] = c.project_name
+            if c.contract_no and c.contract_no not in names_by_contract and c.project_name:
+                names_by_contract[c.contract_no] = c.project_name
 
     plan_by_module = {}
-    last_row_of_module = {}
-    for index, key in enumerate(order):
-        last_row_of_module[key[0]] = index
-    for module in last_row_of_module:
+    last_ship_row_of_module = {}
+    for index, s in enumerate(ships):
+        last_ship_row_of_module[s.module_name or ''] = index
+    for module in last_ship_row_of_module:
         record = MonthlyInput.query.filter_by(data_month=data_month, module_name=module).first()
         plan_by_module[module] = round((record.payment_amount if record else 0.0) or 0.0, 2)
 
-    for index, key in enumerate(order):
-        module, contract_no = key
-        item = selected[key]
-        plan = plan_by_module.get(module, 0.0) if last_row_of_module.get(module) == index else ''
+    for index, s in enumerate(ships):
+        module = s.module_name or ''
+        plan = plan_by_module.get(module, 0.0) if last_ship_row_of_module.get(module) == index else ''
         rows.append([
             module,
-            contract_no,
-            names.get(contract_no, ''),
-            item['unit_count'],
-            round(item['amount_rmb'] / 10000.0, 2),
+            s.contract_no or '',
+            s.ladder_no or '',
+            names_by_ladder.get(s.ladder_no) or names_by_contract.get(s.contract_no or '') or '',
+            s.unit_count or 0,
+            round((s.amount_rmb or 0) / 10000.0, 2),
             plan,
-            item['created_by_name'],
+            s.created_by_name or '',
         ])
 
     details = ContractDetail.query.filter(
@@ -856,6 +851,7 @@ def export_detail(data_month, modules=None):
         rows.append([
             r.module_name or '',
             r.contract_no or '',
+            '',
             r.project_name or '',
             r.unit_count or 0,
             round(r.contract_amount or 0, 2),
@@ -871,7 +867,7 @@ def export_detail(data_month, modules=None):
         ws.append(row)
 
     _style_header(ws, len(DETAIL_HEADERS))
-    _set_widths(ws, [22, 22, 40, 10, 16, 18, 12])
+    _set_widths(ws, [22, 22, 22, 40, 10, 16, 18, 12])
 
     path = os.path.join(tempfile.gettempdir(), 'mf_detail_' + data_month + '.xlsx')
     wb.save(path)
