@@ -535,6 +535,7 @@ def _module_row(data_month, module_name):
         'travel_amount': (record.travel_amount if record else 0.0) or 0.0,
         'other_expense_amount': (record.other_expense_amount if record else 0.0) or 0.0,
         'status': (record.status if record else '') or '',
+        'submitted_at': record.submitted_at.strftime('%Y-%m-%d %H:%M:%S') if record and record.submitted_at else '',
         'updated_by_name': (record.updated_by_name if record else '') or '',
         'updated_at': record.updated_at.strftime('%Y-%m-%d %H:%M:%S') if record and record.updated_at else '',
     }

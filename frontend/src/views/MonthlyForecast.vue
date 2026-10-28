@@ -224,6 +224,7 @@
               <span v-else class="mf-tag-none">未填</span>
             </template>
           </el-table-column>
+          <el-table-column prop="submitted_at" label="最近提交时间" width="160" align="center" />
           <el-table-column prop="updated_by_name" label="填报人" width="100" align="center" />
         </el-table>
       </div>
