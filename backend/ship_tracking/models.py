@@ -166,6 +166,7 @@ class TrackingItem(db.Model):
     plan_removed_at = db.Column(db.DateTime, nullable=True)
 
     actual_ship_date = db.Column(db.Date, index=True, nullable=True)
+    actual_ship_source = db.Column(db.String(20), nullable=True)
     loan_status = db.Column(db.String(30), default='')  # reserved for later
     booking_status = db.Column(db.String(20), index=True, default='未订舱')
     booking_audit_status = db.Column(db.String(20), default='')

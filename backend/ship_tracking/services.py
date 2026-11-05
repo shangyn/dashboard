@@ -332,6 +332,12 @@ def _tracking_dict(item, region='', region_source=''):
         'committed_at': iso(item.committed_at),
         'committed_by_name': item.committed_by_name or '',
         'actual_ship_date': iso(item.actual_ship_date),
+        'actual_ship_source': item.actual_ship_source or '',
+        'actual_ship_source_label': (
+            '台账组A日期' if item.actual_ship_source == 'ledger'
+            else '系统每日实发' if item.actual_ship_source == 'daily'
+            else ''
+        ),
         'booking_status': item.booking_status or '未订舱',
         'booking_audit_status': item.booking_audit_status or '',
         'booking_record_count': item.booking_record_count or 0,
@@ -342,6 +348,27 @@ def _tracking_dict(item, region='', region_source=''):
         'flag_labels': [FLAG_LABELS.get(flag, flag) for flag in flags],
         'source_kind': item.source_kind or 'plan',
     }
+
+
+def _ledger_delivery_date(ladder_key):
+    from dashboards.contract_completion.models import LedgerContract
+
+    key = canonical_ladder(ladder_key)
+    if not key:
+        return None
+    rows = LedgerContract.query.filter(
+        LedgerContract.source == 'ledger',
+        LedgerContract.ladder_no == key,
+    ).all()
+    if not rows:
+        return None
+    primary = max(rows, key=lambda row: row.contract_amount_rmb or 0)
+    if primary.delivery_date:
+        return primary.delivery_date
+    for row in rows:
+        if row.delivery_date:
+            return row.delivery_date
+    return None
 
 
 def _resolve_weekly_modules(user, module_name=None):
@@ -761,6 +788,8 @@ def unlock(user, unlock_type, ladder_keys, reason=''):
             if not active:
                 skipped += 1
                 continue
+            old_actual = iso(row.actual_ship_date)
+            old_source = row.actual_ship_source or ''
             for shipment in active:
                 old = {
                     'ship_date': iso(shipment.ship_date),
@@ -774,11 +803,23 @@ def unlock(user, unlock_type, ladder_keys, reason=''):
                 _audit(user, 'daily', 'admin_void_shipment', row.ladder_key,
                        reason=reason, old_values=old, new_values={'is_void': True})
                 count += 1
-            row.actual_ship_date = None
-            flags = row.flags()
-            if 'shipped_voided' not in flags:
-                flags.append('shipped_voided')
+            ledger_delivery = _ledger_delivery_date(row.ladder_key)
+            if ledger_delivery:
+                row.actual_ship_date = ledger_delivery
+                row.actual_ship_source = 'ledger'
+                flags = [flag for flag in row.flags() if flag != 'shipped_voided']
+            else:
+                row.actual_ship_date = None
+                row.actual_ship_source = None
+                flags = row.flags()
+                if 'shipped_voided' not in flags:
+                    flags.append('shipped_voided')
             row.set_flags(flags)
+            _audit(user, 'daily', 'admin_void_actual', row.ladder_key,
+                   reason=reason,
+                   old_values={'actual_ship_date': old_actual, 'actual_ship_source': old_source},
+                   new_values={'actual_ship_date': iso(row.actual_ship_date),
+                               'actual_ship_source': row.actual_ship_source or ''})
         else:
             raise ValueError('不支持的解锁类型')
     db.session.commit()
@@ -871,10 +912,26 @@ def record_daily_shipments(user, items, password, reason=''):
             db.session.add(shipment)
             old = {}
             action = 'create_shipment'
-        item.actual_ship_date = ship_date
+        ledger_delivery = _ledger_delivery_date(key)
+        if ledger_delivery:
+            item.actual_ship_date = ledger_delivery
+            item.actual_ship_source = 'ledger'
+        else:
+            item.actual_ship_date = ship_date
+            item.actual_ship_source = 'daily'
         _audit(user, 'daily', action, key, reason=normalize_text(reason or entry.get('reason')),
-               old_values=old, new_values={'ship_date': iso(ship_date), 'unit_count': shipment.unit_count})
-        changed.append({'ladder_key': key, 'ship_date': iso(ship_date)})
+               old_values=old, new_values={
+                   'ship_date': iso(ship_date),
+                   'unit_count': shipment.unit_count,
+                   'actual_ship_date': iso(item.actual_ship_date),
+                   'actual_ship_source': item.actual_ship_source or '',
+               })
+        changed.append({
+            'ladder_key': key,
+            'ship_date': iso(ship_date),
+            'actual_ship_date': iso(item.actual_ship_date),
+            'actual_ship_source': item.actual_ship_source or '',
+        })
     try:
         db.session.commit()
     except IntegrityError:
@@ -1078,7 +1135,7 @@ def export_tracking(user, filters=None):
     headers = [
         '大区', '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人',
         '排产完工日期', '整梯发货日期', '预计发货日期', '实际发货日期',
-        '订舱状态', '订舱审核状态', '回款比例',
+        '实际发货日期来源', '订舱状态', '订舱审核状态', '回款比例',
     ]
     sheet.append(headers)
     header_fill = PatternFill('solid', fgColor='172554')
@@ -1110,7 +1167,8 @@ def export_tracking(user, filters=None):
             row['source'], row['reporter'],
             _excel_date(row['schedule_finish_date']), _excel_date(row['whole_ship_date']),
             _excel_date(row['expected_ship_date']), _excel_date(row['actual_ship_date']),
-            row['booking_status'], row['booking_audit_status'], row['payment_ratio'],
+            row['actual_ship_source_label'], row['booking_status'],
+            row['booking_audit_status'], row['payment_ratio'],
         ])
         excel_row = sheet.max_row
         if shipped:
@@ -1130,7 +1188,7 @@ def export_tracking(user, filters=None):
         if shipped:
             sheet.cell(excel_row, 13).font = shipped_font
 
-    widths = [8, 18, 16, 22, 30, 8, 12, 11, 10, 13, 13, 13, 13, 10, 12, 12]
+    widths = [8, 18, 16, 22, 30, 8, 12, 11, 10, 13, 13, 13, 13, 14, 10, 12, 12]
     for index, width in enumerate(widths, 1):
         sheet.column_dimensions[get_column_letter(index)].width = width
     for excel_row in range(2, sheet.max_row + 1):
@@ -1141,9 +1199,9 @@ def export_tracking(user, filters=None):
             )
         sheet.cell(excel_row, 6).number_format = '0.##'
         sheet.cell(excel_row, 7).number_format = '#,##0.00'
-        sheet.cell(excel_row, 16).number_format = '0.00%'
+        sheet.cell(excel_row, 17).number_format = '0.00%'
     sheet.freeze_panes = 'E2'
-    sheet.auto_filter.ref = 'A1:P%d' % sheet.max_row
+    sheet.auto_filter.ref = 'A1:Q%d' % sheet.max_row
     sheet.sheet_view.showGridLines = False
 
     # 汇总页：先看总数和颜色含义，再回到明细逐行核对。

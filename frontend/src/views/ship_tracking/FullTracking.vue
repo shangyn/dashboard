@@ -35,7 +35,7 @@
             clearable
             placeholder="全部发货状态"
             style="width: 152px"
-            title="与表格“发货状态”列一致：已实发=已发货；计划移除=计划已移除；预计日期早于今天=已逾期；有预计发货日期且未发货=已提交待发货（计划导入自带或业务填写都算）；无预计发货日期=未提交待发货"
+          title="与表格“发货状态”列一致：台账组A日期或每日实发=已发货；计划移除=计划已移除；预计日期早于今天=已逾期；有预计发货日期且未发货=已提交待发货（计划导入自带或业务填写都算）；无预计发货日期=未提交待发货"
           >
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
@@ -64,7 +64,7 @@
 
         <div class="st-summary-grid">
           <div class="st-summary-card"><span>总梯号</span><strong>{{ summary.total || 0 }}</strong><small>{{ summary.units || 0 }} 台</small></div>
-          <div class="st-summary-card is-green"><span>已发货</span><strong>{{ summary.shipped || 0 }}</strong><small>以每日实发为准</small></div>
+          <div class="st-summary-card is-green"><span>已发货</span><strong>{{ summary.shipped || 0 }}</strong><small>台账组A优先</small></div>
           <div class="st-summary-card is-blue"><span>已提交待发货</span><strong>{{ summary.committed || 0 }}</strong><small>已有预计发货日期</small></div>
           <div class="st-summary-card is-red"><span>已逾期</span><strong>{{ summary.overdue || 0 }}</strong><small>预计日期早于今天</small></div>
           <div class="st-summary-card is-gray"><span>未提交待发货</span><strong>{{ summary.pending || 0 }}</strong><small>无预计发货日期</small></div>
@@ -415,6 +415,7 @@
             <span>未匹配 {{ syncStatus.data.stats?.ledger_missing ?? '—' }} 条</span>
             <span>更新 {{ syncStatus.data.stats?.updated ?? '—' }} 条</span>
             <span>回款比例 {{ syncStatus.data.stats?.ratio_changed ?? '—' }} 条</span>
+            <span>实际发货日期 {{ syncStatus.data.stats?.actual_changed ?? '—' }} 条</span>
           </div>
           <el-alert
             v-if="syncStatus.data.message"
@@ -559,6 +560,7 @@
           <el-descriptions-item label="整梯发货日期">{{ detailDrawer.row.whole_ship_date || '—' }}</el-descriptions-item>
           <el-descriptions-item label="预计发货">{{ detailDrawer.row.expected_ship_date || '未定' }}</el-descriptions-item>
           <el-descriptions-item label="实际发货">{{ detailDrawer.row.actual_ship_date || '未发' }}</el-descriptions-item>
+          <el-descriptions-item label="实际发货来源">{{ detailDrawer.row.actual_ship_source_label || '—' }}</el-descriptions-item>
           <el-descriptions-item label="订舱状态">{{ detailDrawer.row.booking_status || '未订舱' }}</el-descriptions-item>
           <el-descriptions-item label="订舱审核">{{ detailDrawer.row.booking_audit_status || '—' }}</el-descriptions-item>
           <el-descriptions-item label="回款比例">{{ detailDrawer.row.payment_ratio_label || '—' }}</el-descriptions-item>
@@ -1245,7 +1247,7 @@ async function runSync() {
       ElMessage.warning(data.message || '已有同步任务在运行')
     } else if (data.ok) {
       ElMessage.success(
-        `同步完成：更新 ${data.updated || 0} 条（其中回款比例 ${data.ratio_changed || 0} 条），未匹配台账 ${data.ledger_missing || 0} 条`
+        `同步完成：更新 ${data.updated || 0} 条（其中回款比例 ${data.ratio_changed || 0} 条，实际发货日期 ${data.actual_changed || 0} 条），未匹配台账 ${data.ledger_missing || 0} 条`
       )
     } else {
       ElMessage.error(data.message || '同步失败')

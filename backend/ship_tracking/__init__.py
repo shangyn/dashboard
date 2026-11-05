@@ -86,6 +86,13 @@ def _ensure_tracking_columns():
     if 'st_tracking_item' not in inspector.get_table_names():
         return
     columns = {column['name'] for column in inspector.get_columns('st_tracking_item')}
+    actual_ship_source_added = False
+    if 'actual_ship_source' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN actual_ship_source VARCHAR(20)'
+        ))
+        db.session.commit()
+        actual_ship_source_added = True
     payment_ratio_added = False
     if 'business_expected_raw' not in columns:
         db.session.execute(text(
@@ -108,14 +115,14 @@ def _ensure_tracking_columns():
     ))
     db.session.commit()
     # 新字段首次上线时回填全部已匹配梯号；后续台账上传/计划提交会自动同步。
-    if payment_ratio_added:
+    if payment_ratio_added or actual_ship_source_added:
         try:
             from ship_tracking.sync import sync_tracking_dates
-            result = sync_tracking_dates(source='startup:payment_ratio_migration')
+            result = sync_tracking_dates(source='startup:schema_migration')
             if not result.get('ok'):
-                print('[ShipTracking] 回款比例初始回填失败: %s' % result.get('message', ''))
+                print('[ShipTracking] 台账字段初始回填失败: %s' % result.get('message', ''))
         except Exception as exc:
-            print('[ShipTracking] 回款比例初始回填异常: %s' % exc)
+            print('[ShipTracking] 台账字段初始回填异常: %s' % exc)
 
 
 def _ensure_daily_shipment_guard():

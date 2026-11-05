@@ -41,11 +41,19 @@
         </span>
       </template>
     </el-table-column>
-    <el-table-column label="实际发货时间" width="100" align="center">
+    <el-table-column label="实际发货时间" width="120" align="center">
       <template #default="{ row }">
-        <span :class="row.actual_ship_date ? 'st-date-ok' : 'st-date-missing'">
-          {{ row.actual_ship_date || '未发' }}
-        </span>
+        <div class="st-actual">
+          <span :class="row.actual_ship_date ? 'st-date-ok' : 'st-date-missing'">
+            {{ row.actual_ship_date || '未发' }}
+          </span>
+          <el-tag
+            v-if="row.actual_ship_source_label"
+            size="small"
+            :type="row.actual_ship_source === 'ledger' ? 'success' : 'info'"
+            effect="plain"
+          >{{ row.actual_ship_source === 'ledger' ? '台账' : '系统' }}</el-tag>
+        </div>
       </template>
     </el-table-column>
     <el-table-column label="订舱状态" width="110" align="center">
@@ -147,6 +155,7 @@ function paymentRatioClass(row) {
 .st-book-audit { font-size: 11px; color: #64748b; }
 .st-date-ok { color: #15803d; font-weight: 700; }
 .st-date-missing { color: #94a3b8; }
+.st-actual { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .st-ratio-full { color: #15803d; font-weight: 700; }
 .st-ratio-partial { color: #d97706; font-weight: 700; }
 .st-ratio-zero { color: #64748b; }
