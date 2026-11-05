@@ -50,6 +50,8 @@ def seed_database(app):
                 conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN whole_ship_date DATE"))
             if 'schedule_finish_date' not in lc_cols:
                 conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN schedule_finish_date DATE"))
+            if 'payment_ratio' not in lc_cols:
+                conn.execute(text("ALTER TABLE cc_ledger_contract ADD COLUMN payment_ratio FLOAT"))
             # mf_monthly_input: 加 ship_manual_units / ship_manual_amount（无梯号发货预估）
             mf_cols = [c['name'] for c in inspector.get_columns('mf_monthly_input')]
             if 'ship_manual_units' not in mf_cols:

@@ -38,6 +38,7 @@ const routes = [
       { path: 'contract-completion', component: () => import('../views/ContractCompletion.vue') },
       { path: 'two-year-comparison', component: () => import('../views/TwoYearComparison.vue') },
       { path: 'monthly-forecast', component: () => import('../views/MonthlyForecast.vue') },
+      { path: 'ship-tracking', component: () => import('../views/ship_tracking/ShipTracking.vue') },
     ],
   },
   {

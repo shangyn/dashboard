@@ -25,6 +25,7 @@ class LedgerContract(db.Model):
     unit_count = db.Column(db.Integer, default=0)                         # 台数
     exchange_rate = db.Column(db.Float, default=0.0)                     # 汇率
     contract_amount_rmb = db.Column(db.Float, default=0.0)               # 合同额（人民币），单位：元
+    payment_ratio = db.Column(db.Float, default=0.0)                      # 回款比例（台账 BN 列，原币）
     elevator_type = db.Column(db.String(50))                              # 梯种
     elevator_class = db.Column(db.String(50))                             # 电梯类型
     product_type = db.Column(db.String(200))                              # 产品型号

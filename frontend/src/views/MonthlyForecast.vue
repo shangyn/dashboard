@@ -140,6 +140,15 @@
 
         <el-table :data="pagedCandidates" size="small" :height="tableHeight" class="mf-table">
           <el-table-column label="可发货" width="72" align="center">
+            <template #header>
+              <el-checkbox
+                :model-value="isPageAllSelected"
+                :indeterminate="isPageIndeterminate"
+                :disabled="!pagedCandidates.length"
+                title="全选本页"
+                @change="togglePageSelect"
+              />
+            </template>
             <template #default="{ row }">
               <el-checkbox
                 :model-value="isSelected(row.ladder_no)"
@@ -323,6 +332,17 @@ const pagedCandidates = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filteredCandidates.value.slice(start, start + pageSize.value)
 })
+const pageSelectedCount = computed(() =>
+  pagedCandidates.value.filter((row) => isSelected(row.ladder_no)).length
+)
+const isPageAllSelected = computed(() =>
+  pagedCandidates.value.length > 0 &&
+  pageSelectedCount.value === pagedCandidates.value.length
+)
+const isPageIndeterminate = computed(() =>
+  pageSelectedCount.value > 0 &&
+  pageSelectedCount.value < pagedCandidates.value.length
+)
 const summaryWithTotal = computed(() =>
   summaryTotal.value ? [...summaryRows.value, summaryTotal.value] : summaryRows.value
 )
@@ -345,6 +365,21 @@ function toggleSelect(row, checked) {
   } else {
     delete selections.value[row.ladder_no]
   }
+}
+
+function togglePageSelect(checked) {
+  const next = { ...selections.value }
+  for (const row of pagedCandidates.value) {
+    if (checked) {
+      // 已存在的选择（含手工添加行）保留原 is_manual 标记，不覆盖
+      if (!next[row.ladder_no]) {
+        next[row.ladder_no] = { ...row, is_manual: false }
+      }
+    } else {
+      delete next[row.ladder_no]
+    }
+  }
+  selections.value = next
 }
 
 function removeSelection(ladderNo) {

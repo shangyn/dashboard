@@ -124,6 +124,12 @@ def parse_ledger_contracts(file_path: str) -> dict:
         col_schedule_finish_date = header_map.get('排产完工日期')
         col_delivery_date = _h('组A日期', '实际发货日期', '实际发运日期')
         col_whole_ship_date = _h('整梯发货日期')
+        col_payment_ratio = _h(
+            '已回款比例（原币）', '已回款比例(原币)', '回款比例（原币）', '回款比例(原币)',
+        )
+        # 业务明确按台账 BN 列取回款比例；当前 91 列模板的 BN 列是「已回款比例（原币）」。
+        if col_payment_ratio is None and len(header_row) >= 66:
+            col_payment_ratio = 66
 
         # 所有需要读取的列 → (Excel列号, 模型字段, 类型)
         # 支持两种表头命名（不同版本台账可能不同）
@@ -136,6 +142,7 @@ def parse_ledger_contracts(file_path: str) -> dict:
             (header_map.get('台数'),                'unit_count',            'int'),
             (header_map.get('汇率'),                'exchange_rate',         'float'),
             (header_map.get('合同额（人民币）'),    'contract_amount_rmb',   'float'),
+            (col_payment_ratio,                      'payment_ratio',         'float'),
             (header_map.get('梯种'),                'elevator_type',         'str'),
             (_h('梯型', '类型'),                    'elevator_class',        'str'),
             (header_map.get('产品型号'),            'product_type',          'str'),

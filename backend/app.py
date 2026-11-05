@@ -77,6 +77,11 @@ def create_app():
     from monthly_forecast import register as register_monthly_forecast
     register_monthly_forecast(app)
 
+    # 发货梯号追踪（独立模块，只新增 st_ 表，不改动既有业务表）
+    from ship_tracking import initialize as initialize_ship_tracking
+    from ship_tracking import register as register_ship_tracking
+    register_ship_tracking(app)
+
     # 托管 dashboard HTML 文件
     @app.route('/dashboards/<path:filename>')
     def serve_dashboard(filename):
@@ -134,6 +139,9 @@ def create_app():
     # 初始化数据库和种子数据
     with app.app_context():
         seed_database(app)
+
+    # 原项目种子完成后再初始化发货追踪，首次部署不会影响管理员创建
+    initialize_ship_tracking(app)
 
     return app
 

@@ -111,7 +111,25 @@ def upload_file(code):
 
     db.session.commit()
 
-    return jsonify(code=200, msg='上传完成', data=record.to_dict()), 200
+    data = record.to_dict()
+    if code == 'contract_ledger' and record.status == 'parsed':
+        # 台账更新成功后，把排产完工/整梯发货日期同步到已追踪梯号。
+        # 同步失败只作为提示返回，不影响上传本身成功。
+        try:
+            from ship_tracking.sync import sync_tracking_dates
+            data['ship_tracking_sync'] = sync_tracking_dates(
+                user, source='upload:contract_ledger')
+        except Exception as exc:
+            data['ship_tracking_sync'] = {'ok': False, 'message': str(exc)}
+        # 台账每日更新后自动重算未满 100% 的回款比例；缺少回款文件时跳过。
+        try:
+            from ship_tracking.payment_service import maybe_auto_calc
+            data['ship_tracking_payment_calc'] = maybe_auto_calc(
+                user, trigger='auto:ledger_sync')
+        except Exception as exc:
+            data['ship_tracking_payment_calc'] = {'started': False, 'message': str(exc)}
+
+    return jsonify(code=200, msg='上传完成', data=data), 200
 
 
 @upload_bp.route('/api/upload-history', methods=['GET'])

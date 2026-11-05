@@ -10,7 +10,7 @@
     模块：名单自带「模块」列 → 用该列；否则 → 按人名去业务员表解析
         命中 1 个模块 → 写入
         命中 0 个模块 → 不进名单，写入报告（人工处理）
-        命中多个模块 → 整条略过，写入报告（人工处理）
+        命中多个模块 → 每个模块各写一行，并在报告里列出人员
     平台里查不到账号（离职 / 未入职）→ 整条略过，写入报告
 
 重要：本处理器只读匹配 user 表，只写 mf_user_scope，绝不写回 user / role 表。
@@ -137,14 +137,16 @@ def import_scope(file_path):
     person2modules = info['person2modules']
     resolver = info['resolver']
 
+    previous = UserScope.query.count()
     UserScope.query.delete()
     seen = set()
     assigned = 0
     skipped_empty = 0
     no_account = []
     no_module = []
-    multi_module = []
     bad_module = []
+    # 按人统计最终写入的模块：名单里同一人写多行、或一行解析出多个模块，都算一人多模块。
+    person_modules = {}
 
     for row in table[1:]:
         account = _cell_text(row[col_account]) if (col_account is not None and col_account < len(row)) else ''
@@ -166,17 +168,21 @@ def import_scope(file_path):
             else:
                 no_module.append((name or account, account))
             continue
-        if len(modules) > 1:
-            multi_module.append((name or account, ' / '.join(sorted(modules))))
-            continue
+        entry = person_modules.setdefault(user.id, [name or account, set()])
+        for module_name in sorted(modules):
+            key = (user.id, module_name)
+            if key in seen:
+                continue
+            seen.add(key)
+            entry[1].add(module_name)
+            db.session.add(UserScope(user_id=user.id, match_key=account or name, module_name=module_name))
+            assigned += 1
 
-        module_name = sorted(modules)[0]
-        key = (user.id, module_name)
-        if key in seen:
-            continue
-        seen.add(key)
-        db.session.add(UserScope(user_id=user.id, match_key=account or name, module_name=module_name))
-        assigned += 1
+    multi_module = [
+        (display, ' / '.join(sorted(found)))
+        for display, found in person_modules.values()
+        if len(found) > 1
+    ]
 
     db.session.commit()
 
@@ -185,13 +191,13 @@ def import_scope(file_path):
         multi_module, bad_module, sorted(info['unresolved']), info['path'],
     )
 
-    parts = ['导入 %d 条' % assigned]
+    parts = ['名单已按文件重建：写入 %d 条（原有 %d 条）' % (assigned, previous)]
+    if multi_module:
+        parts.append('%d 人对应多个模块，已全部写入' % len(multi_module))
     if no_account:
         parts.append('%d 条平台无此账号' % len(no_account))
     if no_module:
         parts.append('%d 条查不到模块' % len(no_module))
-    if multi_module:
-        parts.append('%d 条对应多个模块已略过' % len(multi_module))
     if bad_module:
         parts.append('%d 条模块名无法识别' % len(bad_module))
     if skipped_empty:
@@ -201,6 +207,7 @@ def import_scope(file_path):
         'success': True,
         'message': '，'.join(parts),
         'rows': assigned,
+        'previous': previous,
         'no_account': len(no_account),
         'no_module': len(no_module),
         'multi_module': len(multi_module),
@@ -227,7 +234,7 @@ def _write_report(assigned, skipped_empty, no_account, no_module,
         '空数据跳过: %d 行' % skipped_empty,
         '平台无此账号: %d 条' % len(no_account),
         '查不到模块: %d 条' % len(no_module),
-        '对应多个模块已略过: %d 条' % len(multi_module),
+        '对应多个模块已全部写入: %d 人' % len(multi_module),
         '模块名无法识别: %d 条' % len(bad_module),
         '',
     ]
@@ -249,7 +256,7 @@ def _write_report(assigned, skipped_empty, no_account, no_module,
         lines.append('')
 
     if multi_module:
-        lines.append('[对应多个模块] 按约定整条略过，请人工确认后单独添加')
+        lines.append('[对应多个模块] 已按模块逐个写入，下面列出人员便于核对')
         lines.append('%-10s %s' % ('人名', '对应模块'))
         lines.append('-' * 56)
         for name, modules in multi_module:

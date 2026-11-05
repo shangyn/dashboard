@@ -80,9 +80,11 @@ def load_module_map():
 
 
 def resolve_module(contract, module_map):
-    """合同归属模块，三档优先级：改造 > 国家映射 > mapped_module"""
-    if contract.product_type and GAIZAO_MODULE in str(contract.product_type):
-        return GAIZAO_MODULE
+    """合同归属模块：严格按国家映射，国家未命中再退回 mapped_module。
+
+    改造梯不再强制归入「改造」模块，与普通梯号同口径；
+    按业务确认，不按台账业务员姓名归属。
+    """
     module = module_map.get(contract.country or '')
     if module:
         return module
@@ -146,7 +148,7 @@ def _ship_within_month(value, data_month):
 def list_candidates(module_name, data_month=None, keyword=None):
     """发货候选池：组A日期为空 + 排产日期不为空 + 未作废 + 台账来源
     额外：整梯发货日期（台账 AV 列）晚于填报月份的梯号不进候选（空值保留）
-    排序：排产日期倒序（日期近的在前），同日按合同号 / 梯号升序
+    排序：排产日期倒序（日期近的在前），同日按合同号 / 梯号数字升序
     """
     contracts = LedgerContract.query.filter(
         LedgerContract.source == 'ledger',
@@ -162,8 +164,11 @@ def list_candidates(module_name, data_month=None, keyword=None):
     if data_month:
         rows = [c for c in rows if _ship_within_month(c.whole_ship_date, data_month)]
 
-    # 稳定排序：先按合同号 / 梯号升序，再按排产日期倒序
-    rows.sort(key=lambda c: (c.contract_no or '', c.ladder_no or ''))
+    # 稳定排序：先按合同号 / 梯号数字升序，再按排产日期倒序
+    rows.sort(key=lambda c: (
+        c.contract_no or '',
+        _ladder_natural_key(c.ladder_no),
+    ))
     rows.sort(key=lambda c: c.schedule_date or date.min, reverse=True)
 
     if keyword:
@@ -210,6 +215,15 @@ def normalize_ladder(value):
             continue
         chars.append(char)
     return ''.join(chars).upper()
+
+
+def _ladder_natural_key(ladder):
+    """梯号按末尾数字排序；非标准格式退回字符串，避免脏数据报错。"""
+    text = normalize_ladder(ladder)
+    tail = text.rsplit('/', 1)[-1].rstrip('#')
+    if tail.isdigit():
+        return (0, int(tail), text)
+    return (1, 0, text)
 
 
 def find_ledger_ladder(ladder_no):
