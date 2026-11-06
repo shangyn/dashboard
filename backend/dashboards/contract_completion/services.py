@@ -822,14 +822,14 @@ def get_two_year_comparison(include_personal=False):
         if c.source in ('report_a', 'report_b'):
             module = c.mapped_module or ''
             region = _normalize_region(c.mapped_region or '', module)
+        elif c.product_type and '改造' in str(c.product_type):
+            # 真实改造梯优先按产品型号归入「改造」，不要求国家先在映射表里
+            module = '改造'
+            region = _GAIZAO_REGION
         elif c.country and c.country in mapping:
             cm = mapping[c.country]
             region = cm['region']
             module = cm['module']
-            # 改造强制归入「改造」模块所属大区
-            if c.product_type and '改造' in str(c.product_type):
-                module = '改造'
-                region = _GAIZAO_REGION
         else:
             continue  # 未匹配的跳过
 
