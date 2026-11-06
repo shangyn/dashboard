@@ -124,7 +124,7 @@
       <el-tab-pane v-if="context.can_daily_edit" label="每日实发" name="daily">
         <div class="st-daily-note">
           <el-icon><InfoFilled /></el-icon>
-          每日实发角色可查看全部模块。批量提交必须再次输入本人登录密码；当天录入当天可凭原因修正，跨日修改或撤销需管理员解锁。
+          每日实发角色可查看全部模块。当天录入当天可凭原因修正，跨日修改或撤销需管理员解锁。
         </div>
         <div class="st-filter-panel">
           <el-select v-model="filters.month" size="small" clearable placeholder="全部月份" style="width: 118px">
@@ -480,16 +480,13 @@
     </el-tabs>
 
     <el-dialog v-model="dailyDialog.visible" title="批量录入每日实发" width="500px">
-      <el-alert type="warning" :closable="false" show-icon title="实发会立即写入全量明细，仍需再次输入本人登录密码。" />
+      <el-alert type="warning" :closable="false" show-icon title="实发会立即写入全量明细。" />
       <el-form label-width="88px" class="st-dialog-form">
         <el-form-item label="实发日期">
           <el-date-picker v-model="dailyDialog.date" type="date" value-format="YYYY-MM-DD" :disabled-date="disableFuture" style="width: 100%" />
         </el-form-item>
         <el-form-item label="原因/备注">
           <el-input v-model="dailyDialog.reason" type="textarea" :rows="2" placeholder="当天正常实发可不填；历史补录必须填写" />
-        </el-form-item>
-        <el-form-item label="本人密码">
-          <el-input v-model="dailyDialog.password" type="password" show-password placeholder="请输入当前登录账号密码" @keyup.enter="confirmDaily" />
         </el-form-item>
       </el-form>
       <div class="st-dialog-summary">将实发 {{ selectedRows.length }} 条梯号，日期 {{ dailyDialog.date || '未选择' }}</div>
@@ -512,7 +509,6 @@
         <el-form-item label="项目名称"><el-input v-model="externalDialog.project_name" /></el-form-item>
         <el-form-item label="实发日期"><el-date-picker v-model="externalDialog.ship_date" type="date" value-format="YYYY-MM-DD" :disabled-date="disableFuture" style="width: 100%" /></el-form-item>
         <el-form-item label="原因"><el-input v-model="externalDialog.reason" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="本人密码"><el-input v-model="externalDialog.password" type="password" show-password /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="externalDialog.visible = false">取消</el-button>
@@ -844,10 +840,10 @@ const filters = reactive({
 const dailyDate = ref(props.context.today)
 const dailyReason = ref('')
 const dailySaving = ref(false)
-const dailyDialog = reactive({ visible: false, date: props.context.today, reason: '', password: '' })
+const dailyDialog = reactive({ visible: false, date: props.context.today, reason: '' })
 const externalDialog = reactive({
   visible: false, ladder_no: '', contract_no: '', module_name: '', project_name: '',
-  ship_date: props.context.today, reason: '', password: '',
+  ship_date: props.context.today, reason: '',
 })
 const unlockDialog = reactive({ visible: false, type: 'weekly', reason: '' })
 const unlockSaving = ref(false)
@@ -1306,15 +1302,12 @@ function openDailyDialog() {
   dailyDialog.visible = true
   dailyDialog.date = dailyDate.value
   dailyDialog.reason = dailyReason.value
-  dailyDialog.password = ''
 }
 
 async function confirmDaily() {
-  if (!dailyDialog.password) return ElMessage.warning('请输入本人密码')
   dailySaving.value = true
   try {
     const res = await recordDailyShipments({
-      password: dailyDialog.password,
       reason: dailyDialog.reason,
       items: selectedRows.value.map((row) => ({
         ladder_key: row.ladder_key,
@@ -1343,17 +1336,14 @@ function openExternalDialog() {
     project_name: '',
     ship_date: props.context.today,
     reason: '',
-    password: '',
   })
 }
 
 async function confirmExternal() {
   if (!externalDialog.ladder_no || !externalDialog.module_name) return ElMessage.warning('梯号和模块必填')
-  if (!externalDialog.password) return ElMessage.warning('请输入本人密码')
   dailySaving.value = true
   try {
     await recordDailyShipments({
-      password: externalDialog.password,
       reason: externalDialog.reason,
       items: [{
         ladder_key: externalDialog.ladder_no,

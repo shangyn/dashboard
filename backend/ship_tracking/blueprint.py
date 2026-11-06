@@ -230,18 +230,11 @@ def api_history():
 @permission_required(PERMISSION)
 def api_daily():
     try:
-        from auth import bcrypt
         user = get_current_user()
         payload = _payload()
-        password = payload.get('password') or ''
-        if not password:
-            return _fail('批量实发需要再次输入本人登录密码', 400)
-        if not bcrypt.check_password_hash(user.password, password):
-            return _fail('密码错误，实发未保存', 400)
         result = svc.record_daily_shipments(
             user,
             payload.get('items') or [],
-            password=password,
             reason=payload.get('reason') or '',
         )
         return _ok(result, '实发已保存')

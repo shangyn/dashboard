@@ -826,8 +826,8 @@ def unlock(user, unlock_type, ladder_keys, reason=''):
     return {'unlocked': count, 'skipped': skipped}
 
 
-def record_daily_shipments(user, items, password, reason=''):
-    """批量录入实发；密码由路由层校验后传入，这里只做业务写入。"""
+def record_daily_shipments(user, items, reason=''):
+    """批量录入实发；仅允许每日实发角色写入。"""
     if not can_daily_edit(user):
         raise PermissionError('无每日实发权限')
     if not isinstance(items, list) or not items:
