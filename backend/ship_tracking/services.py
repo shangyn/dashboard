@@ -78,6 +78,39 @@ def week_end(start):
     return start + dt.timedelta(days=6)
 
 
+def month_start(value=None):
+    value = value or today()
+    return value.replace(day=1)
+
+
+def next_month_start(value=None):
+    start = month_start(value)
+    if start.month == 12:
+        return dt.date(start.year + 1, 1, 1)
+    return dt.date(start.year, start.month + 1, 1)
+
+
+def month_end(value=None):
+    return next_month_start(value) - dt.timedelta(days=1)
+
+
+def fill_window(value=None):
+    current = value or today()
+    next_start = next_month_start(current)
+    if current >= next_start - dt.timedelta(days=7):
+        default_date = next_start
+        end = month_end(next_start)
+    else:
+        default_date = month_start(current)
+        end = month_end(current)
+    return {
+        'start': current,
+        'end': end,
+        'month': default_date.strftime('%Y-%m'),
+        'default_date': default_date,
+    }
+
+
 def iso(value):
     if not value:
         return ''
@@ -209,6 +242,7 @@ def build_context(user):
     daily = can_daily_edit(user)
     admin = can_admin(user)
     fill = bool(modules) and (is_monthly_fill_role(user) or 'monthly_forecast' in perms or PERMISSION in perms)
+    fill_period = fill_window()
     if full_view:
         mode = 'tracking'
     elif modules:
@@ -230,6 +264,10 @@ def build_context(user):
         'current_week_start': iso(week_start()),
         'target_week_start': iso(target_week_start()),
         'target_week_end': iso(week_end(target_week_start())),
+        'fill_month': fill_period['month'],
+        'fill_start': iso(fill_period['start']),
+        'fill_end': iso(fill_period['end']),
+        'fill_default_date': iso(fill_period['default_date']),
         'role_name': user.role.role_name if user and user.role else '',
         'user': {
             'id': user.id,
@@ -516,6 +554,7 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
     # 其他模块的选项会被算成 0 条，看起来像失败。
     count_modules = _resolve_weekly_modules(user, '')
     target = target_week_start()
+    window = fill_window()
     current = today()
     rows = TrackingItem.query.filter(
         TrackingItem.module_name.in_(count_modules),
@@ -544,8 +583,9 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
         if item.expected_ship_date:
             continue
         if visible:
-            # 只认本周目标的草稿；上一周遗留的草稿不再预填，避免带出过期日期。
-            if item.draft_expected_ship_date and item.draft_week_start == target:
+            # 只认可填窗口内的草稿；窗口外的旧草稿不再预填，避免带出过期日期。
+            if (item.draft_expected_ship_date
+                    and window['start'] <= item.draft_expected_ship_date <= window['end']):
                 draft.append(item)
             candidates.append(item)
         bump(item.module_name, 'candidates')
@@ -574,6 +614,10 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
         'modules': modules,
         'target_week_start': iso(target),
         'target_week_end': iso(week_end(target)),
+        'fill_month': window['month'],
+        'fill_start': iso(window['start']),
+        'fill_end': iso(window['end']),
+        'fill_default_date': iso(window['default_date']),
         'today': iso(current),
         'candidates': [_tracking_dict(item) for item in candidates],
         'submitted': [_tracking_dict(item) for item in submitted],
@@ -584,6 +628,7 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
 
 def _validate_week_items(user, module, items, target, require_committed=False):
     modules = _resolve_weekly_modules(user, module)
+    window = fill_window()
     if not isinstance(items, list) or not items:
         raise ValueError('请选择梯号并填写预计发货日期')
     keys = []
@@ -598,9 +643,9 @@ def _validate_week_items(user, module, items, target, require_committed=False):
         date_value = parse_excel_date(entry.get('expected_ship_date') or entry.get('ship_date'))
         if not date_value:
             raise ValueError('梯号 %s 未选择预计发货日期' % key)
-        if date_value < target or date_value > week_end(target):
+        if date_value < window['start'] or date_value > window['end']:
             raise ValueError('梯号 %s 的预计发货日期必须在 %s 至 %s 之间'
-                             % (key, iso(target), iso(week_end(target))))
+                             % (key, iso(window['start']), iso(window['end'])))
         keys.append((key, date_value))
     rows = TrackingItem.query.filter(TrackingItem.ladder_key.in_([key for key, _ in keys])).all()
     by_key = {row.ladder_key: row for row in rows}
@@ -624,29 +669,36 @@ def _validate_week_items(user, module, items, target, require_committed=False):
 
 
 def save_weekly_draft(user, module_name, items, target_week=None):
-    target = parse_excel_date(target_week) or target_week_start()
-    pairs = _validate_week_items(user, module_name, items, target)
+    window = fill_window()
+    pairs = _validate_week_items(user, module_name, items, window['start'])
     for row, date_value in pairs:
         old = _tracking_dict(row)
         # 草稿只记录在 draft_* 字段，不改预计发货日期：
         # 只有真正提交后才让全量页显示「已提交待发货」。
         row.draft_expected_ship_date = date_value
-        row.draft_week_start = target
+        row.draft_week_start = week_start(date_value)
         _audit(user, 'weekly', 'draft_save', row.ladder_key,
                old_values=old, new_values={'draft_expected_ship_date': iso(date_value)})
     db.session.commit()
-    return {'saved': len(pairs), 'target_week_start': iso(target)}
+    return {
+        'saved': len(pairs),
+        'target_week_start': iso(target_week_start()),
+        'fill_month': window['month'],
+        'fill_start': iso(window['start']),
+        'fill_end': iso(window['end']),
+    }
 
 
 def submit_weekly(user, module_name, items, target_week=None):
-    target = parse_excel_date(target_week) or target_week_start()
-    pairs = _validate_week_items(user, module_name, items, target)
+    window = fill_window()
+    pairs = _validate_week_items(user, module_name, items, window['start'])
     now = dt.datetime.now()
     submitted_week = week_start()
     for row, date_value in pairs:
         old = _tracking_dict(row)
+        committed_week = week_start(date_value)
         row.commit_status = 'committed'
-        row.committed_week_start = target
+        row.committed_week_start = committed_week
         row.committed_on_week_start = submitted_week
         row.committed_expected_ship_date = date_value
         row.committed_at = now
@@ -658,13 +710,16 @@ def submit_weekly(user, module_name, items, target_week=None):
         _audit(user, 'weekly', 'submit', row.ladder_key,
                old_values=old, new_values={
                    'expected_ship_date': iso(date_value),
-                   'committed_week_start': iso(target),
+                   'committed_week_start': iso(committed_week),
                })
     db.session.commit()
     return {
         'submitted': len(pairs),
-        'target_week_start': iso(target),
-        'target_week_end': iso(week_end(target)),
+        'target_week_start': iso(target_week_start()),
+        'target_week_end': iso(week_end(target_week_start())),
+        'fill_month': window['month'],
+        'fill_start': iso(window['start']),
+        'fill_end': iso(window['end']),
     }
 
 
@@ -696,6 +751,7 @@ def withdraw_weekly(user, module_name, ladder_keys):
 
 
 def adjust_weekly(user, module_name, items):
+    window = fill_window()
     rows_payload = []
     for entry in items or []:
         key = canonical_ladder(entry.get('ladder_key') or '')
@@ -715,15 +771,19 @@ def adjust_weekly(user, module_name, items):
             raise ValueError('梯号 %s 尚未提交' % row.ladder_key)
         if row.committed_on_week_start != current_week and not can_admin(user):
             raise ValueError('梯号 %s 已跨周，需管理员解锁' % row.ladder_key)
-        target = row.committed_week_start
         date_value = by_key[row.ladder_key]['expected_ship_date']
-        if not target or date_value < target or date_value > week_end(target):
-            raise ValueError('梯号 %s 的日期必须在该提交周内' % row.ladder_key)
+        if date_value < window['start'] or date_value > window['end']:
+            raise ValueError('梯号 %s 的日期必须在 %s 至 %s 之间'
+                             % (row.ladder_key, iso(window['start']), iso(window['end'])))
         old = _tracking_dict(row)
+        row.committed_week_start = week_start(date_value)
         row.committed_expected_ship_date = date_value
         row.expected_ship_date = date_value
         _audit(user, 'weekly', 'adjust', row.ladder_key, old_values=old,
-               new_values={'expected_ship_date': iso(date_value)})
+               new_values={
+                   'expected_ship_date': iso(date_value),
+                   'committed_week_start': iso(row.committed_week_start),
+               })
         changed += 1
     db.session.commit()
     return {'adjusted': changed}
@@ -1102,7 +1162,7 @@ def query_tracking(user, filters=None):
 
     result.sort(key=sort_key)
     shipped_rows = [row for row in result if row['status'] == 'shipped']
-    target_end = week_end(target_week_start())
+    target_end = fill_window()['end']
     summary = {
         'total': len(result),
         'units': round(sum(row['unit_count'] or 0 for row in result), 2),

@@ -130,7 +130,7 @@ def api_weekly_submit():
             payload.get('module_name') or payload.get('module') or '',
             payload.get('items') or [],
             target_week=payload.get('target_week_start') or svc.target_week_start(),
-        ), '已提交下周发货计划')
+        ), '已提交发货计划')
     except PermissionError as exc:
         return _fail(str(exc), 403)
     except ValueError as exc:

@@ -4,10 +4,11 @@
       <div>
         <h2 class="st-title">发货梯号明细</h2>
         <div class="st-subtitle">
-          业务下周计划填报
+          业务计划填报
           <el-tag size="small" type="primary" effect="plain">
-            {{ context.target_week_start }} 至 {{ context.target_week_end }}
+            {{ fillMonth }}
           </el-tag>
+          <span class="st-hint">{{ fillStart }} 至 {{ fillEnd }}</span>
         </div>
       </div>
       <div class="st-hero-actions">
@@ -31,7 +32,7 @@
         <el-button size="small" plain @click="openManualDialog">手工添加梯号</el-button>
         <el-button size="small" :loading="saving" @click="handleSave">保存草稿</el-button>
         <el-button size="small" type="primary" :loading="submitting" @click="handleSubmit">
-          提交下周计划
+          提交计划
         </el-button>
       </div>
     </div>
@@ -68,7 +69,8 @@
           size="small"
           type="date"
           value-format="YYYY-MM-DD"
-          :disabled-date="disableOutsideWeek"
+          :disabled-date="disableOutsideFillWindow"
+          :default-value="fillDefaultDate"
           placeholder="选择日期"
           style="width: 150px"
         />
@@ -118,14 +120,15 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="下周预计发货日期" width="165">
+        <el-table-column label="预计发货日期" width="165">
           <template #default="{ row }">
             <el-date-picker
               v-model="dateMap[row.ladder_key]"
               size="small"
               type="date"
               value-format="YYYY-MM-DD"
-              :disabled-date="disableOutsideWeek"
+              :disabled-date="disableOutsideFillWindow"
+              :default-value="fillDefaultDate"
               placeholder="请选择"
               style="width: 148px"
             />
@@ -192,7 +195,8 @@
                 size="small"
                 type="date"
                 value-format="YYYY-MM-DD"
-                :disabled-date="disableOutsideCommittedWeek(row)"
+                :disabled-date="disableOutsideFillWindow"
+                :default-value="fillDefaultDate"
                 style="width: 145px"
               />
               <el-button size="small" text type="primary" @click="handleAdjust(row)">改期</el-button>
@@ -216,7 +220,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="梯号必须已在台账中；系统按台账归属模块校验你的填报范围。添加后请在本页填写下周预计发货日期。"
+        title="梯号必须已在台账中；系统按台账归属模块校验你的填报范围。添加后请在本页填写预计发货日期。"
         style="margin-bottom: 14px"
       />
       <el-form label-width="80px" @submit.prevent>
@@ -287,6 +291,15 @@ const moduleCounts = ref({})
 const manualDialog = reactive({ visible: false, ladderNo: '', loading: false })
 
 const myModules = computed(() => props.context.my_modules || [])
+const fillStart = computed(() => props.context.fill_start || props.context.today || props.context.target_week_start || '')
+const fillEnd = computed(() => props.context.fill_end || props.context.target_week_end || fillStart.value)
+const fillMonth = computed(() => props.context.fill_month || fillStart.value.slice(0, 7))
+const fillDefaultDate = computed(() => {
+  const value = props.context.fill_default_date || (fillMonth.value ? `${fillMonth.value}-01` : fillStart.value)
+  if (!value) return undefined
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+})
 
 function moduleOptionLabel(name) {
   const entry = moduleCounts.value[name] || {}
@@ -326,38 +339,42 @@ function formatLocalDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function addDays(dateText, days) {
-  const [year, month, day] = dateText.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  date.setDate(date.getDate() + days)
-  return formatLocalDate(date)
+function monthEndOf(dateText) {
+  const [year, month] = dateText.split('-').map(Number)
+  return formatLocalDate(new Date(year, month, 0))
 }
 
 function buildQuickDates() {
-  const start = props.context.target_week_start
-  quickDates.value = [
-    { label: '周一', value: start },
-    { label: '周二', value: addDays(start, 1) },
-    { label: '周五', value: addDays(start, 4) },
-  ]
-}
-
-function disableOutsideWeek(date) {
-  const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-  return value < props.context.target_week_start || value > props.context.target_week_end
-}
-
-function disableOutsideCommittedWeek(row) {
-  if (!row.committed_week_start) return () => true
-  const start = new Date(`${row.committed_week_start}T00:00:00`)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 6)
-  const startText = row.committed_week_start
-  const endText = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
-  return (date) => {
-    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-    return value < startText || value > endText
+  const start = fillStart.value
+  const end = fillEnd.value
+  if (!start || !end) {
+    quickDates.value = []
+    return
   }
+  const currentMonth = start.slice(0, 7)
+  const currentMonthEnd = monthEndOf(start)
+  const candidates = [{ label: '今天', value: start }]
+  if (currentMonthEnd >= start && currentMonthEnd <= end && currentMonthEnd !== start) {
+    candidates.push({ label: '本月末', value: currentMonthEnd })
+  }
+  const defaultDate = props.context.fill_default_date || ''
+  if (fillMonth.value !== currentMonth && defaultDate >= start && defaultDate <= end) {
+    candidates.push({ label: '下月初', value: defaultDate })
+  }
+  if (end !== currentMonthEnd) {
+    candidates.push({ label: fillMonth.value !== currentMonth ? '下月末' : '窗口末', value: end })
+  }
+  const seen = new Set()
+  quickDates.value = candidates.filter((item) => {
+    if (!item.value || seen.has(item.value)) return false
+    seen.add(item.value)
+    return true
+  })
+}
+
+function disableOutsideFillWindow(date) {
+  const value = formatLocalDate(date)
+  return !fillStart.value || !fillEnd.value || value < fillStart.value || value > fillEnd.value
 }
 
 async function loadData() {
@@ -487,7 +504,6 @@ async function handleSave() {
   try {
     await saveWeeklyDraft({
       module_name: moduleName.value,
-      target_week_start: props.context.target_week_start,
       items,
     })
     ElMessage.success('草稿已保存')
@@ -505,7 +521,7 @@ async function handleSubmit() {
   try {
     await ElMessageBox.confirm(
       `将提交 ${items.length} 条梯号，提交后进入排产并从此后的填报候选池隐藏。确认提交？`,
-      '提交下周计划',
+      '提交计划',
       { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '再检查一下' }
     )
   } catch {
@@ -515,7 +531,6 @@ async function handleSubmit() {
   try {
     const res = await submitWeeklyPlan({
       module_name: moduleName.value,
-      target_week_start: props.context.target_week_start,
       items,
     })
     ElMessage.success(`已提交 ${res.data.submitted} 条梯号`)
