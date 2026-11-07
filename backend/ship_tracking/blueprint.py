@@ -44,6 +44,7 @@ def _filter_args():
         'module': request.args.get('module') or '',
         'region': request.args.get('region') or '',
         'booking_status': request.args.get('booking_status') or '',
+        'actual_ship_source': request.args.get('actual_ship_source') or '',
         'payment_ratio': request.args.get('payment_ratio') or '',
         'statuses': statuses,
         'include_removed': request.args.get('include_removed') or '',
@@ -244,6 +245,47 @@ def api_daily():
         return _fail(str(exc), 400)
     except Exception as exc:
         return _fail('实发保存失败: %s' % exc, 500)
+
+
+@st_bp.route('/api/ship-tracking/daily/external/preview', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_daily_external_preview():
+    try:
+        user = get_current_user()
+        payload = _payload()
+        result = svc.preview_external_ladders(
+            user,
+            payload.get('ladder_no') or '',
+            payload.get('contract_no') or '',
+        )
+        return _ok(result, '梯号识别完成')
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except ValueError as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('识别梯号失败: %s' % exc, 500)
+
+
+@st_bp.route('/api/ship-tracking/daily/delete', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_daily_delete():
+    try:
+        user = get_current_user()
+        payload = _payload()
+        result = svc.delete_daily_shipments(
+            user,
+            payload.get('ladder_keys') or [],
+        )
+        return _ok(result, '实发已删除')
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except ValueError as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('删除实发失败: %s' % exc, 500)
 
 
 @st_bp.route('/api/ship-tracking/unlock', methods=['POST'])

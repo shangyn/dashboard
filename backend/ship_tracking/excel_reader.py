@@ -150,6 +150,100 @@ def split_ladder_values(value, contract_no=''):
     return result
 
 
+def _ladder_number_range(value):
+    text = normalize_text(value).replace(' ', '')
+    match = re.fullmatch(r'(\d+)#?[-~～至—–](\d+)#?', text)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    match = re.fullmatch(r'(\d+)#?', text)
+    if match:
+        number = int(match.group(1))
+        return number, number
+    return None
+
+
+def parse_ladder_batch(value, contract_no=''):
+    """解析手工录入的多梯号，返回规范化梯号、错误和警告。"""
+    text = normalize_text(value)
+    if not text:
+        return {'ladders': [], 'errors': ['请输入梯号'], 'warnings': []}
+    text = (text.replace('，', ',').replace('；', ';').replace('、', ',')
+            .replace('＃', '#').replace('／', '/'))
+    text = re.sub(r'\s*/\s*', '/', text)
+    text = re.sub(r'\s*([-~～至—–])\s*', r'\1', text)
+    tokens = [part for part in re.split(r'[,;\s]+', text) if part.strip()]
+    contract_base = canonical_ladder(contract_no).rstrip('/')
+    explicit_bases = []
+    for token in tokens:
+        token = canonical_ladder(token)
+        if '/' in token:
+            base = canonical_ladder(token.rsplit('/', 1)[0]).rstrip('/')
+            if base:
+                explicit_bases.append(base)
+    active_base = explicit_bases[0] if explicit_bases else contract_base
+
+    ladders = []
+    errors = []
+    warnings = []
+    seen = set()
+    duplicate_count = 0
+    for token in tokens:
+        token = canonical_ladder(token)
+        if not token:
+            continue
+        if '/' in token:
+            base_text, suffix = token.rsplit('/', 1)
+            base = canonical_ladder(base_text).rstrip('/')
+            if base:
+                active_base = base
+            else:
+                base = active_base
+            if not base:
+                errors.append('梯号 %s 缺少完整前缀' % token)
+                continue
+            numbers = _ladder_number_range(suffix)
+            if numbers is None:
+                candidates = [token]
+            else:
+                start, end = numbers
+                if start > end:
+                    start, end = end, start
+                if end - start + 1 > MAX_RANGE_EXPAND:
+                    errors.append('梯号 %s 展开数量超过 %d 台' % (token, MAX_RANGE_EXPAND))
+                    continue
+                candidates = ['%s/%d#' % (base, number) for number in range(start, end + 1)]
+        else:
+            numbers = _ladder_number_range(token)
+            if numbers is None:
+                candidates = [token]
+            else:
+                if not active_base:
+                    errors.append('梯号 %s 缺少完整前缀，请补充合同号或完整梯号' % token)
+                    continue
+                start, end = numbers
+                if start > end:
+                    start, end = end, start
+                if end - start + 1 > MAX_RANGE_EXPAND:
+                    errors.append('梯号 %s 展开数量超过 %d 台' % (token, MAX_RANGE_EXPAND))
+                    continue
+                candidates = ['%s/%d#' % (active_base, number)
+                              for number in range(start, end + 1)]
+        for ladder in candidates:
+            ladder = canonical_ladder(ladder)
+            if not ladder:
+                continue
+            if ladder in seen:
+                duplicate_count += 1
+                continue
+            seen.add(ladder)
+            ladders.append(ladder)
+    if duplicate_count:
+        warnings.append('已自动去重 %d 个重复梯号' % duplicate_count)
+    if not ladders and not errors:
+        errors.append('未识别到有效梯号')
+    return {'ladders': ladders, 'errors': errors, 'warnings': warnings}
+
+
 class XlsxReader(object):
     def __init__(self, path):
         self.path = path

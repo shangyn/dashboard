@@ -43,6 +43,10 @@
             <el-option label="已订舱" value="已订舱" />
             <el-option label="未订舱" value="未订舱" />
           </el-select>
+          <el-select v-model="filters.actual_ship_source" size="small" clearable placeholder="实际发货来源" style="width: 132px">
+            <el-option label="台账" value="ledger" />
+            <el-option label="系统" value="daily" />
+          </el-select>
           <el-select v-model="filters.payment_ratio" size="small" clearable placeholder="回款比例" style="width: 108px">
             <el-option label="100%" value="100" />
             <el-option label="其他" value="other" />
@@ -80,6 +84,16 @@
               <span v-if="selectedRows.length" class="st-selected">已选 {{ selectedRows.length }} 条</span>
             </div>
             <div class="st-toolbar">
+              <el-button
+                v-if="(context.can_daily_edit || context.can_admin) && selectedRows.length"
+                size="small"
+                type="danger"
+                plain
+                :loading="shipmentDeleting"
+                @click="handleDeleteShipments"
+              >
+                删除选中实发
+              </el-button>
               <el-button v-if="context.can_admin && selectedRows.length" size="small" type="warning" plain @click="openUnlockDialog">
                 管理员解锁选中项
               </el-button>
@@ -124,7 +138,7 @@
       <el-tab-pane v-if="context.can_daily_edit" label="每日实发" name="daily">
         <div class="st-daily-note">
           <el-icon><InfoFilled /></el-icon>
-          每日实发角色可查看全部模块。当天录入当天可凭原因修正，跨日修改或撤销需管理员解锁。
+          每日实发角色可查看全部模块。当天修正仍填写原因；填错可直接删除后重新录入，删除支持跨天且不要求填写原因。
         </div>
         <div class="st-filter-panel">
           <el-select v-model="filters.month" size="small" clearable placeholder="全部月份" style="width: 118px">
@@ -155,6 +169,9 @@
           <el-input v-model="dailyReason" size="small" clearable placeholder="补录/修正原因（历史日期必填）" style="width: 270px" />
           <el-button type="primary" size="small" :disabled="!selectedRows.length" @click="openDailyDialog">
             录入选中梯号实发
+          </el-button>
+          <el-button size="small" type="danger" plain :disabled="!selectedRows.length" :loading="shipmentDeleting" @click="handleDeleteShipments">
+            删除选中实发
           </el-button>
           <el-button size="small" plain @click="openExternalDialog">计划外实发</el-button>
           <span class="st-hint">已选 {{ selectedRows.length }} 条</span>
@@ -496,11 +513,42 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="externalDialog.visible" title="计划外梯号实发" width="580px">
-      <el-alert type="info" :closable="false" show-icon title="月度计划未包含但已实际发货的梯号可在此补录，记录会标记为“计划外实发”。" />
+    <el-dialog v-model="externalDialog.visible" title="计划外梯号实发" width="760px">
+      <el-alert type="info" :closable="false" show-icon title="支持一次输入多个梯号，识别校验后会按每行一梯显示；/1-3# 等简写会用合同号补全前缀。" />
       <el-form label-width="88px" class="st-dialog-form">
-        <el-form-item label="梯号"><el-input v-model="externalDialog.ladder_no" placeholder="完整梯号，如 DHT-000000T/1#" /></el-form-item>
-        <el-form-item label="合同号"><el-input v-model="externalDialog.contract_no" /></el-form-item>
+        <el-form-item label="梯号">
+          <el-input
+            v-model="externalDialog.ladder_text"
+            type="textarea"
+            :rows="3"
+            placeholder="如：DHT-261461T/1-3#、/4#、1# 3# 4#；可用换行、空格或逗号分隔"
+            @input="invalidateExternalLadders"
+          />
+          <div class="st-dialog-summary" style="margin-top: 8px">
+            <el-button size="small" :disabled="!externalDialog.ladder_text.trim()" :loading="externalParsing" @click="handleParseExternalLadders">
+              识别并校验
+            </el-button>
+            <span class="st-hint">已识别 {{ externalDialog.ladders.length }} 台</span>
+          </div>
+        </el-form-item>
+        <el-form-item label="合同号"><el-input v-model="externalDialog.contract_no" placeholder="简写梯号时以此作为前缀，如 261461T" @input="invalidateExternalLadders" /></el-form-item>
+        <el-form-item v-if="externalDialog.parse_errors.length" label="校验">
+          <el-alert type="error" :closable="false" show-icon :title="externalDialog.parse_errors.join('；')" />
+        </el-form-item>
+        <el-form-item v-if="externalDialog.parse_warnings.length" label="提示">
+          <el-alert type="warning" :closable="false" show-icon :title="externalDialog.parse_warnings.join('；')" />
+        </el-form-item>
+        <el-form-item v-if="externalDialog.ladders.length" label="识别结果">
+          <el-table :data="externalDialog.ladders" size="small" border max-height="220" style="width: 100%">
+            <el-table-column type="index" label="#" width="50" align="center" />
+            <el-table-column prop="ladder_no" label="梯号" min-width="220" />
+            <el-table-column label="" width="64" align="center">
+              <template #default="{ $index }">
+                <el-button link type="danger" @click="removeExternalLadder($index)">移除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-form-item>
         <el-form-item label="模块">
           <el-select v-model="externalDialog.module_name" filterable style="width: 100%">
             <el-option v-for="name in modules" :key="name" :label="name" :value="name" />
@@ -512,7 +560,9 @@
       </el-form>
       <template #footer>
         <el-button @click="externalDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="dailySaving" @click="confirmExternal">确认实发</el-button>
+        <el-button type="primary" :loading="dailySaving" :disabled="!externalDialog.ladders.length || externalDialog.parse_errors.length" @click="confirmExternal">
+          确认实发
+        </el-button>
       </template>
     </el-dialog>
 
@@ -784,6 +834,7 @@ import {
   commitBookingImport,
   commitForecastImport,
   commitPlanImport,
+  deleteDailyShipments,
   deleteImportBatch,
   downloadImportTemplate,
   downloadPaymentReport,
@@ -795,6 +846,7 @@ import {
   getTrackingHistory,
   getTrackingItems,
   previewBookingImport,
+  previewExternalLadders,
   previewPlanFromForecast,
   previewPlanImport,
   recordDailyShipments,
@@ -832,6 +884,7 @@ const filters = reactive({
   region: '',
   statuses: [],
   booking_status: '',
+  actual_ship_source: '',
   payment_ratio: '',
   keyword: '',
   expectedRange: [],
@@ -840,10 +893,12 @@ const filters = reactive({
 const dailyDate = ref(props.context.today)
 const dailyReason = ref('')
 const dailySaving = ref(false)
+const shipmentDeleting = ref(false)
+const externalParsing = ref(false)
 const dailyDialog = reactive({ visible: false, date: props.context.today, reason: '' })
 const externalDialog = reactive({
-  visible: false, ladder_no: '', contract_no: '', module_name: '', project_name: '',
-  ship_date: props.context.today, reason: '',
+  visible: false, ladder_text: '', contract_no: '', module_name: '', project_name: '',
+  ship_date: props.context.today, reason: '', ladders: [], parse_errors: [], parse_warnings: [],
 })
 const unlockDialog = reactive({ visible: false, type: 'weekly', reason: '' })
 const unlockSaving = ref(false)
@@ -954,6 +1009,7 @@ function buildParams(extra = {}) {
     module: filters.module,
     region: filters.region,
     booking_status: filters.booking_status,
+    actual_ship_source: filters.actual_ship_source,
     payment_ratio: filters.payment_ratio,
     keyword: filters.keyword,
     include_removed: filters.include_removed ? 1 : '',
@@ -999,6 +1055,7 @@ function resetFilters() {
   filters.region = ''
   filters.statuses = []
   filters.booking_status = ''
+  filters.actual_ship_source = ''
   filters.payment_ratio = ''
   filters.keyword = ''
   filters.expectedRange = []
@@ -1025,6 +1082,7 @@ async function handleTabChange(name) {
     // 否则列表和导出会被看不见的条件限制。
     filters.statuses = []
     filters.booking_status = ''
+    filters.actual_ship_source = ''
     filters.payment_ratio = ''
     filters.expectedRange = []
     page.value = 1
@@ -1327,36 +1385,115 @@ async function confirmDaily() {
   }
 }
 
+async function handleDeleteShipments() {
+  const selected = selectedRows.value
+  if (!selected.length) return ElMessage.warning('请选择要删除的实发梯号')
+  const eligible = selected.filter((row) => row.actual_ship_source === 'daily')
+  if (!eligible.length) return ElMessage.warning('选中梯号没有可删除的系统实发记录')
+  const skipped = selected.length - eligible.length
+  try {
+    await ElMessageBox.confirm(
+      `将删除 ${eligible.length} 条系统实发记录` +
+        (skipped ? `，跳过 ${skipped} 条非系统实发或未实发记录` : '') +
+        '。删除后梯号会回到未实发状态；如台账仍有发货日期，继续以台账为准。是否继续？',
+      '删除实发',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  shipmentDeleting.value = true
+  try {
+    const res = await deleteDailyShipments({
+      ladder_keys: eligible.map((row) => row.ladder_key),
+    })
+    const data = res.data || {}
+    ElMessage.success(
+      `已删除 ${data.deleted || 0} 条实发` +
+        (data.skipped ? `，跳过 ${data.skipped} 条` : '')
+    )
+    await loadData()
+    emit('refresh-context')
+  } catch (error) {
+    // 拦截器已提示
+  } finally {
+    shipmentDeleting.value = false
+  }
+}
+
+function invalidateExternalLadders() {
+  externalDialog.ladders = []
+  externalDialog.parse_errors = []
+  externalDialog.parse_warnings = []
+}
+
+function removeExternalLadder(index) {
+  externalDialog.ladders.splice(index, 1)
+}
+
+async function handleParseExternalLadders() {
+  if (!externalDialog.ladder_text.trim()) return ElMessage.warning('请输入梯号')
+  externalParsing.value = true
+  try {
+    const res = await previewExternalLadders({
+      ladder_no: externalDialog.ladder_text,
+      contract_no: externalDialog.contract_no,
+    })
+    const data = res.data || {}
+    externalDialog.ladders = (data.ladders || []).map((ladder) => ({ ladder_no: ladder }))
+    externalDialog.parse_errors = data.errors || []
+    externalDialog.parse_warnings = data.warnings || []
+    if (externalDialog.ladders.length) {
+      ElMessage.success(`已识别 ${externalDialog.ladders.length} 台梯号`)
+    } else {
+      ElMessage.warning(externalDialog.parse_errors[0] || '未识别到有效梯号')
+    }
+  } catch (error) {
+    // 拦截器已提示
+  } finally {
+    externalParsing.value = false
+  }
+}
+
 function openExternalDialog() {
   Object.assign(externalDialog, {
     visible: true,
-    ladder_no: '',
+    ladder_text: '',
     contract_no: '',
     module_name: filters.module || '',
     project_name: '',
     ship_date: props.context.today,
     reason: '',
+    ladders: [],
+    parse_errors: [],
+    parse_warnings: [],
   })
 }
 
 async function confirmExternal() {
-  if (!externalDialog.ladder_no || !externalDialog.module_name) return ElMessage.warning('梯号和模块必填')
+  if (!externalDialog.module_name) return ElMessage.warning('模块必填')
+  if (!externalDialog.ladders.length) return ElMessage.warning('请先识别梯号')
+  if (externalDialog.parse_errors.length) return ElMessage.warning('请先处理梯号校验错误')
+  const ladders = externalDialog.ladders.map((row) => (row.ladder_no || '').trim()).filter(Boolean)
+  if (!ladders.length) return ElMessage.warning('请至少保留一个梯号')
+  if (new Set(ladders).size !== ladders.length) return ElMessage.warning('识别结果中存在重复梯号，请重新识别')
   dailySaving.value = true
   try {
-    await recordDailyShipments({
+    const res = await recordDailyShipments({
       reason: externalDialog.reason,
-      items: [{
-        ladder_key: externalDialog.ladder_no,
-        ladder_no: externalDialog.ladder_no,
+      items: ladders.map((ladder) => ({
+        ladder_key: ladder,
+        ladder_no: ladder,
         contract_no: externalDialog.contract_no,
         module_name: externalDialog.module_name,
         project_name: externalDialog.project_name,
         ship_date: externalDialog.ship_date,
-      }],
+      })),
     })
-    ElMessage.success('计划外实发已记录')
+    ElMessage.success(`已录入 ${res.data.shipped} 条计划外实发`)
     externalDialog.visible = false
     await loadData()
+    emit('refresh-context')
   } catch (error) {
     // 拦截器已提示
   } finally {
@@ -1429,6 +1566,7 @@ const ACTION_LABELS = {
   draft_save: '保存草稿',
   create_shipment: '录入实发',
   update_shipment: '修正实发',
+  delete_shipment: '删除实发',
   admin_void_shipment: '作废实发',
   admin_unlock: '管理员解锁',
   commit_plan: '生效计划版本',

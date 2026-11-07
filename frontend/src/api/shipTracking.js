@@ -40,6 +40,14 @@ export function recordDailyShipments(payload) {
   return request.post('/api/ship-tracking/daily', payload)
 }
 
+export function previewExternalLadders(payload) {
+  return request.post('/api/ship-tracking/daily/external/preview', payload)
+}
+
+export function deleteDailyShipments(payload) {
+  return request.post('/api/ship-tracking/daily/delete', payload)
+}
+
 export function unlockShipTracking(payload) {
   return request.post('/api/ship-tracking/unlock', payload)
 }

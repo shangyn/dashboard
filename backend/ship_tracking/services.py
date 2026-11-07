@@ -14,7 +14,7 @@ from ship_tracking.models import (
     AuditLog, BookingRecord, DailyShipment, ImportBatch, TrackingItem,
 )
 from ship_tracking.excel_reader import (
-    canonical_ladder, normalize_text, parse_excel_date,
+    canonical_ladder, normalize_text, parse_excel_date, parse_ladder_batch,
 )
 from ship_tracking.regions import build_region_map
 
@@ -507,7 +507,7 @@ def add_weekly_ladder(user, payload):
 
 
 def get_weekly(user, module_name=None, include_future=None, keyword=''):
-    """候选池不再按预计日期截断：本模块所有未发货、未提交的有效计划梯号都显示。
+    """候选池只显示本模块未发货、未提交且没有预计发货日期的有效计划梯号。
 
     include_future 参数保留只是为了兼容旧前端传参，已不参与过滤。
     """
@@ -540,6 +540,8 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
             if visible:
                 submitted.append(item)
             bump(item.module_name, 'submitted')
+            continue
+        if item.expected_ship_date:
             continue
         if visible:
             # 只认本周目标的草稿；上一周遗留的草稿不再预填，避免带出过期日期。
@@ -940,6 +942,77 @@ def record_daily_shipments(user, items, reason=''):
     return {'shipped': len(changed), 'items': changed}
 
 
+def preview_external_ladders(user, value, contract_no=''):
+    """识别计划外实发录入的多梯号文本，供页面逐行预览确认。"""
+    if not (can_daily_edit(user) or can_admin(user)):
+        raise PermissionError('无计划外实发录入权限')
+    return parse_ladder_batch(value, contract_no=contract_no)
+
+
+def delete_daily_shipments(user, ladder_keys):
+    """业务删除实发；只作废系统实发记录，跨天可用，不要求填写原因。"""
+    if not (can_daily_edit(user) or can_admin(user)):
+        raise PermissionError('无删除实发权限')
+    keys = []
+    for value in ladder_keys or []:
+        key = canonical_ladder(value)
+        if key and key not in keys:
+            keys.append(key)
+    if not keys:
+        raise ValueError('请选择要删除的实发梯号')
+
+    rows = TrackingItem.query.filter(TrackingItem.ladder_key.in_(keys)).all()
+    by_key = {row.ladder_key: row for row in rows}
+    now = dt.datetime.now()
+    deleted = 0
+    skipped = 0
+    for key in keys:
+        row = by_key.get(key)
+        if row is None or row.actual_ship_source != 'daily':
+            skipped += 1
+            continue
+        active = DailyShipment.query.filter_by(ladder_key=key, is_void=False).all()
+        if not active:
+            skipped += 1
+            continue
+        primary = active[0]
+        old_actual = iso(row.actual_ship_date)
+        old_source = row.actual_ship_source or ''
+        for shipment in active:
+            shipment.is_void = True
+            shipment.void_reason = '业务删除实发'
+            shipment.void_by = user.id
+            shipment.void_by_name = user.real_name or user.username
+            shipment.void_at = now
+        ledger_delivery = _ledger_delivery_date(key)
+        if ledger_delivery:
+            row.actual_ship_date = ledger_delivery
+            row.actual_ship_source = 'ledger'
+            flags = [flag for flag in row.flags() if flag != 'shipped_voided']
+        else:
+            row.actual_ship_date = None
+            row.actual_ship_source = None
+            flags = row.flags()
+            if 'shipped_voided' not in flags:
+                flags.append('shipped_voided')
+        row.set_flags(flags)
+        _audit(user, 'daily', 'delete_shipment', key,
+               reason='业务删除实发',
+               old_values={
+                   'ship_date': iso(primary.ship_date),
+                   'unit_count': primary.unit_count,
+                   'actual_ship_date': old_actual,
+                   'actual_ship_source': old_source,
+               },
+               new_values={
+                   'actual_ship_date': iso(row.actual_ship_date),
+                   'actual_ship_source': row.actual_ship_source or '',
+               })
+        deleted += 1
+    db.session.commit()
+    return {'deleted': deleted, 'skipped': skipped}
+
+
 def _status_filter(item, statuses):
     if not statuses:
         return True
@@ -955,6 +1028,7 @@ def query_tracking(user, filters=None):
     module = normalize_text(filters.get('module'))
     region = normalize_text(filters.get('region'))
     booking = normalize_text(filters.get('booking_status'))
+    actual_source = normalize_text(filters.get('actual_ship_source')).lower()
     payment_ratio_filter = normalize_text(filters.get('payment_ratio')).lower()
     statuses = filters.get('statuses') or []
     if isinstance(statuses, str):
@@ -995,6 +1069,8 @@ def query_tracking(user, filters=None):
             if keyword not in haystack:
                 continue
         if booking and data['booking_status'] != booking:
+            continue
+        if actual_source and data['actual_ship_source'] != actual_source:
             continue
         if payment_ratio_filter in ('100', '100%'):
             if data['payment_ratio_group'] != '100':
