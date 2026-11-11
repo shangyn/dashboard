@@ -89,6 +89,14 @@
         </el-tag>
       </template>
     </el-table-column>
+    <el-table-column
+      v-if="optionalColumns.includes('remark')"
+      label="备注"
+      min-width="200"
+      show-overflow-tooltip
+    >
+      <template #default="{ row }">{{ row.business_remark || '—' }}</template>
+    </el-table-column>
     <el-table-column v-if="optionalColumns.includes('flags')" label="变更 / 异常" min-width="180">
       <template #default="{ row }">
         <div v-if="row.plan_change_count" class="st-change-count">计划变更 {{ row.plan_change_count }} 次</div>

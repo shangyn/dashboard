@@ -614,6 +614,7 @@
           <el-descriptions-item label="最近申请">{{ detailDrawer.row.booking_last_date || '—' }}</el-descriptions-item>
           <el-descriptions-item label="计划变更">{{ detailDrawer.row.plan_change_count || 0 }} 次</el-descriptions-item>
           <el-descriptions-item label="数据标记">{{ detailDrawer.row.flag_labels?.length ? detailDrawer.row.flag_labels.join('；') : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ detailDrawer.row.business_remark || '—' }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ sourceKindLabel(detailDrawer.row) }}</el-descriptions-item>
           <el-descriptions-item label="计划月份">{{ detailDrawer.row.plan_month || '—' }}</el-descriptions-item>
         </el-descriptions>
@@ -709,6 +710,8 @@
             <el-descriptions-item label="文件未含但保留">{{ planPreview.data.summary.preserved_absent_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="文件中日期与已有不同">{{ planPreview.data.summary.expected_changed_count }}</el-descriptions-item>
             <el-descriptions-item label="补空日期">{{ planPreview.data.summary.expected_filled_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="导入备注">{{ planPreview.data.summary.remark_imported_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="备注冲突（保留已有）">{{ planPreview.data.summary.remark_conflict_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已提交承诺冲突（保留承诺）">{{ planPreview.data.summary.committed_conflict_count }}</el-descriptions-item>
             <el-descriptions-item label="文件未含但已实发/已订舱">{{ (planPreview.data.summary.shipped_absent_count ?? 0) + (planPreview.data.summary.booked_absent_count ?? 0) }}</el-descriptions-item>
             <el-descriptions-item label="警告">{{ planPreview.data.warning_count }}</el-descriptions-item>
@@ -744,6 +747,7 @@
           />
           <el-alert v-if="planPreview.data.summary.duplicate_import" type="warning" :closable="false" show-icon style="margin-top: 12px" title="该文件与历史已导入文件相同。如确认重新生成版本，请在下方勾选强制导入。" />
           <el-alert v-if="planPreview.data.summary.committed_conflict_count" type="error" :closable="false" show-icon style="margin-top: 12px" title="文件中的日期与已提交承诺不一致。系统保留原承诺并标记冲突，不会静默覆盖。" />
+          <el-alert v-if="planPreview.data.summary.remark_conflict_count" type="warning" :closable="false" show-icon style="margin-top: 12px" title="文件中的备注与系统已有业务备注不一致。系统保留已有备注，不会静默覆盖。" />
           <el-alert type="info" :closable="false" show-icon style="margin-top: 10px" title="默认保留已有预计/实际/订舱/承诺，只有空值才会被文件补上。勾选下方选项后，已有预计日期才会按文件更新，实际发货/订舱/承诺仍不变。" />
         </template>
         <el-table :data="planPreview.data.issues.slice(0, 200)" size="small" border max-height="300" style="margin-top: 12px">
@@ -905,10 +909,13 @@ const unlockSaving = ref(false)
 const detailDrawer = reactive({ visible: false, loading: false, row: null, history: [] })
 
 const COLUMN_SETTINGS_KEY = 'ship-tracking-optional-columns'
+const REMARK_COLUMN_MIGRATION_KEY = 'ship-tracking-remark-column-v1'
+const DEFAULT_OPTIONAL_COLUMNS = ['remark']
 const optionalColumnOptions = [
   { key: 'amount', label: '金额(万元)' },
   { key: 'schedule', label: '排产完工日期' },
   { key: 'whole', label: '整梯发货日期' },
+  { key: 'remark', label: '备注' },
   { key: 'flags', label: '计划变更 / 异常' },
 ]
 const optionalColumnKeys = optionalColumnOptions.map((item) => item.key)
@@ -916,10 +923,20 @@ const visibleOptionalColumns = ref(loadColumnSettings() || [])
 
 function loadColumnSettings() {
   try {
-    const stored = JSON.parse(localStorage.getItem(COLUMN_SETTINGS_KEY) || '[]')
-    return Array.isArray(stored) ? stored.filter((key) => optionalColumnKeys.includes(key)) : []
+    const raw = localStorage.getItem(COLUMN_SETTINGS_KEY)
+    if (raw === null) return [...DEFAULT_OPTIONAL_COLUMNS]
+    const stored = JSON.parse(raw)
+    const keys = Array.isArray(stored)
+      ? stored.filter((key) => optionalColumnKeys.includes(key))
+      : [...DEFAULT_OPTIONAL_COLUMNS]
+    if (localStorage.getItem(REMARK_COLUMN_MIGRATION_KEY) !== '1') {
+      if (!keys.includes('remark')) keys.push('remark')
+      localStorage.setItem(COLUMN_SETTINGS_KEY, JSON.stringify(keys))
+      localStorage.setItem(REMARK_COLUMN_MIGRATION_KEY, '1')
+    }
+    return keys
   } catch (error) {
-    return []
+    return [...DEFAULT_OPTIONAL_COLUMNS]
   }
 }
 
@@ -933,7 +950,7 @@ function saveColumnSettings() {
 }
 
 function resetColumnSettings() {
-  visibleOptionalColumns.value = []
+  visibleOptionalColumns.value = [...DEFAULT_OPTIONAL_COLUMNS]
   saveColumnSettings()
 }
 
@@ -1576,6 +1593,7 @@ const ACTION_LABELS = {
   cleanup_preview_batches: '清理预览批次',
   restore: '恢复计划',
   manual_add: '手工新增梯号',
+  remark_update: '更新备注',
   sync_run: '执行同步',
   sync_update: '同步台账字段',
 }
@@ -1588,6 +1606,7 @@ const FIELD_LABELS = {
   schedule_finish_date: '排产完工日期',
   whole_ship_date: '整梯发货日期',
   payment_ratio: '回款比例',
+  business_remark: '备注',
   unit_count: '台数',
   amount_rmb: '金额(元)',
   plan_status: '计划状态',

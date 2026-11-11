@@ -28,6 +28,10 @@ export function addWeeklyLadder(payload) {
   return request.post('/api/ship-tracking/weekly/manual', payload)
 }
 
+export function saveWeeklyRemark(payload) {
+  return request.post('/api/ship-tracking/weekly/remark', payload)
+}
+
 export function getTrackingItems(params) {
   return request.get('/api/ship-tracking/items', { params })
 }

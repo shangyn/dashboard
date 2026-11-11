@@ -105,6 +105,20 @@ def _ensure_tracking_columns():
         ))
         db.session.commit()
         payment_ratio_added = True
+    if 'business_remark' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN business_remark TEXT'
+        ))
+        db.session.commit()
+    if 'st_plan_item' in inspector.get_table_names():
+        plan_columns = {
+            column['name'] for column in inspector.get_columns('st_plan_item')
+        }
+        if 'remark' not in plan_columns:
+            db.session.execute(text(
+                'ALTER TABLE st_plan_item ADD COLUMN remark TEXT'
+            ))
+            db.session.commit()
     # 新列首次上线时，从当前计划快照回填源值，便于页面直接解释日期来源。
     db.session.execute(text(
         "UPDATE st_tracking_item SET business_expected_raw = COALESCE(("

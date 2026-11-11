@@ -132,6 +132,7 @@ def _clean_plan_row(row, row_number, ledger, seen, columns):
     project_name = project_raw
     reporter = _field(row, columns, 'reporter')
     source = _field(row, columns, 'source')
+    remark = _field(row, columns, 'remark')
     business_expected_raw = _field(row, columns, 'business_expected')
     seven_day_raw = _field(row, columns, 'seven_day')
     business_date = parse_excel_date(business_expected_raw)
@@ -203,6 +204,7 @@ def _clean_plan_row(row, row_number, ledger, seen, columns):
             'amount_rmb': amount_rmb / float(len(ladders)),
             'source': source,
             'reporter': reporter,
+            'remark': remark,
             # 排产完工 / 整梯发货只取台账；计划 Excel 的日期不参与。
             'schedule_finish_date': parse_excel_date(ladder_ledger_row.get('schedule_finish_date')),
             'whole_ship_date': parse_excel_date(ladder_ledger_row.get('whole_ship_date')),
@@ -281,6 +283,7 @@ def parse_plan_file(path, plan_month):
         'missing_module': sum(1 for item in items if item['module_name'] == '未归属'),
         'missing_project': sum(1 for item in items if 'missing_project' in item['data_flags']),
         'expected_with_date': sum(1 for item in items if item['original_expected_ship_date']),
+        'remark_count': sum(1 for item in items if item.get('remark')),
         'header': columns.to_dict(),
     }
     return items, issues, summary
@@ -336,12 +339,27 @@ def _plan_diff(items, overwrite_expected=False):
     committed_conflicts = []
     shipped_absent = []
     booked_absent = []
+    remark_imported = []
+    remark_conflicts = []
     unchanged = 0
     for key, item in new_by_key.items():
+        file_remark = normalize_text(item.get('remark'))
         row = current.get(key)
         if row is None:
             added.append(key)
+            if file_remark:
+                remark_imported.append(key)
             continue
+        current_remark = normalize_text(row.business_remark)
+        remark_imported_this = bool(file_remark and not current_remark)
+        if remark_imported_this:
+            remark_imported.append(key)
+        elif file_remark and current_remark and file_remark != current_remark:
+            remark_conflicts.append({
+                'ladder_key': key,
+                'old': current_remark,
+                'new': file_remark,
+            })
         old_expected = row.original_expected_ship_date
         file_expected = item.get('original_expected_ship_date')
         # 草稿不再写入 expected，也不参与预览/提交的已有日期判断。
@@ -386,7 +404,8 @@ def _plan_diff(items, overwrite_expected=False):
                 'old': row.module_name or '',
                 'new': item.get('module_name') or '',
             })
-        if old_expected == effective_expected and not module_changed_this and row.plan_status == 'active':
+        if (old_expected == effective_expected and not module_changed_this
+                and not remark_imported_this and row.plan_status == 'active'):
             unchanged += 1
     for key, row in current.items():
         if row.plan_status != 'active' or key in new_by_key:
@@ -410,6 +429,8 @@ def _plan_diff(items, overwrite_expected=False):
         'committed_conflict_count': len(set(committed_conflicts)),
         'shipped_absent_count': len(shipped_absent),
         'booked_absent_count': len(booked_absent),
+        'remark_imported_count': len(remark_imported),
+        'remark_conflict_count': len(remark_conflicts),
         # 兼容旧前端字段：默认保留后不会再有「已实发/已订舱后移除」。
         'shipped_removed_count': 0,
         'booked_removed_count': 0,
@@ -424,6 +445,8 @@ def _plan_diff(items, overwrite_expected=False):
         'committed_conflict_sample': list(dict.fromkeys(committed_conflicts))[:80],
         'shipped_absent_sample': shipped_absent[:80],
         'booked_absent_sample': booked_absent[:80],
+        'remark_imported_sample': remark_imported[:80],
+        'remark_conflict_sample': remark_conflicts[:80],
         'shipped_removed_sample': [],
         'booked_removed_sample': [],
     }
@@ -555,6 +578,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
             whole_ship_date=_parse_iso_date(item.get('whole_ship_date')),
             original_expected_ship_date=expected,
             business_expected_raw=item.get('business_expected_raw') or '',
+            remark=item.get('remark') or '',
             validation_status=item.get('validation_status') or 'ok',
             data_flags=_dump(item.get('data_flags') or []),
             raw_json=_dump(item.get('raw') or {}),
@@ -591,6 +615,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
                 commit_status='unplanned',
                 booking_status='未订舱',
                 source_kind='plan',
+                business_remark=item.get('remark') or '',
             )
             row.set_flags(new_flags)
             db.session.add(row)
@@ -606,6 +631,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
             'unit_count': row.unit_count,
             'amount_rmb': row.amount_rmb,
             'plan_status': row.plan_status,
+            'business_remark': row.business_remark or '',
         }
         old_expected = row.original_expected_ship_date
         file_expected = expected
@@ -648,6 +674,10 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
         row.amount_rmb = float(item.get('amount_rmb') or row.amount_rmb or 0)
         row.source = item.get('source') or row.source
         row.reporter = item.get('reporter') or row.reporter
+        file_remark = normalize_text(item.get('remark'))
+        if file_remark and not normalize_text(row.business_remark):
+            # 只在系统还没有备注时导入计划备注，避免重导覆盖业务填写。
+            row.business_remark = file_remark
         new_raw = normalize_text(item.get('business_expected_raw'))
         if new_raw and (overwrite_expected or not row.business_expected_raw):
             row.business_expected_raw = new_raw
@@ -689,6 +719,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
             old['expected_ship_date'] != iso(effective_expected),
             old['unit_count'] != row.unit_count,
             old['amount_rmb'] != row.amount_rmb,
+            old['business_remark'] != (row.business_remark or ''),
             old['plan_status'] != 'active',
         ])
         if changed:
@@ -699,6 +730,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
                        'expected_ship_date': iso(effective_expected),
                        'unit_count': row.unit_count,
                        'amount_rmb': row.amount_rmb,
+                       'business_remark': row.business_remark or '',
                    })
 
     preserved_absent = []

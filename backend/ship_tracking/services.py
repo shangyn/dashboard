@@ -385,6 +385,7 @@ def _tracking_dict(item, region='', region_source=''):
         'data_flags': flags,
         'flag_labels': [FLAG_LABELS.get(flag, flag) for flag in flags],
         'source_kind': item.source_kind or 'plan',
+        'business_remark': item.business_remark or '',
     }
 
 
@@ -545,7 +546,11 @@ def add_weekly_ladder(user, payload):
 
 
 def get_weekly(user, module_name=None, include_future=None, keyword=''):
-    """候选池只显示本模块未发货、未提交且没有预计发货日期的有效计划梯号。
+    """返回候选池和本模块整体发货明细。
+
+    候选池只显示未进入整体明细的待填报梯号：有效计划、未发货、未提交且
+    没有预计发货日期。下方整体发货明细包含本模块已有预计日期、已提交或
+    已实发的梯号，并明确排除候选池，避免同一梯号上下重复。
 
     include_future 参数保留只是为了兼容旧前端传参，已不参与过滤。
     """
@@ -558,7 +563,6 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
     current = today()
     rows = TrackingItem.query.filter(
         TrackingItem.module_name.in_(count_modules),
-        TrackingItem.plan_status == 'active',
     ).all()
     visible_modules = set(modules)
     candidates = []
@@ -572,15 +576,19 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
         entry[field] += 1
 
     for item in rows:
-        if item.actual_ship_date:
-            continue
         visible = item.module_name in visible_modules
-        if item.commit_status == 'committed':
+        if item.actual_ship_date:
             if visible:
                 submitted.append(item)
             bump(item.module_name, 'submitted')
             continue
-        if item.expected_ship_date:
+        # 已移除且未实发的计划不进入业务视角；已实发的仍保留在下方明细。
+        if item.plan_status != 'active':
+            continue
+        if item.commit_status == 'committed' or item.expected_ship_date:
+            if visible:
+                submitted.append(item)
+            bump(item.module_name, 'submitted')
             continue
         if visible:
             # 只认可填窗口内的草稿；窗口外的旧草稿不再预填，避免带出过期日期。
@@ -603,9 +611,18 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
     candidates = [item for item in candidates if matches(item)]
     draft = [item for item in draft if matches(item)]
     submitted = [item for item in submitted if matches(item)]
-    submitted.sort(key=lambda item: (
-        item.module_name or '', item.expected_ship_date or dt.date.max, item.ladder_key or ''
-    ))
+    def history_sort_key(item):
+        if item.actual_ship_date:
+            return (
+                1, item.module_name or '', -item.actual_ship_date.toordinal(),
+                item.ladder_key or '',
+            )
+        return (
+            0, item.module_name or '', item.expected_ship_date or dt.date.max,
+            item.ladder_key or '',
+        )
+
+    submitted.sort(key=history_sort_key)
     candidates.sort(key=lambda item: (
         item.module_name or '', item.expected_ship_date or dt.date.max, item.ladder_key or ''
     ))
@@ -687,6 +704,41 @@ def save_weekly_draft(user, module_name, items, target_week=None):
         'fill_start': iso(window['start']),
         'fill_end': iso(window['end']),
     }
+
+
+def save_weekly_remark(user, module_name, ladder_key, remark):
+    """保存业务对整体发货明细中未发货梯号的最新备注。"""
+    modules = _resolve_weekly_modules(user, module_name)
+    key = canonical_ladder(ladder_key)
+    if not key:
+        raise ValueError('梯号不能为空')
+    row = TrackingItem.query.filter_by(ladder_key=key).first()
+    if row is None:
+        raise ValueError('梯号 %s 不存在' % key)
+    if row.module_name not in modules:
+        raise ValueError('梯号 %s 不属于当前可填报模块' % key)
+    if row.actual_ship_date:
+        raise ValueError('梯号 %s 已发货，不能再修改备注' % key)
+    if row.plan_status != 'active':
+        raise ValueError('梯号 %s 的计划已移除，不能修改备注' % key)
+    if row.commit_status != 'committed' and not row.expected_ship_date:
+        raise ValueError('梯号 %s 尚未进入整体发货明细，不能填写备注' % key)
+
+    remark_text = str(remark or '').replace('\r\n', '\n').replace('\r', '\n').strip()
+    if len(remark_text) > 500:
+        raise ValueError('备注不能超过 500 个字符')
+    old_remark = row.business_remark or ''
+    if old_remark == remark_text:
+        return _tracking_dict(row)
+
+    row.business_remark = remark_text
+    _audit(
+        user, 'weekly', 'remark_update', key,
+        old_values={'business_remark': old_remark},
+        new_values={'business_remark': remark_text},
+    )
+    db.session.commit()
+    return _tracking_dict(row)
 
 
 def submit_weekly(user, module_name, items, target_week=None):
@@ -1124,7 +1176,7 @@ def query_tracking(user, filters=None):
         if keyword:
             haystack = ' '.join([
                 data['contract_no'], data['ladder_no'], data['project_name'],
-                data['module_name'], data['salesperson'],
+                data['module_name'], data['salesperson'], data['business_remark'],
             ]).upper()
             if keyword not in haystack:
                 continue
@@ -1271,7 +1323,7 @@ def export_tracking(user, filters=None):
     headers = [
         '大区', '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人',
         '排产完工日期', '整梯发货日期', '预计发货日期', '实际发货日期',
-        '实际发货日期来源', '订舱状态', '订舱审核状态', '回款比例',
+        '实际发货日期来源', '订舱状态', '订舱审核状态', '回款比例', '备注',
     ]
     sheet.append(headers)
     header_fill = PatternFill('solid', fgColor='172554')
@@ -1304,7 +1356,7 @@ def export_tracking(user, filters=None):
             _excel_date(row['schedule_finish_date']), _excel_date(row['whole_ship_date']),
             _excel_date(row['expected_ship_date']), _excel_date(row['actual_ship_date']),
             row['actual_ship_source_label'], row['booking_status'],
-            row['booking_audit_status'], row['payment_ratio'],
+            row['booking_audit_status'], row['payment_ratio'], row['business_remark'],
         ])
         excel_row = sheet.max_row
         if shipped:
@@ -1324,7 +1376,7 @@ def export_tracking(user, filters=None):
         if shipped:
             sheet.cell(excel_row, 13).font = shipped_font
 
-    widths = [8, 18, 16, 22, 30, 8, 12, 11, 10, 13, 13, 13, 13, 14, 10, 12, 12]
+    widths = [8, 18, 16, 22, 30, 8, 12, 11, 10, 13, 13, 13, 13, 14, 10, 12, 12, 30]
     for index, width in enumerate(widths, 1):
         sheet.column_dimensions[get_column_letter(index)].width = width
     for excel_row in range(2, sheet.max_row + 1):
@@ -1336,8 +1388,11 @@ def export_tracking(user, filters=None):
         sheet.cell(excel_row, 6).number_format = '0.##'
         sheet.cell(excel_row, 7).number_format = '#,##0.00'
         sheet.cell(excel_row, 17).number_format = '0.00%'
+        sheet.cell(excel_row, 18).alignment = Alignment(
+            vertical='top', wrap_text=True
+        )
     sheet.freeze_panes = 'E2'
-    sheet.auto_filter.ref = 'A1:Q%d' % sheet.max_row
+    sheet.auto_filter.ref = 'A1:R%d' % sheet.max_row
     sheet.sheet_view.showGridLines = False
 
     # 汇总页：先看总数和颜色含义，再回到明细逐行核对。
@@ -1453,10 +1508,11 @@ def make_plan_template():
     sheet = workbook.active
     sheet.title = '预计发货明细'
     headers = ['模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人',
-               '排产完工日期', '整梯发货日期', '业务预计发货时间']
+               '排产完工日期', '整梯发货日期', '业务预计发货时间', '备注']
     sheet.append(headers)
     sheet.append(['示例模块', 'DHT-000000T', 'DHT-000000T/1#', '示例项目', 1, 10.0,
-                  '候选勾选', '张三', '2026-11-10', '2026-11-10', '2026-11-10'])
+                  '候选勾选', '张三', '2026-11-10', '2026-11-10', '2026-11-10', ''])
+    sheet.column_dimensions['L'].width = 36
     sheet.freeze_panes = 'A2'
     output = io.BytesIO()
     workbook.save(output)

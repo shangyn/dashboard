@@ -41,7 +41,7 @@
       type="info"
       :closable="false"
       show-icon
-      title="待填报区只显示没有预计发货日期的梯号；已有预计发货日期（含计划导入）的梯号不再显示。提交后仍保留在下方已提交区和全量明细中。"
+      title="待填报区只显示尚未进入整体发货明细的梯号；已有预计发货日期、已提交或已发货的梯号会进入下方整体发货明细，不会上下重复。"
     />
 
     <div class="st-panel">
@@ -157,10 +157,10 @@
     <div class="st-panel">
       <div class="st-panel-head">
         <div>
-          <span class="st-panel-title">我已提交 / 待发货</span>
+          <span class="st-panel-title">整体发货明细</span>
           <span class="st-count">共 {{ filteredSubmitted.length }} 条</span>
         </div>
-        <span class="st-hint">本模块全部已提交梯号始终保留；未发货不会从列表消失</span>
+        <span class="st-hint">本模块整体发货明细；未发货在前，已发货在后</span>
       </div>
       <el-table ref="submittedTableRef" :data="pagedSubmitted" row-key="ladder_key" size="small" border class="st-table">
         <el-table-column prop="ladder_no" label="梯号" width="185" />
@@ -182,14 +182,15 @@
         <el-table-column prop="committed_by_name" label="填报人" width="90" align="center" />
         <el-table-column label="当前状态" width="110" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'overdue' ? 'danger' : 'primary'" size="small" effect="plain">
+            <el-tag :type="statusTagType(row.status)" size="small" effect="plain">
               {{ row.status_label }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="同周调整" min-width="250">
           <template #default="{ row }">
-            <div class="st-adjust-cell">
+            <div v-if="row.actual_ship_date" class="st-hint">已发货，只读</div>
+            <div v-else-if="row.commit_status === 'committed'" class="st-adjust-cell">
               <el-date-picker
                 v-model="editDates[row.ladder_key]"
                 size="small"
@@ -201,6 +202,25 @@
               />
               <el-button size="small" text type="primary" @click="handleAdjust(row)">改期</el-button>
               <el-button size="small" text type="danger" @click="handleWithdraw(row)">撤回</el-button>
+            </div>
+            <span v-else class="st-hint">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="备注" min-width="220">
+          <template #default="{ row }">
+            <div class="st-remark-cell">
+              <span class="st-remark-text" :title="row.business_remark || ''">
+                {{ row.business_remark || '—' }}
+              </span>
+              <el-button
+                v-if="!row.actual_ship_date"
+                size="small"
+                text
+                type="primary"
+                @click="openRemarkDialog(row)"
+              >
+                {{ row.business_remark ? '编辑备注' : '添加备注' }}
+              </el-button>
             </div>
           </template>
         </el-table-column>
@@ -214,6 +234,27 @@
         @current-change="(value) => (submittedPage = value)"
       />
     </div>
+
+    <el-dialog v-model="remarkDialog.visible" title="填写备注" width="520px">
+      <div class="st-remark-target">
+        <strong>{{ remarkDialog.row?.ladder_no || '' }}</strong>
+        <span>{{ remarkDialog.row?.project_name || '' }}</span>
+      </div>
+      <el-input
+        v-model="remarkDialog.value"
+        type="textarea"
+        :rows="5"
+        maxlength="500"
+        show-word-limit
+        placeholder="请填写未按时发货的原因或补充说明"
+      />
+      <template #footer>
+        <el-button @click="remarkDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="remarkDialog.saving" @click="saveRemark">
+          保存备注
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="manualDialog.visible" title="手工添加合同号 / 梯号" width="480px">
       <el-alert
@@ -251,6 +292,7 @@ import {
   adjustWeeklyPlan,
   getWeeklyPlan,
   saveWeeklyDraft,
+  saveWeeklyRemark,
   submitWeeklyPlan,
   withdrawWeeklyPlan,
 } from '../../api/shipTracking'
@@ -289,6 +331,12 @@ watch([candidates, submitted], () =>
 const quickDates = ref([])
 const moduleCounts = ref({})
 const manualDialog = reactive({ visible: false, ladderNo: '', loading: false })
+const remarkDialog = reactive({
+  visible: false,
+  row: null,
+  value: '',
+  saving: false,
+})
 
 const myModules = computed(() => props.context.my_modules || [])
 const fillStart = computed(() => props.context.fill_start || props.context.today || props.context.target_week_start || '')
@@ -318,7 +366,8 @@ const filteredSubmitted = computed(() => {
   const text = keyword.value.trim().toUpperCase()
   if (!text) return submitted.value
   return submitted.value.filter((row) =>
-    [row.contract_no, row.ladder_no, row.project_name].join(' ').toUpperCase().includes(text)
+    [row.contract_no, row.ladder_no, row.project_name, row.module_name, row.business_remark]
+      .join(' ').toUpperCase().includes(text)
   )
 })
 const pagedCandidates = computed(() => {
@@ -333,6 +382,14 @@ const pagedSubmitted = computed(() => {
 function isoDate(value) {
   if (!value) return ''
   return String(value).slice(0, 10)
+}
+
+function statusTagType(status) {
+  if (status === 'shipped') return 'success'
+  if (status === 'overdue') return 'danger'
+  if (status === 'pending') return 'warning'
+  if (status === 'removed') return 'info'
+  return 'primary'
 }
 
 function formatLocalDate(date) {
@@ -392,7 +449,9 @@ async function loadData() {
       if (row.draft_expected_ship_date) dateMap[row.ladder_key] = row.draft_expected_ship_date
     })
     submitted.value.forEach((row) => {
-      editDates[row.ladder_key] = row.committed_expected_ship_date || row.expected_ship_date
+      if (row.commit_status === 'committed' && !row.actual_ship_date) {
+        editDates[row.ladder_key] = row.committed_expected_ship_date || row.expected_ship_date
+      }
     })
     selectedRows.value = []
     candidatePage.value = 1
@@ -408,6 +467,37 @@ async function loadData() {
 function openManualDialog() {
   manualDialog.ladderNo = ''
   manualDialog.visible = true
+}
+
+function openRemarkDialog(row) {
+  if (row.actual_ship_date) {
+    ElMessage.warning('已发货梯号不能修改备注')
+    return
+  }
+  remarkDialog.row = row
+  remarkDialog.value = row.business_remark || ''
+  remarkDialog.visible = true
+}
+
+async function saveRemark() {
+  if (!remarkDialog.row) return
+  remarkDialog.saving = true
+  try {
+    const res = await saveWeeklyRemark({
+      module_name: moduleName.value,
+      ladder_key: remarkDialog.row.ladder_key,
+      remark: remarkDialog.value,
+    })
+    if (remarkDialog.row) {
+      remarkDialog.row.business_remark = res.data?.business_remark || ''
+    }
+    remarkDialog.visible = false
+    ElMessage.success('备注已保存')
+  } catch (error) {
+    // 拦截器已提示
+  } finally {
+    remarkDialog.saving = false
+  }
 }
 
 async function submitManualLadder(reactivate) {
@@ -608,6 +698,10 @@ onMounted(async () => {
 .st-table { width: 100%; }
 .st-table :deep(.el-table__body-wrapper) { transform: translateZ(0); }
 .st-adjust-cell { display: flex; align-items: center; gap: 6px; }
+.st-remark-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.st-remark-text { color: #475569; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.st-remark-target { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; color: #334155; }
+.st-remark-target span { color: #64748b; font-size: 12px; }
 .st-pager { margin-top: 14px; justify-content: flex-end; }
 @media (max-width: 760px) {
   .st-page { padding: 12px; }

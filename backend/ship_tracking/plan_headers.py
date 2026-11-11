@@ -5,7 +5,7 @@
 
 - 新格式（2026-11 起）：A 模块 / B 合同号 / C 梯号 / D 项目名称 / E 台数 /
   F 金额(万元) / G 来源 / H 填报人 / I 排产完工日期 / J 整梯发货日期 /
-  K 业务预计发货时间
+  K 业务预计发货时间 / L 备注
 - 旧格式：在「整梯发货日期」之后还有「7日前发货」列，「业务预计发货时间」列位置也更靠右
 
 列顺序变化、插入无关列不影响解析；表头缺失或必需列缺失会抛 PlanHeaderError，
@@ -30,6 +30,7 @@ FIELD_LABELS = {
     'business_expected': '业务预计发货时间',
     'seven_day': '7日前发货',
     'contract_amount_rmb': '合同额',
+    'remark': '备注',
 }
 
 HEADER_ALIASES = {
@@ -54,6 +55,7 @@ HEADER_ALIASES = {
     'contract_amount_rmb': ('合同额', '合同金额', '合同额(元)', '合同金额(元)',
                             '合同额(RMB)', '合同金额(RMB)', '合同额(人民币)',
                             '合同金额(人民币)'),
+    'remark': ('备注', '备注说明', '原因备注', '未按时发货原因'),
 }
 
 # 已知但不参与计划导入的列：识别到只做提示，不阻断导入。
@@ -61,7 +63,7 @@ KNOWN_IGNORED_ALIASES = {
     '实际发货日期': '实际发货', '实际发货时间': '实际发货', '实际发货': '实际发货',
     '订舱状态': '订舱', '订舱情况': '订舱',
     '订舱审核状态': '订舱审核', '审核状态': '订舱审核',
-    '序号': '辅助列', '备注': '辅助列', '计划月份': '辅助列',
+    '序号': '辅助列', '计划月份': '辅助列',
     '当前节点': '订舱', '国家': '辅助列', '区域': '辅助列', '大区': '辅助列',
 }
 
@@ -69,7 +71,7 @@ REQUIRED_FIELDS = ('ladder', 'contract_no')
 DATE_FIELDS = ('business_expected', 'seven_day')
 OPTIONAL_FIELDS = ('module', 'project_name', 'unit_count', 'amount_wan', 'source',
                    'reporter', 'schedule_finish_date', 'whole_ship_date',
-                   'contract_amount_rmb')
+                   'contract_amount_rmb', 'remark')
 
 HEADER_SCAN_LIMIT = 10
 

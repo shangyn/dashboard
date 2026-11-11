@@ -1,0 +1,538 @@
+[
+  {
+    "sheet": "本部应收",
+    "row": 2,
+    "value": "丁绎澎",
+    "company": "阿尔及利亚Eurl Confidence",
+    "country": "阿尔及利亚",
+    "module": "埃及-2"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 3,
+    "value": "吴迪",
+    "company": "阿联酋AG Elevator Systems & Metal Technology LLC",
+    "country": "阿联酋2",
+    "module": "阿联酋-2"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 4,
+    "value": "吴迪",
+    "company": "阿联酋AL FUTTAIM ENGINEERING",
+    "country": "阿联酋",
+    "module": "阿联酋-1"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 5,
+    "value": "潘闯",
+    "company": "埃及2 EGYPT GULF ELEVATORS&ESCALATORS CO.\"EGGEEC\"",
+    "country": "埃及2",
+    "module": "埃及-1"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 6,
+    "value": "高新尧",
+    "company": "澳大利亚BLT AUSTRALIA(关联方)",
+    "country": "澳大利亚",
+    "module": "澳大利亚"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 7,
+    "value": "高新尧",
+    "company": "澳大利亚Brilliant Lifts Australia Pty Ltd",
+    "country": "澳大利亚",
+    "module": "澳大利亚"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 8,
+    "value": "齐文童",
+    "company": "俄罗斯Elevator-Modern",
+    "country": "东俄罗斯",
+    "module": "俄罗斯（东部）"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 9,
+    "value": "丛峻",
+    "company": "俄罗斯LLC《Sovremennye Liftovye Mashiny》",
+    "country": "西俄罗斯",
+    "module": "俄罗斯（中部）"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 11,
+    "value": "齐文童",
+    "company": "俄罗斯乌法ASTRO-LIFT",
+    "country": "东俄罗斯",
+    "module": "俄罗斯（东部）"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 12,
+    "value": "赵俊峰",
+    "company": "科威特BOBIAN ELEVATOR",
+    "country": "科威特",
+    "module": "科威特"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 13,
+    "value": "叶哲铭",
+    "company": "马尔代夫HOUSING DEVELOPMENT CORPORATION LIMITED",
+    "country": "马尔代夫1",
+    "module": "马尔代夫"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 15,
+    "value": "武永佳",
+    "company": "沙特1SAUDI BLT",
+    "country": "沙特1",
+    "module": "沙特工厂"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 16,
+    "value": "任嘉庆",
+    "company": "印度1CITY LIFT",
+    "country": "印度1",
+    "module": "印度私营"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 17,
+    "value": "张鹏",
+    "company": "印度YUANDA-ROYAL Consortium",
+    "country": "印度",
+    "module": "印度公建"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 18,
+    "value": "于春光",
+    "company": "越南TUNG FENG CONSTRUCTION ENGINEERING(VIETNAM)",
+    "country": "越南",
+    "module": "越南-1（工厂）"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 19,
+    "value": "韩宇",
+    "company": "格鲁吉亚1 LLC TORCH GE",
+    "country": "格鲁吉亚1",
+    "module": "阿塞拜疆"
+  },
+  {
+    "sheet": "本部应收",
+    "row": 20,
+    "value": "丁绎澎",
+    "company": "阿尔及利亚EURL BEST ELEVATOR IMPORT EXPORT",
+    "country": "阿尔及利亚",
+    "module": "埃及-2"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 2,
+    "value": "丁绎澎",
+    "company": "埃及Dusur Elevator&Escalator",
+    "country": "埃及1",
+    "module": "埃及-2"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 3,
+    "value": "赵俊峰",
+    "company": "安哥拉GBS GROUP(HK)LTD",
+    "country": "安哥拉1",
+    "module": "科威特"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 5,
+    "value": "潘闯",
+    "company": "菲律宾SJLK TRADING",
+    "country": "菲律宾",
+    "module": "埃及-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 6,
+    "value": "潘闯",
+    "company": "菲律宾Vertical Lift and Equipment，Inc.",
+    "country": "菲律宾",
+    "module": "埃及-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 7,
+    "value": "田媛媛",
+    "company": "哥伦比亚ALTUS ELEVATOR AVV SUCURSAL",
+    "country": "哥伦比亚",
+    "module": "哥伦比亚"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 8,
+    "value": "田媛媛",
+    "company": "圭亚那Andy",
+    "country": "圭亚那",
+    "module": "哥伦比亚"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 9,
+    "value": "于洋",
+    "company": "哈萨克斯坦NRGY LIFT LLP",
+    "country": "哈萨克斯坦1",
+    "module": "塔吉克/哈萨克斯坦-2"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 10,
+    "value": "逄顺福",
+    "company": "蒙古BLT BRILLIANT CO LTD",
+    "country": "蒙古",
+    "module": "蒙古"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 11,
+    "value": "逄顺福",
+    "company": "蒙古BULINTE LLC",
+    "country": "蒙古",
+    "module": "蒙古"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 14,
+    "value": "尤健宇",
+    "company": "墨西哥 WAT TAMBOR,S.A. DE C.V",
+    "country": "墨西哥",
+    "module": "墨西哥-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 16,
+    "value": "肖宇晗",
+    "company": "塞浦路斯FRANCO ELEVATORS LTD",
+    "country": "塞浦路斯",
+    "module": "墨西哥-2"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 17,
+    "value": "吴迪",
+    "company": "沙特2 Saudi ITM LLC",
+    "country": "沙特2",
+    "module": "阿联酋-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 18,
+    "value": "于洋",
+    "company": "塔吉克斯坦1 Zakiya Sokhtmon LLC",
+    "country": "塔吉克斯坦1",
+    "module": "塔吉克/哈萨克斯坦-2"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 19,
+    "value": "彭凤琴",
+    "company": "塔吉克斯坦IMO LLC",
+    "country": "塔吉克斯坦",
+    "module": "哈萨克斯坦-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 20,
+    "value": "范皓铭",
+    "company": "危地马拉ELEVATEC,S.A.",
+    "country": "危地马拉1",
+    "module": "加勒比海"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 21,
+    "value": "努热艾力.艾尼瓦尔",
+    "company": "乌兹别克斯坦 HIGH LIFT",
+    "country": "乌兹别克斯坦",
+    "module": "乌兹别克斯坦-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 22,
+    "value": "祁阳",
+    "company": "新加坡EM Services Pte Ltd",
+    "country": "新加坡",
+    "module": "新加坡市政会"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 23,
+    "value": "张琬怡",
+    "company": "亚美尼亚1 HRAZDAN VERELAK LLC",
+    "country": "亚美尼亚1",
+    "module": "泰国"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 24,
+    "value": "吕超",
+    "company": "伊拉克1Hanjin",
+    "country": "伊拉克1",
+    "module": "伊拉克"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 25,
+    "value": "张琬怡",
+    "company": "伊拉克Rakaez AL-Tatweer for elevators&escalator",
+    "country": "伊拉克",
+    "module": "泰国"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 27,
+    "value": "金刚",
+    "company": "朝鲜CXC商贸公司",
+    "country": "朝鲜",
+    "module": "朝鲜-韩国"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 28,
+    "value": "金刚",
+    "company": "朝鲜中朝供应链商贸公司",
+    "country": "朝鲜",
+    "module": "朝鲜-韩国"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 29,
+    "value": "单一",
+    "company": "俄罗斯1Edison AI LLC",
+    "country": "俄罗斯1",
+    "module": "俄罗斯（西部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 30,
+    "value": "张沁媛",
+    "company": "俄罗斯3 Baikal-Asia-Enginerring LLC",
+    "country": "俄罗斯3",
+    "module": "俄罗斯（中南）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 31,
+    "value": "齐文童",
+    "company": "俄罗斯Kaliningrad",
+    "country": "东俄罗斯",
+    "module": "俄罗斯（东部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 32,
+    "value": "丛峻",
+    "company": "俄罗斯KASKAD",
+    "country": "西俄罗斯",
+    "module": "俄罗斯（中部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 33,
+    "value": "齐文童",
+    "company": "俄罗斯沈阳佩森商贸有限公司",
+    "country": "东俄罗斯",
+    "module": "俄罗斯（东部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 34,
+    "value": "陈科锦",
+    "company": "沙特 贵州溢洋电梯有限公司",
+    "country": "沙特",
+    "module": "沙特-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 35,
+    "value": "丛峻",
+    "company": "西俄罗斯 Dana",
+    "country": "西俄罗斯",
+    "module": "俄罗斯（中部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 36,
+    "value": "齐文童",
+    "company": "东俄罗斯CENTER POINT  TRADING LIMITED",
+    "country": "东俄罗斯",
+    "module": "俄罗斯（东部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 37,
+    "value": "秦力超",
+    "company": "哈萨克斯坦2 TOO“LGS Kazakhstan elevator Group”",
+    "country": "哈萨克斯坦3",
+    "module": "哈萨克斯坦-3"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 38,
+    "value": "鲁鸿飞",
+    "company": "马来西亚DONG YONG ELEVATORS",
+    "country": "马来西亚",
+    "module": "马来西亚"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 39,
+    "value": "叶哲铭",
+    "company": "印尼1PT CELINDO TEKNIKAL.GEMILANG",
+    "country": "印尼1",
+    "module": "马尔代夫"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 40,
+    "value": "刘晓虎",
+    "company": "孟加拉 Concept elevators",
+    "country": "孟加拉",
+    "module": "孟加拉"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 41,
+    "value": "孙成雨",
+    "company": "伊朗AMIRAN ASAN BAR",
+    "country": "伊朗",
+    "module": "伊朗"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 42,
+    "value": "张鹏",
+    "company": "印度 OSCORP COMPANY",
+    "country": "印度",
+    "module": "印度公建"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 43,
+    "value": "丛峻",
+    "company": "巴西1HERTZ COMERCIO E MANUTENCAO DE ELEVADORES LTDA",
+    "country": "巴西1",
+    "module": "俄罗斯（中部）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 45,
+    "value": "彭凤琴",
+    "company": "哈萨克斯坦Liftek Ltd",
+    "country": "哈萨克斯坦",
+    "module": "哈萨克斯坦-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 46,
+    "value": "尤健宇",
+    "company": "墨西哥 CORELLIAN S.A. DE C.V.",
+    "country": "墨西哥",
+    "module": "墨西哥-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 47,
+    "value": "陈科锦",
+    "company": "沙特AL FUTTAIM ENGINEERING",
+    "country": "沙特",
+    "module": "沙特-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 48,
+    "value": "尤健宇",
+    "company": "墨西哥CORELLIAN SA DE CVAV",
+    "country": "墨西哥",
+    "module": "墨西哥-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 49,
+    "value": "田媛媛",
+    "company": "玻利维亚MELEVAR S.R.L",
+    "country": "玻利维亚",
+    "module": "哥伦比亚"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 50,
+    "value": "吴迪",
+    "company": "阿联酋2 ELECTRA ELEVATOR AND ESCALATORS",
+    "country": "阿联酋2",
+    "module": "阿联酋-2"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 51,
+    "value": "袁帅",
+    "company": "埃塞俄比亚OOVID ELECTRO MECHANICAL",
+    "country": "津巴布韦1",
+    "module": "尼日利亚/埃塞俄比亚"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 52,
+    "value": "刘景伟",
+    "company": "俄罗斯2 E-LIFT SERVICES",
+    "country": "俄罗斯2",
+    "module": "俄罗斯（西南）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 53,
+    "value": "张沁媛",
+    "company": "俄罗斯3 Level",
+    "country": "俄罗斯3",
+    "module": "俄罗斯（中南）"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 54,
+    "value": "彭凤琴",
+    "company": "塔吉克斯坦《Sokhtmon va Voridot》LLC",
+    "country": "塔吉克斯坦",
+    "module": "哈萨克斯坦-1"
+  },
+  {
+    "sheet": "本部预收",
+    "row": 55,
+    "value": "高新尧",
+    "company": "斐济VINOD PATEL&CO.,LTD",
+    "country": "斐济",
+    "module": "澳大利亚"
+  },
+  {
+    "sheet": "进出口",
+    "row": 2,
+    "value": "尤健宇",
+    "company": "CORELLIAN",
+    "country": "墨西哥",
+    "module": "墨西哥-1"
+  },
+  {
+    "sheet": "进出口",
+    "row": 4,
+    "value": "范皓铭",
+    "company": "ELEVACIONES TECNICAS S.A.",
+    "country": "哥斯达黎加",
+    "module": "加勒比海"
+  }
+]

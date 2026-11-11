@@ -117,6 +117,7 @@ class PlanItem(db.Model):
     whole_ship_date = db.Column(db.Date, nullable=True)
     original_expected_ship_date = db.Column(db.Date, nullable=True)
     business_expected_raw = db.Column(db.String(100), default='')
+    remark = db.Column(db.Text, default='')
     validation_status = db.Column(db.String(20), default='ok')  # ok / warning / error
     data_flags = db.Column(db.Text, default='[]')
     raw_json = db.Column(db.Text, default='{}')
@@ -175,6 +176,7 @@ class TrackingItem(db.Model):
 
     source_kind = db.Column(db.String(30), default='plan')  # plan / actual_only / manual
     data_flags = db.Column(db.Text, default='[]')
+    business_remark = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
