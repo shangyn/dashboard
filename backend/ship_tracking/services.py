@@ -706,15 +706,15 @@ def save_weekly_draft(user, module_name, items, target_week=None):
     }
 
 
-def save_weekly_remark(user, module_name, ladder_key, remark):
-    """保存业务对整体发货明细中未发货梯号的最新备注。"""
-    modules = _resolve_weekly_modules(user, module_name)
-    key = canonical_ladder(ladder_key)
-    if not key:
-        raise ValueError('梯号不能为空')
-    row = TrackingItem.query.filter_by(ladder_key=key).first()
-    if row is None:
-        raise ValueError('梯号 %s 不存在' % key)
+def _normalize_business_remark(remark):
+    remark_text = str(remark or '').replace('\r\n', '\n').replace('\r', '\n').strip()
+    if len(remark_text) > 500:
+        raise ValueError('备注不能超过 500 个字符')
+    return remark_text
+
+
+def _validate_weekly_remark_row(row, modules, key=None):
+    key = key or row.ladder_key
     if row.module_name not in modules:
         raise ValueError('梯号 %s 不属于当前可填报模块' % key)
     if row.actual_ship_date:
@@ -724,9 +724,31 @@ def save_weekly_remark(user, module_name, ladder_key, remark):
     if row.commit_status != 'committed' and not row.expected_ship_date:
         raise ValueError('梯号 %s 尚未进入整体发货明细，不能填写备注' % key)
 
-    remark_text = str(remark or '').replace('\r\n', '\n').replace('\r', '\n').strip()
-    if len(remark_text) > 500:
-        raise ValueError('备注不能超过 500 个字符')
+
+def _load_tracking_items_by_keys(keys):
+    """按梯号取记录；分块查询以避开 SQLite 的参数数量限制。"""
+    result = {}
+    chunk_size = 400
+    for start in range(0, len(keys), chunk_size):
+        rows = TrackingItem.query.filter(
+            TrackingItem.ladder_key.in_(keys[start:start + chunk_size])
+        ).all()
+        result.update({row.ladder_key: row for row in rows})
+    return result
+
+
+def save_weekly_remark(user, module_name, ladder_key, remark):
+    """保存业务对整体发货明细中未发货梯号的最新备注。"""
+    modules = _resolve_weekly_modules(user, module_name)
+    key = canonical_ladder(ladder_key)
+    if not key:
+        raise ValueError('梯号不能为空')
+    row = TrackingItem.query.filter_by(ladder_key=key).first()
+    if row is None:
+        raise ValueError('梯号 %s 不存在' % key)
+    _validate_weekly_remark_row(row, modules, key)
+
+    remark_text = _normalize_business_remark(remark)
     old_remark = row.business_remark or ''
     if old_remark == remark_text:
         return _tracking_dict(row)
@@ -739,6 +761,56 @@ def save_weekly_remark(user, module_name, ladder_key, remark):
     )
     db.session.commit()
     return _tracking_dict(row)
+
+
+def save_weekly_remarks(user, module_name, ladder_keys, remark):
+    """批量保存未发货梯号的业务备注；全部校验通过后统一提交。"""
+    modules = _resolve_weekly_modules(user, module_name)
+    keys = []
+    seen = set()
+    for raw_key in ladder_keys or []:
+        key = canonical_ladder(raw_key)
+        if key and key not in seen:
+            seen.add(key)
+            keys.append(key)
+    if not keys:
+        raise ValueError('请选择梯号')
+    if len(keys) > 2000:
+        raise ValueError('单次最多批量填写 2000 条梯号备注')
+
+    remark_text = _normalize_business_remark(remark)
+    by_key = _load_tracking_items_by_keys(keys)
+    rows = []
+    for key in keys:
+        row = by_key.get(key)
+        if row is None:
+            raise ValueError('梯号 %s 不存在' % key)
+        _validate_weekly_remark_row(row, modules, key)
+        rows.append(row)
+
+    changed = 0
+    unchanged = 0
+    for row in rows:
+        old_remark = row.business_remark or ''
+        if old_remark == remark_text:
+            unchanged += 1
+            continue
+        row.business_remark = remark_text
+        _audit(
+            user, 'weekly', 'remark_update', row.ladder_key,
+            reason='批量填写备注',
+            old_values={'business_remark': old_remark},
+            new_values={'business_remark': remark_text},
+        )
+        changed += 1
+
+    if changed:
+        db.session.commit()
+    return {
+        'saved': changed,
+        'unchanged': unchanged,
+        'remark': remark_text,
+    }
 
 
 def submit_weekly(user, module_name, items, target_week=None):

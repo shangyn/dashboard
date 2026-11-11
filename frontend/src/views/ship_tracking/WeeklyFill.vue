@@ -159,10 +159,55 @@
         <div>
           <span class="st-panel-title">整体发货明细</span>
           <span class="st-count">共 {{ filteredSubmitted.length }} 条</span>
+          <span class="st-selected">已选 {{ remarkSelectedRows.length }} 条</span>
         </div>
-        <span class="st-hint">本模块整体发货明细；未发货在前，已发货在后</span>
+        <div class="st-toolbar">
+          <el-input
+            v-model="remarkKeyword"
+            size="small"
+            clearable
+            placeholder="搜索合同号 / 梯号 / 项目"
+            style="width: 240px"
+          />
+        </div>
       </div>
-      <el-table ref="submittedTableRef" :data="pagedSubmitted" row-key="ladder_key" size="small" border class="st-table">
+      <div class="st-batchbar">
+        <span class="st-batch-label">批量填写备注</span>
+        <el-button
+          size="small"
+          :disabled="!pendingSubmittedRows.length"
+          @click="selectAllFilteredRemarks"
+        >
+          选中筛选结果（{{ pendingSubmittedRows.length }}）
+        </el-button>
+        <el-button size="small" :disabled="!remarkSelectedRows.length" @click="clearRemarkSelection">
+          清空选择
+        </el-button>
+        <el-button
+          size="small"
+          type="primary"
+          :disabled="!remarkSelectedRows.length"
+          @click="openBatchRemarkDialog"
+        >
+          批量填写备注
+        </el-button>
+        <span class="st-hint">可按合同号搜索后，一次选中所有未发货梯号；已发货不可选</span>
+      </div>
+      <el-table
+        ref="submittedTableRef"
+        :data="pagedSubmitted"
+        row-key="ladder_key"
+        size="small"
+        border
+        class="st-table"
+        @selection-change="handleRemarkSelectionChange"
+      >
+        <el-table-column
+          type="selection"
+          width="42"
+          reserve-selection
+          :selectable="canSelectRemarkRow"
+        />
         <el-table-column prop="ladder_no" label="梯号" width="185" />
         <el-table-column prop="project_name" label="项目名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="module_name" label="模块" width="150" />
@@ -235,11 +280,27 @@
       />
     </div>
 
-    <el-dialog v-model="remarkDialog.visible" title="填写备注" width="520px">
-      <div class="st-remark-target">
+    <el-dialog
+      v-model="remarkDialog.visible"
+      :title="remarkDialog.rows.length ? '批量填写备注' : '填写备注'"
+      width="520px"
+    >
+      <div v-if="!remarkDialog.rows.length" class="st-remark-target">
         <strong>{{ remarkDialog.row?.ladder_no || '' }}</strong>
         <span>{{ remarkDialog.row?.project_name || '' }}</span>
       </div>
+      <div v-else class="st-remark-target">
+        <strong>已选择 {{ remarkDialog.rows.length }} 条未发货梯号</strong>
+        <span>{{ batchRemarkPreview }}</span>
+      </div>
+      <el-alert
+        v-if="remarkDialog.rows.length"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="保存后将用同一段内容覆盖选中梯号的现有业务备注。"
+        style="margin-bottom: 12px"
+      />
       <el-input
         v-model="remarkDialog.value"
         type="textarea"
@@ -251,7 +312,7 @@
       <template #footer>
         <el-button @click="remarkDialog.visible = false">取消</el-button>
         <el-button type="primary" :loading="remarkDialog.saving" @click="saveRemark">
-          保存备注
+          {{ remarkDialog.rows.length ? '批量保存' : '保存备注' }}
         </el-button>
       </template>
     </el-dialog>
@@ -293,6 +354,7 @@ import {
   getWeeklyPlan,
   saveWeeklyDraft,
   saveWeeklyRemark,
+  saveWeeklyRemarks,
   submitWeeklyPlan,
   withdrawWeeklyPlan,
 } from '../../api/shipTracking'
@@ -308,10 +370,12 @@ const saving = ref(false)
 const submitting = ref(false)
 const moduleName = ref('')
 const keyword = ref('')
+const remarkKeyword = ref('')
 const candidates = ref([])
 const submitted = ref([])
 const draftRows = ref([])
 const selectedRows = ref([])
+const remarkSelectedRows = ref([])
 const dateMap = reactive({})
 const editDates = reactive({})
 const batchDate = ref('')
@@ -334,6 +398,7 @@ const manualDialog = reactive({ visible: false, ladderNo: '', loading: false })
 const remarkDialog = reactive({
   visible: false,
   row: null,
+  rows: [],
   value: '',
   saving: false,
 })
@@ -363,12 +428,20 @@ const filteredCandidates = computed(() => {
   )
 })
 const filteredSubmitted = computed(() => {
-  const text = keyword.value.trim().toUpperCase()
+  const text = remarkKeyword.value.trim().toUpperCase()
   if (!text) return submitted.value
   return submitted.value.filter((row) =>
     [row.contract_no, row.ladder_no, row.project_name, row.module_name, row.business_remark]
       .join(' ').toUpperCase().includes(text)
   )
+})
+const pendingSubmittedRows = computed(() => filteredSubmitted.value.filter(canSelectRemarkRow))
+const batchRemarkPreview = computed(() => {
+  const rows = remarkDialog.rows || []
+  if (!rows.length) return ''
+  const ladders = rows.slice(0, 6).map((row) => row.ladder_no).join('、')
+  const contracts = new Set(rows.map((row) => row.contract_no).filter(Boolean))
+  return `${rows.length} 条：${ladders}${rows.length > 6 ? ' 等' : ''}${contracts.size ? `；涉及 ${contracts.size} 个合同` : ''}`
 })
 const pagedCandidates = computed(() => {
   const start = (candidatePage.value - 1) * pageSize
@@ -454,9 +527,11 @@ async function loadData() {
       }
     })
     selectedRows.value = []
+    remarkSelectedRows.value = []
     candidatePage.value = 1
     submittedPage.value = 1
     if (candidateTableRef.value) candidateTableRef.value.clearSelection()
+    if (submittedTableRef.value) submittedTableRef.value.clearSelection()
   } catch (error) {
     // 拦截器已提示
   } finally {
@@ -475,14 +550,48 @@ function openRemarkDialog(row) {
     return
   }
   remarkDialog.row = row
+  remarkDialog.rows = []
   remarkDialog.value = row.business_remark || ''
   remarkDialog.visible = true
 }
 
+function openBatchRemarkDialog() {
+  const rows = remarkSelectedRows.value.filter(canSelectRemarkRow)
+  if (!rows.length) {
+    ElMessage.warning('请先选择未发货梯号')
+    return
+  }
+  const remarks = [...new Set(rows.map((row) => row.business_remark || ''))]
+  remarkDialog.row = null
+  remarkDialog.rows = rows
+  remarkDialog.value = remarks.length === 1 ? remarks[0] : ''
+  remarkDialog.visible = true
+}
+
 async function saveRemark() {
-  if (!remarkDialog.row) return
+  if (!remarkDialog.row && !remarkDialog.rows.length) return
   remarkDialog.saving = true
   try {
+    if (remarkDialog.rows.length) {
+      const rows = remarkDialog.rows.slice()
+      const res = await saveWeeklyRemarks({
+        module_name: moduleName.value,
+        ladder_keys: rows.map((row) => row.ladder_key),
+        remark: remarkDialog.value,
+      })
+      const savedRemark = res.data?.remark ?? remarkDialog.value
+      rows.forEach((row) => {
+        row.business_remark = savedRemark
+      })
+      remarkDialog.visible = false
+      remarkDialog.rows = []
+      clearRemarkSelection()
+      const unchanged = Number(res.data?.unchanged || 0)
+      ElMessage.success(
+        `备注已批量保存：更新 ${res.data?.saved || 0} 条${unchanged ? `，${unchanged} 条内容未变化` : ''}`
+      )
+      return
+    }
     const res = await saveWeeklyRemark({
       module_name: moduleName.value,
       ladder_key: remarkDialog.row.ladder_key,
@@ -492,6 +601,7 @@ async function saveRemark() {
       remarkDialog.row.business_remark = res.data?.business_remark || ''
     }
     remarkDialog.visible = false
+    remarkDialog.rows = []
     ElMessage.success('备注已保存')
   } catch (error) {
     // 拦截器已提示
@@ -547,12 +657,39 @@ function clearSelection() {
   if (candidateTableRef.value) candidateTableRef.value.clearSelection()
 }
 
-// 关键字只是前端过滤，页数可能变少；两个分页都要回到第 1 页，
-// 并清空勾选，避免批量套用/提交作用到已被筛掉、看不见的行。
+function canSelectRemarkRow(row) {
+  return !row.actual_ship_date
+}
+
+function handleRemarkSelectionChange(rows) {
+  remarkSelectedRows.value = rows
+}
+
+function clearRemarkSelection() {
+  remarkSelectedRows.value = []
+  if (submittedTableRef.value) submittedTableRef.value.clearSelection()
+}
+
+async function selectAllFilteredRemarks() {
+  const rows = pendingSubmittedRows.value
+  if (!rows.length) {
+    ElMessage.warning('当前筛选结果没有可填写备注的未发货梯号')
+    return
+  }
+  await nextTick()
+  rows.forEach((row) => submittedTableRef.value?.toggleRowSelection(row, true))
+  ElMessage.success(`已选择 ${rows.length} 条未发货梯号`)
+}
+
+// 待填报关键字只影响上方候选池，避免合同搜索时清空下方的批量备注选择。
 watch(keyword, () => {
   candidatePage.value = 1
-  submittedPage.value = 1
   clearSelection()
+})
+
+watch(remarkKeyword, () => {
+  submittedPage.value = 1
+  clearRemarkSelection()
 })
 
 function applyBatchDate() {

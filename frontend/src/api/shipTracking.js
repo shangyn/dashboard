@@ -32,6 +32,10 @@ export function saveWeeklyRemark(payload) {
   return request.post('/api/ship-tracking/weekly/remark', payload)
 }
 
+export function saveWeeklyRemarks(payload) {
+  return request.post('/api/ship-tracking/weekly/remarks', payload)
+}
+
 export function getTrackingItems(params) {
   return request.get('/api/ship-tracking/items', { params })
 }

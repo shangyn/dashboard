@@ -221,6 +221,29 @@ def api_weekly_remark():
         return _fail('保存备注失败: %s' % exc, 500)
 
 
+@st_bp.route('/api/ship-tracking/weekly/remarks', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_weekly_remarks():
+    try:
+        payload = _payload()
+        return _ok(
+            svc.save_weekly_remarks(
+                get_current_user(),
+                payload.get('module_name') or payload.get('module') or '',
+                payload.get('ladder_keys') or [],
+                payload.get('remark') or '',
+            ),
+            '备注已批量保存',
+        )
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except ValueError as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('批量保存备注失败: %s' % exc, 500)
+
+
 @st_bp.route('/api/ship-tracking/items', methods=['GET'])
 @jwt_required()
 @permission_required(PERMISSION)
