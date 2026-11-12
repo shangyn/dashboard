@@ -113,6 +113,13 @@ async function fetchData() {
           { value: 'upload_manage', label: '上传配置管理' },
         ],
       },
+      {
+        label: '发货梯号明细（业务操作，按角色勾选生效）',
+        options: [
+          { value: 'ship_tracking_weekly_adjust', label: '业务改期' },
+          { value: 'ship_tracking_weekly_withdraw', label: '业务撤回' },
+        ],
+      },
     ]
 
     // 从模块表动态生成看板类权限

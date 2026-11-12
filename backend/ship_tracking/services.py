@@ -14,7 +14,7 @@ from ship_tracking.models import (
     AuditLog, BookingRecord, DailyShipment, ImportBatch, TrackingItem,
 )
 from ship_tracking.excel_reader import (
-    canonical_ladder, normalize_text, parse_excel_date, parse_ladder_batch,
+    canonical_ladder, natural_ladder_key, normalize_text, parse_excel_date, parse_ladder_batch,
 )
 from ship_tracking.regions import build_region_map
 
@@ -22,6 +22,8 @@ PERMISSION = 'ship_tracking'
 VIEW_PERMISSION = 'ship_tracking_view'
 DAILY_PERMISSION = 'ship_tracking_daily_edit'
 ADMIN_PERMISSION = 'ship_tracking_admin'
+ADJUST_PERMISSION = 'ship_tracking_weekly_adjust'
+WITHDRAW_PERMISSION = 'ship_tracking_weekly_withdraw'
 
 STATUS_LABELS = {
     'shipped': '已发货',
@@ -170,6 +172,16 @@ def can_admin(user):
     return is_admin(user) or ADMIN_PERMISSION in permissions_of(user)
 
 
+def can_adjust_weekly(user):
+    """业务是否拥有改期动作权限；管理员始终可用。"""
+    return bool(user) and (can_admin(user) or ADJUST_PERMISSION in permissions_of(user))
+
+
+def can_withdraw_weekly(user):
+    """业务是否拥有撤回动作权限；管理员始终可用。"""
+    return bool(user) and (can_admin(user) or WITHDRAW_PERMISSION in permissions_of(user))
+
+
 def can_import(user):
     """导入管理面向所有可查看全量明细的角色开放。"""
     return bool(can_full_view(user) or can_admin(user))
@@ -256,6 +268,8 @@ def build_context(user):
         'can_daily_edit': daily,
         'can_admin': admin,
         'can_import': can_import(user),
+        'can_adjust_weekly': can_adjust_weekly(user),
+        'can_withdraw_weekly': can_withdraw_weekly(user),
         'my_modules': modules,
         'modules': all_modules() if full_view else modules,
         'months': month_options(),
@@ -312,7 +326,46 @@ def _payment_ratio_label(value):
     return '%.2f%%' % (value * 100.0)
 
 
-def _tracking_dict(item, region='', region_source=''):
+def _weekly_action_state(user, item):
+    """返回单条梯号在当前用户下的改期/撤回能力及不可操作原因。
+
+    权限只决定动作能力；提交状态、计划状态和发货状态决定记录是否可操作。
+    """
+    state = {
+        'can_adjust': False,
+        'can_withdraw': False,
+        'adjust_block_reason': '',
+        'withdraw_block_reason': '',
+    }
+    if not user:
+        return state
+    if item.actual_ship_date:
+        reason = '已发货，只读'
+        state['adjust_block_reason'] = reason
+        state['withdraw_block_reason'] = reason
+        return state
+    if item.commit_status != 'committed':
+        reason = '尚未提交'
+        state['adjust_block_reason'] = reason
+        state['withdraw_block_reason'] = reason
+        return state
+    if item.plan_status != 'active':
+        reason = '计划已移除'
+        state['adjust_block_reason'] = reason
+        state['withdraw_block_reason'] = reason
+        return state
+    if can_adjust_weekly(user):
+        state['can_adjust'] = True
+    else:
+        state['adjust_block_reason'] = '当前角色无改期权限'
+    if can_withdraw_weekly(user):
+        state['can_withdraw'] = True
+    else:
+        state['withdraw_block_reason'] = '当前角色无撤回权限'
+    return state
+
+
+def _tracking_dict(item, region='', region_source='', user=None):
     expected = item.expected_ship_date
     flags = item.flags()
     if item.actual_ship_date:
@@ -329,6 +382,7 @@ def _tracking_dict(item, region='', region_source=''):
         status = 'pending'
     plan_week = week_start(expected) if expected else None
     payment_ratio = _payment_ratio_value(getattr(item, 'payment_ratio', None))
+    action_state = _weekly_action_state(user, item)
     return {
         'id': item.id,
         'ladder_key': item.ladder_key or '',
@@ -386,6 +440,10 @@ def _tracking_dict(item, region='', region_source=''):
         'flag_labels': [FLAG_LABELS.get(flag, flag) for flag in flags],
         'source_kind': item.source_kind or 'plan',
         'business_remark': item.business_remark or '',
+        'can_adjust': action_state['can_adjust'],
+        'can_withdraw': action_state['can_withdraw'],
+        'adjust_block_reason': action_state['adjust_block_reason'],
+        'withdraw_block_reason': action_state['withdraw_block_reason'],
     }
 
 
@@ -615,16 +673,17 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
         if item.actual_ship_date:
             return (
                 1, item.module_name or '', -item.actual_ship_date.toordinal(),
-                item.ladder_key or '',
+                natural_ladder_key(item.ladder_key or item.ladder_no),
             )
         return (
             0, item.module_name or '', item.expected_ship_date or dt.date.max,
-            item.ladder_key or '',
+            natural_ladder_key(item.ladder_key or item.ladder_no),
         )
 
     submitted.sort(key=history_sort_key)
     candidates.sort(key=lambda item: (
-        item.module_name or '', item.expected_ship_date or dt.date.max, item.ladder_key or ''
+        item.module_name or '', item.expected_ship_date or dt.date.max,
+        natural_ladder_key(item.ladder_key or item.ladder_no),
     ))
     return {
         'module_name': normalize_text(module_name) or '全部我的模块',
@@ -636,9 +695,9 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
         'fill_end': iso(window['end']),
         'fill_default_date': iso(window['default_date']),
         'today': iso(current),
-        'candidates': [_tracking_dict(item) for item in candidates],
-        'submitted': [_tracking_dict(item) for item in submitted],
-        'drafts': [_tracking_dict(item) for item in draft],
+        'candidates': [_tracking_dict(item, user=user) for item in candidates],
+        'submitted': [_tracking_dict(item, user=user) for item in submitted],
+        'drafts': [_tracking_dict(item, user=user) for item in draft],
         'module_counts': module_counts,
     }
 
@@ -848,14 +907,13 @@ def submit_weekly(user, module_name, items, target_week=None):
 
 
 def withdraw_weekly(user, module_name, ladder_keys):
+    if not can_withdraw_weekly(user):
+        raise PermissionError('当前角色无撤回权限')
     rows = _load_owned_ladders(user, module_name, ladder_keys)
-    current_week = week_start()
     changed = 0
     for row in rows:
         if row.commit_status != 'committed':
             raise ValueError('梯号 %s 尚未提交' % row.ladder_key)
-        if row.committed_on_week_start != current_week and not can_admin(user):
-            raise ValueError('梯号 %s 已跨周，需管理员解锁' % row.ladder_key)
         old = _tracking_dict(row)
         row.commit_status = 'withdrawn'
         row.committed_week_start = None
@@ -875,6 +933,8 @@ def withdraw_weekly(user, module_name, ladder_keys):
 
 
 def adjust_weekly(user, module_name, items):
+    if not can_adjust_weekly(user):
+        raise PermissionError('当前角色无改期权限')
     window = fill_window()
     rows_payload = []
     for entry in items or []:
@@ -887,14 +947,11 @@ def adjust_weekly(user, module_name, items):
         rows_payload.append({'ladder_key': key, 'expected_ship_date': date_value})
     keys = [entry['ladder_key'] for entry in rows_payload]
     rows = _load_owned_ladders(user, module_name, keys)
-    current_week = week_start()
     by_key = {entry['ladder_key']: entry for entry in rows_payload}
     changed = 0
     for row in rows:
         if row.commit_status != 'committed':
             raise ValueError('梯号 %s 尚未提交' % row.ladder_key)
-        if row.committed_on_week_start != current_week and not can_admin(user):
-            raise ValueError('梯号 %s 已跨周，需管理员解锁' % row.ladder_key)
         date_value = by_key[row.ladder_key]['expected_ship_date']
         if date_value < window['start'] or date_value > window['end']:
             raise ValueError('梯号 %s 的日期必须在 %s 至 %s 之间'
@@ -929,6 +986,8 @@ def _load_owned_ladders(user, module, ladder_keys):
             raise ValueError('梯号 %s 不属于当前可填报模块' % key)
         if row.actual_ship_date:
             raise ValueError('梯号 %s 已实发' % key)
+        if row.plan_status != 'active':
+            raise ValueError('梯号 %s 的计划已移除' % key)
         result.append(row)
     return result
 
@@ -1282,7 +1341,10 @@ def query_tracking(user, filters=None):
             date_order = -dt.date.fromisoformat(expected).toordinal()
         else:
             date_order = 999999999
-        return (row.get('module_name') or '', date_order, row.get('ladder_key') or '')
+        return (
+            row.get('module_name') or '', date_order,
+            natural_ladder_key(row.get('ladder_key') or row.get('ladder_no')),
+        )
 
     result.sort(key=sort_key)
     shipped_rows = [row for row in result if row['status'] == 'shipped']
@@ -1371,9 +1433,9 @@ def _excel_number(value):
 def _export_sort_key(row):
     """已发货排在最前并按实际发货日期；未发货按预计日期，缺日期排最后。"""
     if row['status'] == 'shipped' or row['actual_ship_date']:
-        return (0, row['actual_ship_date'] or '', row['ladder_no'] or '')
+        return (0, row['actual_ship_date'] or '', natural_ladder_key(row['ladder_no']))
     return (1, row['expected_ship_date'] or '9999-12-31',
-            row['module_name'] or '', row['ladder_no'] or '')
+            row['module_name'] or '', natural_ladder_key(row['ladder_no']))
 
 
 def export_tracking(user, filters=None):

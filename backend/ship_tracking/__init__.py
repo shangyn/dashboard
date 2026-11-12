@@ -22,6 +22,9 @@ MODULE_URL = '/ship-tracking'
 MODULE_ICON = 'Van'
 MODULE_SORT = 11
 DAILY_ROLE_NAME = '发货梯号实发'
+WEEKLY_ADJUST_PERMISSION = 'ship_tracking_weekly_adjust'
+WEEKLY_WITHDRAW_PERMISSION = 'ship_tracking_weekly_withdraw'
+WEEKLY_PERMISSION_SEED_KEY = 'weekly_action_permissions_v1'
 
 
 def register(app):
@@ -40,6 +43,7 @@ def initialize(app):
             _ensure_tracking_columns()
             _ensure_daily_shipment_guard()
             _ensure_access()
+            _ensure_weekly_action_permissions()
             _bootstrap_plan_if_empty(app)
         finally:
             if acquired:
@@ -229,6 +233,27 @@ def _ensure_access():
         print('[ShipTracking] 权限已追加: %s' % changed_roles)
     if daily_role_note:
         print('[ShipTracking] ' + daily_role_note)
+
+
+def _ensure_weekly_action_permissions():
+    """一次性为现有业务填报角色补充改期权限；撤回权限不自动授予。
+
+    通过 st_setting 记录迁移标记，避免管理员后续取消权限后被重启重新加回。
+    """
+    from models import Role
+    from ship_tracking.models import TrackingSetting
+
+    if db.session.get(TrackingSetting, WEEKLY_PERMISSION_SEED_KEY) is not None:
+        return
+    role = Role.query.filter_by(role_name='单月签排发填报').first()
+    if role is None:
+        return
+    permissions = role.get_permissions()
+    if WEEKLY_ADJUST_PERMISSION not in permissions:
+        role.set_permissions(permissions + [WEEKLY_ADJUST_PERMISSION])
+    db.session.add(TrackingSetting(key=WEEKLY_PERMISSION_SEED_KEY, value='1'))
+    db.session.commit()
+    print('[ShipTracking] 已为业务填报角色补充改期权限；撤回权限需管理员手动授予')
 
 
 def _bootstrap_plan_if_empty(app):
