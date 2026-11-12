@@ -223,6 +223,7 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="committed_week_start" label="提交周" width="110" align="center" />
         <el-table-column prop="committed_by_name" label="填报人" width="90" align="center" />
         <el-table-column label="当前状态" width="110" align="center">
           <template #default="{ row }">
@@ -231,37 +232,21 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="actionColumnLabel" min-width="250">
+        <el-table-column label="同周调整" min-width="250">
           <template #default="{ row }">
             <div v-if="row.actual_ship_date" class="st-hint">已发货，只读</div>
             <div v-else-if="row.commit_status === 'committed'" class="st-adjust-cell">
-              <template v-if="row.can_adjust">
-                <el-date-picker
-                  v-model="editDates[row.ladder_key]"
-                  size="small"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  :disabled-date="disableOutsideFillWindow"
-                  :default-value="fillDefaultDate"
-                  style="width: 145px"
-                />
-                <el-button size="small" text type="primary" @click="handleAdjust(row)">改期</el-button>
-              </template>
-              <el-button
-                v-if="row.can_withdraw"
+              <el-date-picker
+                v-model="editDates[row.ladder_key]"
                 size="small"
-                text
-                type="danger"
-                @click="handleWithdraw(row)"
-              >
-                撤回
-              </el-button>
-              <span
-                v-if="!row.can_adjust && !row.can_withdraw"
-                class="st-hint"
-              >
-                {{ row.adjust_block_reason || row.withdraw_block_reason || '当前不可操作' }}
-              </span>
+                type="date"
+                value-format="YYYY-MM-DD"
+                :disabled-date="disableOutsideFillWindow"
+                :default-value="fillDefaultDate"
+                style="width: 145px"
+              />
+              <el-button size="small" text type="primary" @click="handleAdjust(row)">改期</el-button>
+              <el-button size="small" text type="danger" @click="handleWithdraw(row)">撤回</el-button>
             </div>
             <span v-else class="st-hint">—</span>
           </template>
@@ -428,9 +413,6 @@ const fillDefaultDate = computed(() => {
   const [year, month, day] = value.split('-').map(Number)
   return new Date(year, month - 1, day)
 })
-const actionColumnLabel = computed(() =>
-  props.context.can_withdraw_weekly ? '改期 / 撤回' : '改期'
-)
 
 function moduleOptionLabel(name) {
   const entry = moduleCounts.value[name] || {}
@@ -540,7 +522,7 @@ async function loadData() {
       if (row.draft_expected_ship_date) dateMap[row.ladder_key] = row.draft_expected_ship_date
     })
     submitted.value.forEach((row) => {
-      if (row.can_adjust) {
+      if (row.commit_status === 'committed' && !row.actual_ship_date) {
         editDates[row.ladder_key] = row.committed_expected_ship_date || row.expected_ship_date
       }
     })
@@ -789,10 +771,6 @@ async function handleSubmit() {
 }
 
 async function handleAdjust(row) {
-  if (!row.can_adjust) {
-    ElMessage.warning(row.adjust_block_reason || '当前角色无改期权限')
-    return
-  }
   const date = editDates[row.ladder_key]
   if (!date) {
     ElMessage.warning('请选择调整后的日期')
@@ -811,13 +789,9 @@ async function handleAdjust(row) {
 }
 
 async function handleWithdraw(row) {
-  if (!row.can_withdraw) {
-    ElMessage.warning(row.withdraw_block_reason || '当前角色无撤回权限')
-    return
-  }
   try {
     await ElMessageBox.confirm(
-      `确认撤回梯号 ${row.ladder_no}？撤回后该梯号会重新回到候选池。`,
+      `确认撤回梯号 ${row.ladder_no}？撤回后该梯号会重新回到候选池。跨周撤回需要管理员解锁。`,
       '撤回提交',
       { type: 'warning', confirmButtonText: '确认撤回', cancelButtonText: '取消' }
     )
