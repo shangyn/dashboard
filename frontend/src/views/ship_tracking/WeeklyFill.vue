@@ -234,7 +234,7 @@
         <el-table-column :label="actionColumnLabel" min-width="250">
           <template #default="{ row }">
             <div v-if="row.actual_ship_date" class="st-hint">已发货，只读</div>
-            <div v-else-if="row.commit_status === 'committed'" class="st-adjust-cell">
+            <div v-else-if="row.can_adjust || row.can_withdraw" class="st-adjust-cell">
               <template v-if="row.can_adjust">
                 <el-date-picker
                   v-model="editDates[row.ladder_key]"
@@ -245,25 +245,21 @@
                   :default-value="fillDefaultDate"
                   style="width: 145px"
                 />
-                <el-button size="small" text type="primary" @click="handleAdjust(row)">改期</el-button>
+                <el-button size="small" text type="primary" @click.stop="handleAdjust(row)">改期</el-button>
               </template>
               <el-button
                 v-if="row.can_withdraw"
                 size="small"
                 text
                 type="danger"
-                @click="handleWithdraw(row)"
+                @click.stop="handleWithdraw(row)"
               >
                 撤回
               </el-button>
-              <span
-                v-if="!row.can_adjust && !row.can_withdraw"
-                class="st-hint"
-              >
-                {{ row.adjust_block_reason || row.withdraw_block_reason || '当前不可操作' }}
-              </span>
             </div>
-            <span v-else class="st-hint">—</span>
+            <span v-else class="st-hint">
+              {{ row.adjust_block_reason || row.withdraw_block_reason || '—' }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="备注" min-width="220">
@@ -277,7 +273,7 @@
                 size="small"
                 text
                 type="primary"
-                @click="openRemarkDialog(row)"
+                @click.stop="openRemarkDialog(row)"
               >
                 {{ row.business_remark ? '编辑备注' : '添加备注' }}
               </el-button>

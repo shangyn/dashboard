@@ -5,6 +5,21 @@ from decorators import permission_required
 
 roles_bp = Blueprint('roles', __name__)
 
+BUSINESS_FILL_ROLE = '单月签排发填报'
+WEEKLY_ACTION_PERMISSIONS = {
+    'ship_tracking_weekly_adjust',
+    'ship_tracking_weekly_withdraw',
+}
+
+
+def _sanitize_permissions(role_name, permissions):
+    """业务改期/撤回配置只允许出现在固定填报角色上。"""
+    values = [permission for permission in (permissions or []) if permission]
+    if (role_name or '').strip() == BUSINESS_FILL_ROLE:
+        return values
+    return [permission for permission in values
+            if permission not in WEEKLY_ACTION_PERMISSIONS]
+
 
 @roles_bp.route('/api/roles', methods=['GET'])
 @jwt_required()
@@ -18,10 +33,10 @@ def get_roles():
 @jwt_required()
 @permission_required('role_manage')
 def create_role():
-    data = request.get_json()
+    data = request.get_json() or {}
     role_name = data.get('role_name', '').strip()
     is_admin = data.get('is_admin', False)
-    permissions = data.get('permissions', [])
+    permissions = _sanitize_permissions(role_name, data.get('permissions', []))
 
     if not role_name:
         return jsonify(code=400, msg='角色名称不能为空', data=None), 400
@@ -45,18 +60,19 @@ def update_role(role_id):
     if not role:
         return jsonify(code=404, msg='角色不存在', data=None), 404
 
-    data = request.get_json()
+    data = request.get_json() or {}
     if 'role_name' in data:
+        role_name = (data['role_name'] or '').strip()
         existing = Role.query.filter(
-            Role.role_name == data['role_name'], Role.id != role_id
+            Role.role_name == role_name, Role.id != role_id
         ).first()
         if existing:
-            return jsonify(code=400, msg=f'角色名称 {data["role_name"]} 已存在', data=None), 400
-        role.role_name = data['role_name']
+            return jsonify(code=400, msg=f'角色名称 {role_name} 已存在', data=None), 400
+        role.role_name = role_name
     if 'is_admin' in data:
         role.is_admin = data['is_admin']
-    if 'permissions' in data:
-        role.set_permissions(data['permissions'])
+    permissions = data.get('permissions', role.get_permissions())
+    role.set_permissions(_sanitize_permissions(role.role_name, permissions))
 
     db.session.commit()
     return jsonify(code=200, msg='角色已更新', data=role.to_dict()), 200

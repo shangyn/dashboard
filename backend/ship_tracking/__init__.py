@@ -243,16 +243,37 @@ def _ensure_weekly_action_permissions():
     from models import Role
     from ship_tracking.models import TrackingSetting
 
+    business_role_name = '单月签排发填报'
+    weekly_permissions = {WEEKLY_ADJUST_PERMISSION, WEEKLY_WITHDRAW_PERMISSION}
+    cleaned_roles = []
+    for role in Role.query.all():
+        if role.role_name == business_role_name:
+            continue
+        current = role.get_permissions()
+        filtered = [permission for permission in current
+                    if permission not in weekly_permissions]
+        if filtered != current:
+            role.set_permissions(filtered)
+            cleaned_roles.append(role.role_name)
+
     if db.session.get(TrackingSetting, WEEKLY_PERMISSION_SEED_KEY) is not None:
+        if cleaned_roles:
+            db.session.commit()
+            print('[ShipTracking] 已清理非业务角色的改期/撤回权限: %s' % cleaned_roles)
         return
-    role = Role.query.filter_by(role_name='单月签排发填报').first()
+    role = Role.query.filter_by(role_name=business_role_name).first()
     if role is None:
+        if cleaned_roles:
+            db.session.commit()
+            print('[ShipTracking] 已清理非业务角色的改期/撤回权限: %s' % cleaned_roles)
         return
     permissions = role.get_permissions()
     if WEEKLY_ADJUST_PERMISSION not in permissions:
         role.set_permissions(permissions + [WEEKLY_ADJUST_PERMISSION])
     db.session.add(TrackingSetting(key=WEEKLY_PERMISSION_SEED_KEY, value='1'))
     db.session.commit()
+    if cleaned_roles:
+        print('[ShipTracking] 已清理非业务角色的改期/撤回权限: %s' % cleaned_roles)
     print('[ShipTracking] 已为业务填报角色补充改期权限；撤回权限需管理员手动授予')
 
 

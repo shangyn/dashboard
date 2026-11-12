@@ -44,7 +44,7 @@
           <el-switch v-model="form.is_admin" active-text="是" inactive-text="否" />
         </el-form-item>
         <el-form-item label="权限">
-          <div v-for="group in permissionGroups" :key="group.label" style="margin-bottom: 12px;">
+          <div v-for="group in visiblePermissionGroups" :key="group.label" style="margin-bottom: 12px;">
             <div style="font-weight: 600; font-size: 12px; color: #666; margin-bottom: 6px;">{{ group.label }}</div>
             <el-checkbox-group v-model="form.permissions">
               <el-checkbox v-for="opt in group.options" :key="opt.value" :value="opt.value" :label="opt.value">
@@ -88,6 +88,15 @@ const formRules = {
 }
 
 const permissionGroups = ref([])
+const BUSINESS_FILL_ROLE = '单月签排发填报'
+const WEEKLY_ACTION_PERMISSIONS = [
+  'ship_tracking_weekly_adjust',
+  'ship_tracking_weekly_withdraw',
+]
+const isBusinessFillRole = computed(() => form.role_name.trim() === BUSINESS_FILL_ROLE)
+const visiblePermissionGroups = computed(() => permissionGroups.value.filter(
+  (group) => !group.businessOnly || isBusinessFillRole.value
+))
 
 onMounted(() => fetchData())
 
@@ -115,6 +124,7 @@ async function fetchData() {
       },
       {
         label: '发货梯号明细（业务操作，按角色勾选生效）',
+        businessOnly: true,
         options: [
           { value: 'ship_tracking_weekly_adjust', label: '业务改期' },
           { value: 'ship_tracking_weekly_withdraw', label: '业务撤回' },
@@ -177,20 +187,23 @@ function openEditDialog(row) {
 async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+  const permissions = isBusinessFillRole.value
+    ? form.permissions
+    : form.permissions.filter((permission) => !WEEKLY_ACTION_PERMISSIONS.includes(permission))
   submitLoading.value = true
   try {
     if (isEdit.value) {
       await updateRole(editId.value, {
         role_name: form.role_name,
         is_admin: form.is_admin,
-        permissions: form.permissions,
+        permissions,
       })
       ElMessage.success('角色已更新')
     } else {
       await createRole({
         role_name: form.role_name,
         is_admin: form.is_admin,
-        permissions: form.permissions,
+        permissions,
       })
       ElMessage.success('角色创建成功')
     }

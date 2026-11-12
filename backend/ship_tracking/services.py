@@ -344,22 +344,24 @@ def _weekly_action_state(user, item):
         state['adjust_block_reason'] = reason
         state['withdraw_block_reason'] = reason
         return state
-    if item.commit_status != 'committed':
-        reason = '尚未提交'
-        state['adjust_block_reason'] = reason
-        state['withdraw_block_reason'] = reason
-        return state
     if item.plan_status != 'active':
         reason = '计划已移除'
         state['adjust_block_reason'] = reason
         state['withdraw_block_reason'] = reason
         return state
+    has_ship_date = bool(item.expected_ship_date or item.committed_expected_ship_date)
     if can_adjust_weekly(user):
-        state['can_adjust'] = True
+        if has_ship_date or item.commit_status == 'committed':
+            state['can_adjust'] = True
+        else:
+            state['adjust_block_reason'] = '尚未进入整体发货明细'
     else:
         state['adjust_block_reason'] = '当前角色无改期权限'
     if can_withdraw_weekly(user):
-        state['can_withdraw'] = True
+        if item.commit_status == 'committed':
+            state['can_withdraw'] = True
+        else:
+            state['withdraw_block_reason'] = '尚未提交'
     else:
         state['withdraw_block_reason'] = '当前角色无撤回权限'
     return state
@@ -950,8 +952,10 @@ def adjust_weekly(user, module_name, items):
     by_key = {entry['ladder_key']: entry for entry in rows_payload}
     changed = 0
     for row in rows:
-        if row.commit_status != 'committed':
-            raise ValueError('梯号 %s 尚未提交' % row.ladder_key)
+        if not (row.commit_status == 'committed'
+                or row.expected_ship_date
+                or row.committed_expected_ship_date):
+            raise ValueError('梯号 %s 尚未进入整体发货明细' % row.ladder_key)
         date_value = by_key[row.ladder_key]['expected_ship_date']
         if date_value < window['start'] or date_value > window['end']:
             raise ValueError('梯号 %s 的日期必须在 %s 至 %s 之间'
