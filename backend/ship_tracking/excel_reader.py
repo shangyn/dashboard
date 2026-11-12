@@ -111,6 +111,15 @@ def canonical_ladder(value):
     return text
 
 
+def natural_ladder_key(value):
+    """Return a key that sorts ladder numbers numerically (1#, 2#, 10#)."""
+    text = canonical_ladder(value)
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.findall(r'\d+|\D+', text)
+    )
+
+
 def expand_ladder_ranges(value, contract_no=''):
     """展开 1#-3# / 1-3# 一类区间梯号；普通梯号原样返回。"""
     text = canonical_ladder(value)

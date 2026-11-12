@@ -14,7 +14,7 @@ from ship_tracking.models import (
     AuditLog, BookingRecord, DailyShipment, ImportBatch, TrackingItem,
 )
 from ship_tracking.excel_reader import (
-    canonical_ladder, normalize_text, parse_excel_date, parse_ladder_batch,
+    canonical_ladder, natural_ladder_key, normalize_text, parse_excel_date, parse_ladder_batch,
 )
 from ship_tracking.regions import build_region_map
 
@@ -673,16 +673,17 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
         if item.actual_ship_date:
             return (
                 1, item.module_name or '', -item.actual_ship_date.toordinal(),
-                item.ladder_key or '',
+                natural_ladder_key(item.ladder_key or item.ladder_no),
             )
         return (
             0, item.module_name or '', item.expected_ship_date or dt.date.max,
-            item.ladder_key or '',
+            natural_ladder_key(item.ladder_key or item.ladder_no),
         )
 
     submitted.sort(key=history_sort_key)
     candidates.sort(key=lambda item: (
-        item.module_name or '', item.expected_ship_date or dt.date.max, item.ladder_key or ''
+        item.module_name or '', item.expected_ship_date or dt.date.max,
+        natural_ladder_key(item.ladder_key or item.ladder_no),
     ))
     return {
         'module_name': normalize_text(module_name) or '全部我的模块',
@@ -1340,7 +1341,10 @@ def query_tracking(user, filters=None):
             date_order = -dt.date.fromisoformat(expected).toordinal()
         else:
             date_order = 999999999
-        return (row.get('module_name') or '', date_order, row.get('ladder_key') or '')
+        return (
+            row.get('module_name') or '', date_order,
+            natural_ladder_key(row.get('ladder_key') or row.get('ladder_no')),
+        )
 
     result.sort(key=sort_key)
     shipped_rows = [row for row in result if row['status'] == 'shipped']
@@ -1429,9 +1433,9 @@ def _excel_number(value):
 def _export_sort_key(row):
     """已发货排在最前并按实际发货日期；未发货按预计日期，缺日期排最后。"""
     if row['status'] == 'shipped' or row['actual_ship_date']:
-        return (0, row['actual_ship_date'] or '', row['ladder_no'] or '')
+        return (0, row['actual_ship_date'] or '', natural_ladder_key(row['ladder_no']))
     return (1, row['expected_ship_date'] or '9999-12-31',
-            row['module_name'] or '', row['ladder_no'] or '')
+            row['module_name'] or '', natural_ladder_key(row['ladder_no']))
 
 
 def export_tracking(user, filters=None):
