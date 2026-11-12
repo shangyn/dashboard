@@ -261,6 +261,14 @@ class AuditLog(db.Model):
         }
 
 
+class TrackingSetting(db.Model):
+    """模块级设置与一次性迁移标记。"""
+    __tablename__ = 'st_setting'
+
+    key = db.Column(db.String(80), primary_key=True)
+    value = db.Column(db.Text, default='')
+
+
 def _loads(value, default=None):
     if default is None:
         default = {}

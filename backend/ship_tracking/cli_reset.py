@@ -29,6 +29,7 @@ DEFAULT_BACKUP_DIR = os.path.join(BASE_DIR, 'instance', 'backups')
 
 # 子表/流水在前，批次在后；本模块没有声明数据库外键，顺序只作语义上的安全安排。
 ST_TABLES = [
+    'st_setting',
     'st_import_issue',
     'st_audit_log',
     'st_booking_record',
