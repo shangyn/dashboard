@@ -711,7 +711,7 @@
             <el-descriptions-item label="文件中日期与已有不同">{{ planPreview.data.summary.expected_changed_count }}</el-descriptions-item>
             <el-descriptions-item label="补空日期">{{ planPreview.data.summary.expected_filled_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="导入备注">{{ planPreview.data.summary.remark_imported_count ?? 0 }}</el-descriptions-item>
-            <el-descriptions-item label="备注冲突（保留已有）">{{ planPreview.data.summary.remark_conflict_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item :label="planPreview.overwriteRemark ? '备注将被覆盖' : '备注冲突（保留已有）'">{{ planPreview.data.summary.remark_conflict_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已提交承诺冲突（保留承诺）">{{ planPreview.data.summary.committed_conflict_count }}</el-descriptions-item>
             <el-descriptions-item label="文件未含但已实发/已订舱">{{ (planPreview.data.summary.shipped_absent_count ?? 0) + (planPreview.data.summary.booked_absent_count ?? 0) }}</el-descriptions-item>
             <el-descriptions-item label="警告">{{ planPreview.data.warning_count }}</el-descriptions-item>
@@ -747,8 +747,17 @@
           />
           <el-alert v-if="planPreview.data.summary.duplicate_import" type="warning" :closable="false" show-icon style="margin-top: 12px" title="该文件与历史已导入文件相同。如确认重新生成版本，请在下方勾选强制导入。" />
           <el-alert v-if="planPreview.data.summary.committed_conflict_count" type="error" :closable="false" show-icon style="margin-top: 12px" title="文件中的日期与已提交承诺不一致。系统保留原承诺并标记冲突，不会静默覆盖。" />
-          <el-alert v-if="planPreview.data.summary.remark_conflict_count" type="warning" :closable="false" show-icon style="margin-top: 12px" title="文件中的备注与系统已有业务备注不一致。系统保留已有备注，不会静默覆盖。" />
-          <el-alert type="info" :closable="false" show-icon style="margin-top: 10px" title="默认保留已有预计/实际/订舱/承诺，只有空值才会被文件补上。勾选下方选项后，已有预计日期才会按文件更新，实际发货/订舱/承诺仍不变。" />
+          <el-alert
+            v-if="planPreview.data.summary.remark_conflict_count"
+            :type="planPreview.overwriteRemark ? 'error' : 'warning'"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+            :title="planPreview.overwriteRemark
+              ? `文件中的备注将覆盖 ${planPreview.data.summary.remark_conflict_count} 条已有业务备注，请确认。`
+              : '文件中的备注与系统已有业务备注不一致。系统保留已有备注，不会静默覆盖。'"
+          />
+          <el-alert type="info" :closable="false" show-icon style="margin-top: 10px" title="默认保留已有预计日期和业务备注，只有空值才会被文件补上；实际发货/订舱/承诺不会被覆盖。勾选下方选项后，才会按文件更新对应字段。" />
         </template>
         <el-table :data="planPreview.data.issues.slice(0, 200)" size="small" border max-height="300" style="margin-top: 12px">
           <el-table-column prop="row_number" label="行号" width="65" align="center" />
@@ -759,6 +768,7 @@
           <template v-if="planPreview.mode !== 'forecast'">
             <el-checkbox v-model="planPreview.force">强制重新导入相同文件</el-checkbox>
             <el-checkbox v-model="planPreview.overwriteExpected">用文件中的预计日期覆盖已有预计日期</el-checkbox>
+            <el-checkbox v-model="planPreview.overwriteRemark">用文件中的备注覆盖已有业务备注（空值保留）</el-checkbox>
           </template>
           <span>预览共 {{ planPreview.data.issue_total || 0 }} 条提示</span>
         </div>
@@ -961,6 +971,7 @@ const planPreview = reactive({
   data: null,
   force: false,
   overwriteExpected: false,
+  overwriteRemark: false,
   mode: 'excel',
 })
 const planPreviewLoading = ref(false)
@@ -1678,6 +1689,7 @@ async function previewPlan() {
     planPreview.data = res.data
     planPreview.force = false
     planPreview.overwriteExpected = false
+    planPreview.overwriteRemark = false
     planPreview.mode = 'excel'
     planPreview.visible = true
   } catch (error) {
@@ -1698,6 +1710,7 @@ async function previewForecast() {
     planPreview.data = res.data
     planPreview.force = false
     planPreview.overwriteExpected = false
+    planPreview.overwriteRemark = false
     planPreview.mode = 'forecast'
     planPreview.visible = true
   } catch (error) {
@@ -1720,11 +1733,14 @@ async function commitPlan() {
       const res = await commitPlanImport(
         planPreview.data.id,
         planPreview.force,
-        planPreview.overwriteExpected
+        planPreview.overwriteExpected,
+        planPreview.overwriteRemark
       )
       const preserved = res.data.preserved_absent_count || 0
+      const remarkOverwritten = res.data.remark_overwritten_count || 0
       ElMessage.success(
         `计划版本 ${res.data.version} 已生效，变更 ${res.data.changed_count} 条` +
+          (remarkOverwritten ? `，覆盖备注 ${remarkOverwritten} 条` : '') +
           (preserved ? `，文件未含但保留 ${preserved} 条` : '')
       )
       planFile.value = null

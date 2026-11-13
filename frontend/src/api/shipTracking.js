@@ -67,11 +67,12 @@ export function previewPlanImport(file, planMonth) {
   return request.post('/api/ship-tracking/import/plan/preview', data)
 }
 
-export function commitPlanImport(batchId, force = false, overwriteExpected = false) {
+export function commitPlanImport(batchId, force = false, overwriteExpected = false, overwriteRemark = false) {
   return request.post('/api/ship-tracking/import/plan/commit', {
     batch_id: batchId,
     force,
     overwrite_expected: overwriteExpected,
+    overwrite_remark: overwriteRemark,
   })
 }
 

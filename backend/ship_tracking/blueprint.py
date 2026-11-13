@@ -400,6 +400,7 @@ def api_plan_commit():
             user,
             force=bool(payload.get('force')),
             overwrite_expected=bool(payload.get('overwrite_expected')),
+            overwrite_remark=bool(payload.get('overwrite_remark')),
         ), '月度计划已生成新版本')
     except PermissionError as exc:
         return _fail(str(exc), 403)

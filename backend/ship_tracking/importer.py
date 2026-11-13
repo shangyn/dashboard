@@ -523,7 +523,8 @@ def _parse_iso_date(value):
     return parse_excel_date(value) if value else None
 
 
-def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
+def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
+                       overwrite_remark=False):
     if not can_import(user):
         raise PermissionError('无导入权限')
     batch = db.session.get(ImportBatch, batch_id)
@@ -586,6 +587,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
         db.session.add(row)
 
     changed_keys = []
+    remark_overwritten_count = 0
     for key, item in new_by_key.items():
         expected = _parse_iso_date(item.get('original_expected_ship_date'))
         row = current_rows.get(key)
@@ -675,8 +677,16 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
         row.source = item.get('source') or row.source
         row.reporter = item.get('reporter') or row.reporter
         file_remark = normalize_text(item.get('remark'))
-        if file_remark and not normalize_text(row.business_remark):
-            # 只在系统还没有备注时导入计划备注，避免重导覆盖业务填写。
+        current_remark = normalize_text(row.business_remark)
+        if overwrite_remark:
+            # 导入人员显式勾选后，用文件中的非空备注覆盖现有业务备注；
+            # 文件备注为空时保留原值，避免误批量清空。
+            if file_remark and file_remark != current_remark:
+                if current_remark:
+                    remark_overwritten_count += 1
+                row.business_remark = file_remark
+        elif file_remark and not current_remark:
+            # 默认只补空，避免重导覆盖业务填写。
             row.business_remark = file_remark
         new_raw = normalize_text(item.get('business_expected_raw'))
         if new_raw and (overwrite_expected or not row.business_expected_raw):
@@ -769,6 +779,8 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
                'version': batch.version,
                'unique_count': batch.unique_count,
                'changed_count': len(set(changed_keys)),
+               'overwrite_remark': overwrite_remark,
+               'remark_overwritten_count': remark_overwritten_count,
            })
     db.session.commit()
     try:
@@ -783,6 +795,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False):
         'unique_count': batch.unique_count,
         'total_units': batch.total_units,
         'changed_count': len(set(changed_keys)),
+        'remark_overwritten_count': remark_overwritten_count,
         'preserved_absent_count': len(preserved_absent),
         'sync': sync_result,
     }
