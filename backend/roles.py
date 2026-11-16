@@ -10,11 +10,20 @@ WEEKLY_ACTION_PERMISSIONS = {
     'ship_tracking_weekly_adjust',
     'ship_tracking_weekly_withdraw',
 }
+SHIP_TRACKING_MODULE_PERMISSION = 'ship_tracking'
+SHIP_TRACKING_SUB_PERMISSIONS = {
+    'ship_tracking_view',
+    'ship_tracking_daily_edit',
+    'ship_tracking_admin',
+}
 
 
 def _sanitize_permissions(role_name, permissions):
     """业务改期/撤回配置只允许出现在固定填报角色上。"""
     values = [permission for permission in (permissions or []) if permission]
+    if any(permission in SHIP_TRACKING_SUB_PERMISSIONS for permission in values):
+        if SHIP_TRACKING_MODULE_PERMISSION not in values:
+            values.insert(0, SHIP_TRACKING_MODULE_PERMISSION)
     if (role_name or '').strip() == BUSINESS_FILL_ROLE:
         return values
     return [permission for permission in values

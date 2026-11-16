@@ -46,7 +46,7 @@
         <el-form-item label="权限">
           <div v-for="group in visiblePermissionGroups" :key="group.label" style="margin-bottom: 12px;">
             <div style="font-weight: 600; font-size: 12px; color: #666; margin-bottom: 6px;">{{ group.label }}</div>
-            <el-checkbox-group v-model="form.permissions">
+            <el-checkbox-group v-model="form.permissions" @change="handlePermissionsChange">
               <el-checkbox v-for="opt in group.options" :key="opt.value" :value="opt.value" :label="opt.value">
                 {{ opt.label }}
               </el-checkbox>
@@ -89,6 +89,8 @@ const formRules = {
 
 const permissionGroups = ref([])
 const BUSINESS_FILL_ROLE = '单月签排发填报'
+const SHIP_TRACKING_MODULE_PERMISSION = 'ship_tracking'
+const SHIP_TRACKING_VIEW_PERMISSION = 'ship_tracking_view'
 const WEEKLY_ACTION_PERMISSIONS = [
   'ship_tracking_weekly_adjust',
   'ship_tracking_weekly_withdraw',
@@ -97,6 +99,13 @@ const isBusinessFillRole = computed(() => form.role_name.trim() === BUSINESS_FIL
 const visiblePermissionGroups = computed(() => permissionGroups.value.filter(
   (group) => !group.businessOnly || isBusinessFillRole.value
 ))
+
+function handlePermissionsChange(permissions) {
+  if (permissions.includes(SHIP_TRACKING_VIEW_PERMISSION)
+      && !permissions.includes(SHIP_TRACKING_MODULE_PERMISSION)) {
+    form.permissions = [...permissions, SHIP_TRACKING_MODULE_PERMISSION]
+  }
+}
 
 onMounted(() => fetchData())
 
@@ -120,6 +129,15 @@ async function fetchData() {
           { value: 'role_manage', label: '角色管理' },
           { value: 'module_manage', label: '模块管理' },
           { value: 'upload_manage', label: '上传配置管理' },
+        ],
+      },
+      {
+        label: '发货梯号明细（模块内权限）',
+        options: [
+          {
+            value: 'ship_tracking_view',
+            label: '查看全量发货明细（不含实发、改期、撤回）',
+          },
         ],
       },
       {
@@ -187,9 +205,13 @@ function openEditDialog(row) {
 async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
-  const permissions = isBusinessFillRole.value
+  let permissions = isBusinessFillRole.value
     ? form.permissions
     : form.permissions.filter((permission) => !WEEKLY_ACTION_PERMISSIONS.includes(permission))
+  if (permissions.includes(SHIP_TRACKING_VIEW_PERMISSION)
+      && !permissions.includes(SHIP_TRACKING_MODULE_PERMISSION)) {
+    permissions = [SHIP_TRACKING_MODULE_PERMISSION, ...permissions]
+  }
   submitLoading.value = true
   try {
     if (isEdit.value) {
