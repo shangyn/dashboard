@@ -115,8 +115,16 @@
 
       <div class="mf-panel">
         <div class="mf-panel-head">
-          <span class="mf-panel-title">发货候选（组A日期为空 且 已排产）</span>
-          <span class="mf-panel-count">共 {{ candidates.length }} 条</span>
+          <span class="mf-panel-title">发货候选（组A日期为空；已排产，或 2026 年签订未排产）</span>
+          <span class="mf-panel-count">
+            共 {{ filteredCandidates.length }} 条
+            <span class="mf-hint">全量：已排产 {{ scheduledCount }} / 未排产 {{ unplannedCount }}</span>
+          </span>
+          <el-select v-model="scheduleFilter" size="small" style="width:110px">
+            <el-option label="全部排产" value="all" />
+            <el-option label="已排产" value="scheduled" />
+            <el-option label="未排产" value="unplanned" />
+          </el-select>
           <el-input
             v-model="keyword"
             size="small"
@@ -161,7 +169,12 @@
           <el-table-column prop="project_name" label="项目名称" min-width="220" show-overflow-tooltip />
           <el-table-column prop="unit_count" label="台数" width="70" align="right" />
           <el-table-column prop="amount_wan" label="金额(万元)" width="110" align="right" />
-          <el-table-column prop="schedule_date" label="排产日期" width="110" align="center" />
+          <el-table-column prop="schedule_date" label="排产日期" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="!row.schedule_date" size="small" type="warning">未排产</el-tag>
+              <span v-else>{{ row.schedule_date }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="schedule_finish_date" label="排产完工日期" width="110" align="center" />
           <el-table-column label="来源" width="90" align="center">
             <template #default="{ row }">
@@ -275,6 +288,7 @@ const context = ref({
 const month = ref('')
 const moduleName = ref('')
 const keyword = ref('')
+const scheduleFilter = ref('all')
 const manualLadder = ref('')
 const page = ref(1)
 const pageSize = ref(20)
@@ -320,13 +334,19 @@ const ladderAmount = computed(() =>
 const shipUnits = computed(() => round2(ladderUnits.value + manualUnits.value))
 const shipAmount = computed(() => round2(ladderAmount.value + manualAmount.value))
 const manualOnly = computed(() => Object.values(selections.value).filter((row) => row.is_manual))
+const scheduledCount = computed(() => candidates.value.filter((row) => !!row.schedule_date).length)
+const unplannedCount = computed(() => candidates.value.length - scheduledCount.value)
 
 const filteredCandidates = computed(() => {
   const text = (keyword.value || '').trim().toLowerCase()
-  if (!text) return candidates.value
-  return candidates.value.filter((row) =>
-    `${row.contract_no || ''} ${row.ladder_no || ''} ${row.project_name || ''}`.toLowerCase().includes(text)
-  )
+  return candidates.value.filter((row) => {
+    if (scheduleFilter.value === 'scheduled' && !row.schedule_date) return false
+    if (scheduleFilter.value === 'unplanned' && row.schedule_date) return false
+    if (!text) return true
+    return `${row.contract_no || ''} ${row.ladder_no || ''} ${row.project_name || ''}`
+      .toLowerCase()
+      .includes(text)
+  })
 })
 const pagedCandidates = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -347,7 +367,7 @@ const summaryWithTotal = computed(() =>
   summaryTotal.value ? [...summaryRows.value, summaryTotal.value] : summaryRows.value
 )
 
-watch(keyword, () => {
+watch([keyword, scheduleFilter], () => {
   page.value = 1
 })
 
@@ -450,10 +470,12 @@ async function loadPage() {
 }
 
 function onMonthChange() {
+  scheduleFilter.value = 'all'
   loadPage()
 }
 
 function onModuleChange() {
+  scheduleFilter.value = 'all'
   loadPage()
 }
 

@@ -10,7 +10,7 @@ import os
 import tempfile
 from datetime import date, datetime
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from models import db
 from monthly_forecast.models import MonthlyInput, ShipSelection, Submission, UserScope
@@ -21,6 +21,10 @@ from dashboards.contract_completion.models import (
 )
 
 GAIZAO_MODULE = '改造'
+
+# 2026 年签订且尚未排产的合同也进入候选池
+UNPLANNED_SIGN_START = date(2026, 1, 1)
+UNPLANNED_SIGN_END = date(2027, 1, 1)
 
 
 # 月份工具
@@ -146,7 +150,8 @@ def _ship_within_month(value, data_month):
 
 
 def list_candidates(module_name, data_month=None, keyword=None):
-    """发货候选池：组A日期为空 + 排产日期不为空 + 未作废 + 台账来源
+    """发货候选池：组A日期为空 + 未作废 + 台账来源
+    排产条件：已排产，或 2026 年签订且排产日期为空
     额外：整梯发货日期（台账 AV 列）晚于填报月份的梯号不进候选（空值保留）
     排序：排产日期倒序（日期近的在前），同日按合同号 / 梯号数字升序
     """
@@ -154,7 +159,14 @@ def list_candidates(module_name, data_month=None, keyword=None):
         LedgerContract.source == 'ledger',
         or_(LedgerContract.product_status.is_(None), LedgerContract.product_status != '已作废'),
         LedgerContract.delivery_date.is_(None),
-        LedgerContract.schedule_date.isnot(None),
+        or_(
+            LedgerContract.schedule_date.isnot(None),
+            and_(
+                LedgerContract.schedule_date.is_(None),
+                LedgerContract.sign_date >= UNPLANNED_SIGN_START,
+                LedgerContract.sign_date < UNPLANNED_SIGN_END,
+            ),
+        ),
     ).all()
 
     module_map = load_module_map()
