@@ -121,7 +121,7 @@
             <span class="mf-hint">全量：已排产 {{ scheduledCount }} / 未排产 {{ unplannedCount }}</span>
           </span>
           <el-select v-model="scheduleFilter" size="small" style="width:110px">
-            <el-option label="全部排产" value="all" />
+            <el-option label="全部梯号" value="all" />
             <el-option label="已排产" value="scheduled" />
             <el-option label="未排产" value="unplanned" />
           </el-select>
@@ -288,7 +288,7 @@ const context = ref({
 const month = ref('')
 const moduleName = ref('')
 const keyword = ref('')
-const scheduleFilter = ref('all')
+const scheduleFilter = ref('scheduled')
 const manualLadder = ref('')
 const page = ref(1)
 const pageSize = ref(20)
@@ -470,12 +470,12 @@ async function loadPage() {
 }
 
 function onMonthChange() {
-  scheduleFilter.value = 'all'
+  scheduleFilter.value = 'scheduled'
   loadPage()
 }
 
 function onModuleChange() {
-  scheduleFilter.value = 'all'
+  scheduleFilter.value = 'scheduled'
   loadPage()
 }
 
