@@ -72,6 +72,8 @@
     </el-container>
   </el-container>
 
+  <BusinessAssistant />
+
   <!-- 修改密码弹窗 -->
   <el-dialog v-model="pwdDialogVisible" width="460px" :show-close="false" class="pwd-dialog">
     <template #header>
@@ -115,6 +117,7 @@ import { DataAnalysis, User, Lock, Grid, UploadFilled, Upload, Document, Trophy,
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { changePassword } from '../api/auth'
+import BusinessAssistant from '../components/BusinessAssistant/BusinessAssistant.vue'
 
 const route = useRoute()
 const router = useRouter()

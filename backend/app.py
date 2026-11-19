@@ -87,6 +87,10 @@ def create_app():
     from module_business_detail import register as register_module_business_detail
     register_module_business_detail(app)
 
+    # 经营助手（独立只读旁路，不修改既有业务模块）
+    from business_assistant import register as register_business_assistant
+    register_business_assistant(app)
+
     # 托管 dashboard HTML 文件
     @app.route('/dashboards/<path:filename>')
     def serve_dashboard(filename):

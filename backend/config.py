@@ -15,3 +15,12 @@ class Config:
     JWT_QUERY_STRING_NAME = 'token'
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     DASHBOARD_OUTPUT_DIR = os.path.join(BASE_DIR, 'var', 'dashboards')
+
+    # 经营助手：默认开启入口，默认不启用外部模型；关闭总开关不影响现有模块。
+    ASSISTANT_ENABLED = os.environ.get('ASSISTANT_ENABLED', '1') == '1'
+    ASSISTANT_MODEL_ENABLED = os.environ.get('ASSISTANT_MODEL_ENABLED', '0') == '1'
+    ASSISTANT_MODEL_BASE_URL = os.environ.get('ASSISTANT_MODEL_BASE_URL', '')
+    ASSISTANT_MODEL_API_KEY = os.environ.get('ASSISTANT_MODEL_API_KEY', '')
+    ASSISTANT_MODEL_NAME = os.environ.get('ASSISTANT_MODEL_NAME', 'deepseek-chat')
+    ASSISTANT_MODEL_TIMEOUT = int(os.environ.get('ASSISTANT_MODEL_TIMEOUT', '25'))
+    ASSISTANT_EXPORT_MAX_AGE = int(os.environ.get('ASSISTANT_EXPORT_MAX_AGE', '900'))

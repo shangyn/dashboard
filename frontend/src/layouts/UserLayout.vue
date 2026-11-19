@@ -21,6 +21,8 @@
     </el-main>
   </el-container>
 
+  <BusinessAssistant />
+
   <!-- 修改密码弹窗 -->
   <el-dialog v-model="pwdDialogVisible" width="460px" :show-close="false" class="pwd-dialog">
     <template #header>
@@ -63,6 +65,7 @@ import { ElMessage } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { changePassword } from '../api/auth'
+import BusinessAssistant from '../components/BusinessAssistant/BusinessAssistant.vue'
 
 const router = useRouter()
 const route = useRoute()
