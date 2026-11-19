@@ -4,12 +4,15 @@ import re
 import uuid
 
 from flask import current_app
+from sqlalchemy.exc import IntegrityError
 
+from models import db
 from monthly_forecast import services as mf_svc
 
 from business_assistant import tools
 from business_assistant.exporting import create_export_token
 from business_assistant.model_client import model_enabled, plan_action
+from business_assistant.models import BusinessAssistantSetting
 from business_assistant.scope import resolve_scope
 
 
@@ -35,9 +38,45 @@ LIMITED_QUESTIONS = [
     '合同和梯号数据从哪里来',
 ]
 
+SETTING_ID = 1
+
 
 def enabled():
-    return bool(current_app.config.get('ASSISTANT_ENABLED', True))
+    return bool(_setting_row().enabled)
+
+
+def _setting_row():
+    row = db.session.get(BusinessAssistantSetting, SETTING_ID)
+    if row is not None:
+        return row
+    row = BusinessAssistantSetting(
+        id=SETTING_ID,
+        enabled=bool(current_app.config.get('ASSISTANT_ENABLED', True)),
+    )
+    db.session.add(row)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        row = db.session.get(BusinessAssistantSetting, SETTING_ID)
+    return row
+
+
+def is_admin(user):
+    return bool(user and user.role and user.role.is_admin)
+
+
+def get_setting():
+    return _setting_row().to_dict()
+
+
+def update_setting(user, enabled_value):
+    row = _setting_row()
+    row.enabled = bool(enabled_value)
+    row.updated_by = user.id
+    row.updated_by_name = user.real_name or user.username or ''
+    db.session.commit()
+    return row.to_dict()
 
 
 def _default_questions(scope):

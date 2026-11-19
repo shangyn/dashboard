@@ -61,6 +61,15 @@
           </el-icon>
         </div>
         <div class="header-right">
+          <div class="assistant-toggle" title="控制所有用户的经营助手入口">
+            <span class="assistant-toggle-label">经营助手</span>
+            <el-switch
+              v-model="assistantEnabled"
+              :loading="assistantSwitchLoading"
+              @change="handleAssistantToggle"
+            />
+            <span class="assistant-toggle-state">{{ assistantEnabled ? '显示' : '隐藏' }}</span>
+          </div>
           <span class="header-username" @click="openPwdDialog">{{ authStore.userInfo?.real_name || '管理员' }}</span>
           <el-button class="logout-btn" @click="handleLogout">退出登录</el-button>
         </div>
@@ -110,13 +119,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, User, Lock, Grid, UploadFilled, Upload, Document, Trophy, Fold, Expand, EditPen } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { changePassword } from '../api/auth'
+import { getAssistantAdminSetting, updateAssistantAdminSetting } from '../api/businessAssistant'
 import BusinessAssistant from '../components/BusinessAssistant/BusinessAssistant.vue'
 
 const route = useRoute()
@@ -126,6 +136,8 @@ const appStore = useAppStore()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const hideHeader = computed(() => route.meta.hideHeader === true)
+const assistantEnabled = ref(true)
+const assistantSwitchLoading = ref(false)
 
 const pwdDialogVisible = ref(false)
 const pwdFormRef = ref(null)
@@ -159,6 +171,35 @@ function handleLogout() {
   authStore.logout()
   router.push('/login')
 }
+
+async function loadAssistantSetting() {
+  try {
+    const response = await getAssistantAdminSetting()
+    assistantEnabled.value = Boolean(response.data?.enabled)
+  } catch {
+    assistantEnabled.value = true
+  }
+}
+
+async function handleAssistantToggle(value) {
+  assistantSwitchLoading.value = true
+  try {
+    const response = await updateAssistantAdminSetting(Boolean(value))
+    assistantEnabled.value = Boolean(response.data?.enabled)
+    window.dispatchEvent(new CustomEvent('business-assistant-visibility', {
+      detail: { enabled: assistantEnabled.value },
+    }))
+    ElMessage.success(assistantEnabled.value
+      ? '经营助手已对全部用户显示'
+      : '经营助手已对全部用户隐藏')
+  } catch {
+    assistantEnabled.value = !value
+  } finally {
+    assistantSwitchLoading.value = false
+  }
+}
+
+onMounted(loadAssistantSetting)
 
 async function handleChangePassword() {
   const valid = await pwdFormRef.value.validate().catch(() => false)
@@ -214,6 +255,17 @@ async function handleChangePassword() {
 }
 .collapse-icon { cursor: pointer; color: #888; }
 .header-right { display: flex; align-items: center; gap: 22px; }
+.assistant-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #e3eaf4;
+  border-radius: 8px;
+  background: #f7faff;
+}
+.assistant-toggle-label { font-size: 12px; color: #52657d; }
+.assistant-toggle-state { min-width: 24px; font-size: 12px; color: #1a73e8; }
 .header-username {
   font-size: 13px;
   color: #555;

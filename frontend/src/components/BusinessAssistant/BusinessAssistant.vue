@@ -118,7 +118,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Close, Download, RefreshRight } from '@element-plus/icons-vue'
@@ -134,6 +134,7 @@ const sending = ref(false)
 const question = ref('')
 const bodyRef = ref(null)
 const messages = ref([])
+let contextRefreshTimer = null
 const context = reactive({
   enabled: false,
   scope: { mode: 'none', label: '暂无权限', modules: [], module_count: 0 },
@@ -158,9 +159,16 @@ async function loadContext() {
   try {
     const response = await getAssistantContext()
     Object.assign(context, response.data || {})
+    if (!context.enabled) visible.value = false
   } catch {
     context.enabled = false
+    visible.value = false
   }
+}
+
+function handleVisibilityChange(event) {
+  context.enabled = Boolean(event.detail?.enabled)
+  if (!context.enabled) visible.value = false
 }
 
 async function send(text) {
@@ -217,7 +225,20 @@ async function downloadExport(message) {
   }
 }
 
-onMounted(loadContext)
+onMounted(() => {
+  loadContext()
+  window.addEventListener('business-assistant-visibility', handleVisibilityChange)
+  window.addEventListener('focus', loadContext)
+  contextRefreshTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') loadContext()
+  }, 60000)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('business-assistant-visibility', handleVisibilityChange)
+  window.removeEventListener('focus', loadContext)
+  if (contextRefreshTimer) window.clearInterval(contextRefreshTimer)
+})
 </script>
 
 <style scoped>

@@ -20,6 +20,50 @@ def _fail(message, code=400):
     return jsonify(code=code, msg=message, data=None), code
 
 
+def _admin_user():
+    user = get_current_user()
+    if not services.is_admin(user):
+        return None
+    return user
+
+
+@assistant_bp.route('/api/business-assistant/admin/setting', methods=['GET'])
+@jwt_required()
+def api_admin_setting():
+    user = _admin_user()
+    if user is None:
+        return _fail('仅管理员可以管理经营助手开关', 403)
+    try:
+        return _ok(services.get_setting())
+    except Exception as exc:
+        logger.exception('读取经营助手管理员设置失败')
+        return _fail('读取设置失败: %s' % exc, 500)
+
+
+@assistant_bp.route('/api/business-assistant/admin/setting', methods=['PUT'])
+@jwt_required()
+def api_update_admin_setting():
+    user = _admin_user()
+    if user is None:
+        return _fail('仅管理员可以管理经营助手开关', 403)
+    payload = request.get_json(silent=True) or {}
+    enabled_value = payload.get('enabled')
+    if not isinstance(enabled_value, bool) and enabled_value in (0, 1):
+        enabled_value = bool(enabled_value)
+    elif not isinstance(enabled_value, bool):
+        return _fail('enabled 必须为布尔值', 400)
+    try:
+        setting = services.update_setting(user, enabled_value)
+        logger.info(
+            'assistant setting updated user=%s enabled=%s',
+            user.id, setting.get('enabled'),
+        )
+        return _ok(setting, '经营助手开关已更新')
+    except Exception as exc:
+        logger.exception('更新经营助手管理员设置失败')
+        return _fail('更新设置失败: %s' % exc, 500)
+
+
 @assistant_bp.route('/api/business-assistant/context', methods=['GET'])
 @jwt_required()
 def api_context():

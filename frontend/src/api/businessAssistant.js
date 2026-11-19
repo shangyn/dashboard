@@ -8,6 +8,14 @@ export function askBusinessAssistant(data) {
   return request.post('/api/business-assistant/chat', data)
 }
 
+export function getAssistantAdminSetting() {
+  return request.get('/api/business-assistant/admin/setting')
+}
+
+export function updateAssistantAdminSetting(enabled) {
+  return request.put('/api/business-assistant/admin/setting', { enabled })
+}
+
 export function downloadAssistantExport(token, filename) {
   const authToken = localStorage.getItem('token')
   const query = new URLSearchParams({ token })
