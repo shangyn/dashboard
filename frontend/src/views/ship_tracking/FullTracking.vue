@@ -376,7 +376,7 @@
           <div class="st-import-card">
             <div class="st-import-title">从单月填报生成计划</div>
             <p class="st-import-desc">
-              取同月份各模块<strong>最新已提交版本</strong>的发货梯号，增量并入发货明细。只补缺失/已移除梯号，不改已有预计日期、实际发货、订舱和承诺；草稿不参与。
+              取同月份各模块<strong>最新已提交版本</strong>的发货梯号，增量并入发货明细。补缺失、恢复已移除，并把其他月份的有效计划转入本月；保留原预计日期、备注、实际发货、订舱和承诺；草稿不参与。
             </p>
             <div class="st-import-form">
               <el-date-picker v-model="planMonth" size="small" type="month" value-format="YYYY-MM" placeholder="计划月份" style="width: 140px" />
@@ -666,6 +666,7 @@
             <el-descriptions-item label="填报梯号">{{ forecastSummary.selection_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="有效梯号">{{ planPreview.data.unique_count }}</el-descriptions-item>
             <el-descriptions-item label="新增">{{ forecastSummary.added_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="转入本月">{{ forecastSummary.moved_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已存在跳过">{{ forecastSummary.existing_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="恢复已移除">{{ forecastSummary.restored_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已实发跳过">{{ forecastSummary.skipped_shipped_count ?? 0 }}</el-descriptions-item>
@@ -679,6 +680,7 @@
             <el-table-column prop="version" label="提交版本" width="82" align="center" />
             <el-table-column prop="selections" label="填报梯号" width="82" align="right" />
             <el-table-column prop="added" label="新增" width="66" align="right" />
+            <el-table-column prop="moved" label="转入" width="66" align="right" />
             <el-table-column prop="existing" label="已存在" width="72" align="right" />
             <el-table-column prop="restored" label="恢复" width="66" align="right" />
           </el-table>
@@ -695,7 +697,7 @@
             :closable="false"
             show-icon
             style="margin-top: 10px"
-            title="本次只补缺失/已移除梯号，不改已有预计日期、实际发货、订舱和承诺；新增行需要业务在周填报里填写预计发货日期。"
+            title="本次补缺失/已移除梯号，并把其他月份的有效计划转入本月；原预计日期、备注、实际发货、订舱和承诺保持不变。新增行需要业务在周填报里填写预计发货日期。"
           />
         </template>
         <template v-else>
@@ -964,7 +966,7 @@ function resetColumnSettings() {
   saveColumnSettings()
 }
 
-const planMonth = ref(props.context.default_month)
+const planMonth = ref(props.context.fill_month || props.context.default_month)
 const planFile = ref(null)
 const planPreview = reactive({
   visible: false,
@@ -1727,7 +1729,7 @@ async function commitPlan() {
       const res = await commitForecastImport(planPreview.data.id)
       const data = res.data || {}
       ElMessage.success(
-        `已并入 ${data.added_count || 0} 条，恢复 ${data.restored_count || 0} 条，已存在跳过 ${data.skipped_existing || 0} 条`
+        `已新增 ${data.added_count || 0} 条，转入 ${data.moved_count || 0} 条，恢复 ${data.restored_count || 0} 条，已存在跳过 ${data.skipped_existing || 0} 条`
       )
     } else {
       const res = await commitPlanImport(

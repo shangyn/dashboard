@@ -82,6 +82,11 @@ def create_app():
     from ship_tracking import register as register_ship_tracking
     register_ship_tracking(app)
 
+    # 模块经营明细（独立只读模块，只新增模块入口与独立接口）
+    from module_business_detail import initialize as initialize_module_business_detail
+    from module_business_detail import register as register_module_business_detail
+    register_module_business_detail(app)
+
     # 托管 dashboard HTML 文件
     @app.route('/dashboards/<path:filename>')
     def serve_dashboard(filename):
@@ -142,6 +147,9 @@ def create_app():
 
     # 原项目种子完成后再初始化发货追踪，首次部署不会影响管理员创建
     initialize_ship_tracking(app)
+
+    # 模块经营明细只补充自己的菜单入口，不自动修改现有角色权限
+    initialize_module_business_detail(app)
 
     return app
 

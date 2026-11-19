@@ -936,16 +936,17 @@ def preview_plan_from_forecast(month, user):
     items, issues, stats = _forecast_plan_items(month)
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
-    added = existing = restored = skipped_shipped = 0
+    added = existing = moved = restored = skipped_shipped = 0
     breakdown = stats.get('module_breakdown') or {}
     for item in items:
         entry = breakdown.setdefault(
             item['module_name'],
             {'version': stats['submission_versions'].get(item['module_name'], 0),
-             'selections': 0, 'added': 0, 'existing': 0, 'restored': 0},
+             'selections': 0, 'added': 0, 'existing': 0, 'moved': 0, 'restored': 0},
         )
         entry.setdefault('added', 0)
         entry.setdefault('existing', 0)
+        entry.setdefault('moved', 0)
         entry.setdefault('restored', 0)
         row = current_rows.get(item['ladder_key'])
         if row is None:
@@ -954,8 +955,12 @@ def preview_plan_from_forecast(month, user):
         elif row.actual_ship_date or row.source_kind == 'actual_only':
             skipped_shipped += 1
         elif row.plan_status == 'active':
-            existing += 1
-            entry['existing'] += 1
+            if row.plan_month == month:
+                existing += 1
+                entry['existing'] += 1
+            else:
+                moved += 1
+                entry['moved'] += 1
         else:
             restored += 1
             entry['restored'] += 1
@@ -980,6 +985,7 @@ def preview_plan_from_forecast(month, user):
         'module_mismatch_count': stats['module_mismatch_count'],
         'added_count': added,
         'existing_count': existing,
+        'moved_count': moved,
         'restored_count': restored,
         'skipped_shipped_count': skipped_shipped,
         'module_breakdown': breakdown,
@@ -1018,7 +1024,7 @@ def preview_plan_from_forecast(month, user):
 
 
 def commit_forecast_import(batch_id, user):
-    """把单月填报批次增量并入追踪表：只新增/恢复，不改已有有效行。"""
+    """把单月填报批次并入追踪表：新增、恢复，或把其他月份的有效计划转入本月。"""
     if not can_import(user):
         raise PermissionError('无导入权限')
     batch = db.session.get(ImportBatch, batch_id)
@@ -1043,7 +1049,7 @@ def commit_forecast_import(batch_id, user):
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
     now = dt.datetime.now()
-    added = restored = skipped_existing = skipped_shipped = 0
+    added = moved = restored = skipped_existing = skipped_shipped = 0
     for item in items:
         key = item['ladder_key']
         row = current_rows.get(key)
@@ -1052,25 +1058,54 @@ def commit_forecast_import(batch_id, user):
                 skipped_shipped += 1
                 continue
             if row.plan_status == 'active':
-                skipped_existing += 1
+                if row.plan_month == batch.plan_month:
+                    skipped_existing += 1
+                    continue
+                # 其他月份的有效计划被本月重新选中：更新计划归属，
+                # 预计日期、承诺、备注、订舱和实发信息全部保留。
+                old_values = {
+                    'plan_month': row.plan_month or '',
+                    'plan_batch_id': row.plan_batch_id,
+                    'plan_version': row.plan_version or 0,
+                }
+                row.plan_month = batch.plan_month
+                row.plan_batch_id = batch.id
+                row.plan_version = batch.version
+                row.plan_removed_at = None
+                row.plan_change_count = (row.plan_change_count or 0) + 1
+                _audit(user, 'forecast', 'move_month', key, batch_id=batch.id,
+                       old_values=old_values,
+                       new_values={
+                           'plan_month': row.plan_month,
+                           'plan_batch_id': row.plan_batch_id,
+                           'plan_version': row.plan_version,
+                       })
+                moved += 1
                 continue
             # 已移除但未实发：恢复计划状态，日期/承诺/订舱原样保留。
+            old_plan_month = row.plan_month or ''
             flags = {flag for flag in row.flags() if not str(flag).startswith('plan_removed_')}
             flags.add('restored_from_forecast')
             row.set_flags(flags)
             row.plan_status = 'active'
             row.plan_removed_at = None
             row.plan_month = batch.plan_month
+            row.plan_batch_id = batch.id
+            row.plan_version = batch.version
+            if old_plan_month != batch.plan_month:
+                row.plan_change_count = (row.plan_change_count or 0) + 1
             _audit(user, 'forecast', 'restore', key, batch_id=batch.id,
-                   old_values={'plan_status': 'removed'},
-                   new_values={'plan_status': 'active', 'module_name': row.module_name or ''})
+                   old_values={'plan_status': 'removed', 'plan_month': old_plan_month},
+                   new_values={'plan_status': 'active', 'module_name': row.module_name or '',
+                               'plan_month': row.plan_month, 'plan_batch_id': row.plan_batch_id,
+                               'plan_version': row.plan_version})
             restored += 1
             continue
 
         row = TrackingItem(
             ladder_key=key,
             plan_month=batch.plan_month,
-            plan_version=0,
+            plan_version=batch.version,
             plan_batch_id=batch.id,
             plan_status='active',
             contract_no=item.get('contract_no') or '',
@@ -1113,6 +1148,7 @@ def commit_forecast_import(batch_id, user):
            new_values={
                'plan_month': batch.plan_month,
                'added_count': added,
+               'moved_count': moved,
                'restored_count': restored,
            })
     db.session.commit()
@@ -1126,6 +1162,7 @@ def commit_forecast_import(batch_id, user):
         'plan_month': batch.plan_month,
         'version': batch.version,
         'added_count': added,
+        'moved_count': moved,
         'restored_count': restored,
         'skipped_existing': skipped_existing,
         'skipped_shipped': skipped_shipped,

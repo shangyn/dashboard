@@ -25,6 +25,9 @@ ADMIN_PERMISSION = 'ship_tracking_admin'
 ADJUST_PERMISSION = 'ship_tracking_weekly_adjust'
 WITHDRAW_PERMISSION = 'ship_tracking_weekly_withdraw'
 
+# 下月开始前多少天切换下月填报窗口（自然日）
+NEXT_MONTH_OPEN_DAYS = 15
+
 STATUS_LABELS = {
     'shipped': '已发货',
     'overdue': '已逾期',
@@ -99,7 +102,7 @@ def month_end(value=None):
 def fill_window(value=None):
     current = value or today()
     next_start = next_month_start(current)
-    if current >= next_start - dt.timedelta(days=7):
+    if current >= next_start - dt.timedelta(days=NEXT_MONTH_OPEN_DAYS):
         default_date = next_start
         end = month_end(next_start)
     else:

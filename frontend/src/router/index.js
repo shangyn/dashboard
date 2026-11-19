@@ -39,6 +39,7 @@ const routes = [
       { path: 'two-year-comparison', component: () => import('../views/TwoYearComparison.vue') },
       { path: 'monthly-forecast', component: () => import('../views/MonthlyForecast.vue') },
       { path: 'ship-tracking', component: () => import('../views/ship_tracking/ShipTracking.vue') },
+      { path: 'module-business-detail', component: () => import('../views/ModuleBusinessDetail.vue'), meta: { permission: 'module_business_detail' } },
     ],
   },
   {
@@ -90,6 +91,20 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requireAdmin && !authStore.isAdmin) {
     next('/403')
     return
+  }
+
+  // 新模块使用独立页面权限；未配置 meta.permission 的现有路由行为不变
+  if (to.meta.permission) {
+    try {
+      await authStore.fetchCurrentUser()
+    } catch {
+      next('/login')
+      return
+    }
+    if (!authStore.hasPermission(to.meta.permission)) {
+      next('/403')
+      return
+    }
   }
 
   // 管理员访问普通用户首页 → 重定向到管理员首页
