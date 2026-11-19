@@ -3,6 +3,35 @@ from datetime import timedelta
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
+
+def _load_assistant_env():
+    # gunicorn does not read dotenv files; load it before Config is built.
+    candidates = (
+        os.path.join(BASE_DIR, '.assistant.env'),
+        os.path.join(os.path.dirname(BASE_DIR), '.assistant.env'),
+    )
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, 'r', encoding='utf-8') as fh:
+                for raw in fh:
+                    line = raw.strip()
+                    if not line or line.startswith('#') or '=' not in line:
+                        continue
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    if key:
+                        os.environ[key] = value
+        except OSError:
+            continue
+        break
+
+
+_load_assistant_env()
+
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     SQLALCHEMY_DATABASE_URI = os.environ.get(

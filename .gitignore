@@ -50,6 +50,7 @@ tmp_ui/
 # ============ 敏感配置 ============
 .env
 .env.*
+.assistant.env
 *.secret
 *.key
 *.pem
