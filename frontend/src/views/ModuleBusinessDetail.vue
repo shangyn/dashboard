@@ -9,14 +9,14 @@
           </el-tag>
           <el-tag effect="plain">{{ periodLabel }}</el-tag>
         </div>
-        <p>合同、梯号、签排发、回款与计划明细（只读）</p>
+        <p>台账合同与梯号明细（只读）</p>
       </div>
       <el-button :loading="loading.export" @click="handleExport">导出 Excel</el-button>
     </div>
 
     <div class="filter-card">
       <div class="filter-item">
-        <span>月份</span>
+        <span>签订月份</span>
         <el-select v-model="filters.month" style="width: 150px" @change="handleFilterChange">
           <el-option :label="yearOptionLabel" value="" />
           <el-option v-for="item in context.months" :key="item" :label="item" :value="item" />
@@ -34,7 +34,7 @@
         <el-input
           v-model="filters.keyword"
           clearable
-          placeholder="合同号 / 梯号 / 项目 / 业务员"
+          placeholder="合同号 / 梯号 / 项目 / 产品型号 / 业务员"
           @keyup.enter="handleSearch"
           @clear="handleSearch"
         />
@@ -101,39 +101,26 @@
       <el-tab-pane label="梯号明细" name="ladders">
         <div class="summary-line">
           <el-tag effect="plain">共 {{ ladderState.summary.total || 0 }} 个梯号</el-tag>
-          <el-tag type="success" effect="plain">已发货 {{ ladderState.summary.shipped || 0 }}</el-tag>
-          <el-tag type="warning" effect="plain">逾期 {{ ladderState.summary.overdue || 0 }}</el-tag>
           <el-tag effect="plain">台数 {{ formatNumber(ladderState.summary.units) }}</el-tag>
         </div>
         <el-table :data="ladderState.rows" border stripe size="small" v-loading="loading.ladders">
-          <el-table-column prop="module_name" label="模块" fixed width="140" />
-          <el-table-column prop="contract_no" label="合同号" width="150" />
+          <el-table-column prop="contract_no" label="合同号" fixed width="150" />
           <el-table-column prop="ladder_no" label="梯号" width="170" />
           <el-table-column prop="project_name" label="项目名称" min-width="190" show-overflow-tooltip />
-          <el-table-column label="国家 / 大区" min-width="150">
-            <template #default="{ row }">{{ row.country || '—' }} / {{ row.region || '—' }}</template>
-          </el-table-column>
-          <el-table-column prop="salesperson" label="业务员" width="100" />
           <el-table-column prop="unit_count" label="台数" align="right" width="80" />
           <el-table-column label="金额(万元)" align="right" width="110">
             <template #default="{ row }">{{ formatAmount(row.amount_wan) }}</template>
           </el-table-column>
-          <el-table-column label="回款比例" align="right" width="100">
-            <template #default="{ row }">{{ row.payment_ratio_label || '—' }}</template>
-          </el-table-column>
-          <el-table-column prop="plan_month" label="计划月份" width="100" />
-          <el-table-column prop="expected_ship_date" label="预计发货" width="110" />
-          <el-table-column prop="actual_ship_date" label="实际发货" width="110" />
-          <el-table-column label="状态" width="120">
-            <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)" size="small" effect="plain">
-                {{ row.status_label }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="commit_label" label="提交" width="90" />
-          <el-table-column prop="booking_status" label="订舱" width="90" />
-          <el-table-column prop="business_remark" label="业务备注" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="schedule_finish_date" label="排产完工日期" width="120" />
+          <el-table-column prop="whole_ship_date" label="整梯发货日期" width="120" />
+          <el-table-column prop="delivery_date" label="组A日期" width="110" />
+          <el-table-column prop="product_type" label="产品型号" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="capacity" label="载重" align="right" width="90" />
+          <el-table-column prop="speed" label="速度" align="right" width="90" />
+          <el-table-column prop="sign_date" label="签订日期" width="110" />
+          <el-table-column prop="product_status" label="产品状态" width="100" />
+          <el-table-column prop="salesperson" label="业务员" width="100" />
+          <el-table-column prop="payment_ratio_label" label="已回款比例" align="right" width="110" />
         </el-table>
         <div class="pager-line">
           <el-pagination
@@ -146,41 +133,6 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="回款明细" name="payments">
-        <div class="summary-line">
-          <el-tag effect="plain">共 {{ paymentState.summary.total || 0 }} 笔</el-tag>
-          <el-tag type="success" effect="plain">人民币 {{ formatAmount(paymentState.summary.amount_wan) }} 万元</el-tag>
-          <el-tag v-if="paymentState.summary.unmatched" type="warning" effect="plain">
-            未匹配 {{ paymentState.summary.unmatched }} 笔
-          </el-tag>
-        </div>
-        <el-table :data="paymentState.rows" border stripe size="small" v-loading="loading.payments">
-          <el-table-column prop="module_name" label="模块" fixed width="140" />
-          <el-table-column prop="contract_no" label="合同号" width="150" />
-          <el-table-column prop="ladder_no" label="梯号" width="170" />
-          <el-table-column prop="project_name" label="项目名称" min-width="190" show-overflow-tooltip />
-          <el-table-column prop="payment_date" label="回款日期" width="110" />
-          <el-table-column label="原币金额" align="right" width="120">
-            <template #default="{ row }">{{ formatNumber(row.payment_amount_orig) }}</template>
-          </el-table-column>
-          <el-table-column prop="currency" label="币种" width="80" />
-          <el-table-column label="人民币(万元)" align="right" width="130">
-            <template #default="{ row }">{{ formatAmount(row.payment_amount_wan) }}</template>
-          </el-table-column>
-          <el-table-column prop="node_type" label="节点" width="120" />
-          <el-table-column prop="payment_method" label="付款方式" width="120" />
-          <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
-        </el-table>
-        <div class="pager-line">
-          <el-pagination
-            v-model:current-page="paymentState.page"
-            :page-size="paymentState.pageSize"
-            :total="paymentState.summary.total || 0"
-            layout="total, prev, pager, next"
-            @current-change="loadPayments"
-          />
-        </div>
-      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -193,22 +145,19 @@ import {
   getContext,
   getLadders,
   getOverview,
-  getPayments,
 } from '../api/moduleBusinessDetail'
 
 const context = reactive({
   modules: [],
   months: [],
-  default_month: '',
   scoped: true,
   year: 2026,
 })
 const filters = reactive({ month: '', module: '', keyword: '' })
 const activeTab = ref('overview')
 const overview = ref(null)
-const loading = reactive({ overview: false, ladders: false, payments: false, export: false })
+const loading = reactive({ overview: false, ladders: false, export: false })
 const ladderState = reactive({ rows: [], summary: {}, page: 1, pageSize: 20 })
-const paymentState = reactive({ rows: [], summary: {}, page: 1, pageSize: 20 })
 
 const yearOptionLabel = computed(() => `${context.year}年度`)
 const periodLabel = computed(() => filters.month || yearOptionLabel.value)
@@ -236,23 +185,14 @@ function formatRatio(value) {
   return `${((Number(value || 0)) * 100).toFixed(2)}%`
 }
 
-function statusTagType(status) {
-  if (status === 'shipped') return 'success'
-  if (status === 'overdue') return 'danger'
-  if (status === 'removed') return 'info'
-  if (status === 'committed') return 'warning'
-  return ''
-}
-
 async function loadContext() {
   const response = await getContext()
   const data = response.data || {}
   context.modules = data.modules || []
   context.months = data.months || []
-  context.default_month = data.default_month || ''
   context.scoped = Boolean(data.scoped)
   context.year = data.year || context.year
-  filters.month = context.default_month
+  filters.month = ''
   if (context.modules.length === 1) filters.module = context.modules[0]
 }
 
@@ -289,40 +229,18 @@ async function loadLadders() {
   }
 }
 
-async function loadPayments() {
-  loading.payments = true
-  try {
-    const response = await getPayments({
-      month: filters.month,
-      year: context.year,
-      module: filters.module,
-      q: filters.keyword,
-      page: paymentState.page,
-      page_size: paymentState.pageSize,
-    })
-    const data = response.data || {}
-    paymentState.rows = data.rows || []
-    paymentState.summary = data.summary || {}
-  } finally {
-    loading.payments = false
-  }
-}
-
 async function loadAll() {
-  await Promise.all([loadOverview(), loadLadders(), loadPayments()])
+  await Promise.all([loadOverview(), loadLadders()])
 }
 
 function handleFilterChange() {
   ladderState.page = 1
-  paymentState.page = 1
   loadAll()
 }
 
 function handleSearch() {
   ladderState.page = 1
-  paymentState.page = 1
   loadLadders()
-  loadPayments()
 }
 
 async function handleExport() {

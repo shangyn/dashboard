@@ -1,4 +1,4 @@
-"""模块经营明细 — 只读汇总、梯号明细与回款明细。"""
+"""模块经营明细 — 只读汇总与台账梯号明细。"""
 import datetime as dt
 import io
 from collections import defaultdict
@@ -11,7 +11,6 @@ from dashboards.contract_completion.services import AZT_MODULE_MAP, get_annual_c
 from monthly_forecast.models import UserScope
 from monthly_forecast import services as mf_svc
 from ship_tracking.excel_reader import canonical_ladder, normalize_text
-from ship_tracking.models import TrackingItem
 
 PERMISSION = 'module_business_detail'
 BUSINESS_ROLE = '单月签排发填报'
@@ -335,175 +334,47 @@ def get_overview(user, month=None, module=None, year=None):
     }
 
 
-def _row_key(contract_no, ladder_no):
-    key = canonical_ladder(ladder_no or '')
-    return key or ('%s|%s' % (contract_no or '', ladder_no or ''))
-
-
-def _tracking_status(item):
-    if item.actual_ship_date:
-        return 'shipped', '已发货'
-    if item.plan_status == 'removed':
-        return 'removed', '已移除'
-    if item.expected_ship_date and item.expected_ship_date < dt.date.today():
-        return 'overdue', '已逾期'
-    if item.expected_ship_date or item.commit_status == 'committed':
-        return 'committed', '已提交待发货'
-    return 'pending', '未提交待发货'
-
-
-def _commit_label(value):
-    return {
-        'committed': '已提交',
-        'withdrawn': '已撤回',
-    }.get(value or '', '未提交')
-
-
 def _build_ladder_rows(modules):
     module_set = set(modules)
     module_map = mf_svc.load_module_map()
     contracts = _ledger_contracts()
-    rows_by_key = {}
+    rows = []
 
     for contract in contracts:
         module = mf_svc.resolve_module(contract, module_map)
         if module not in module_set:
             continue
-        key = _row_key(contract.contract_no, contract.ladder_no)
-        if key in rows_by_key:
-            continue
         ratio = _ratio(contract.payment_ratio)
-        rows_by_key[key] = {
-            'ladder_key': key,
+        rows.append({
             'contract_no': contract.contract_no or '',
             'ladder_no': contract.ladder_no or '',
             'module_name': module,
             'project_name': contract.project_name or '',
-            'country': contract.country or '',
-            'region': contract.mapped_region or contract.business_region or '',
-            'salesperson': contract.salesperson or '',
-            'currency': contract.currency or '',
             'unit_count': contract.unit_count or 0,
+            'amount_rmb': round(contract.contract_amount_rmb or 0, 2),
             'amount_wan': round((contract.contract_amount_rmb or 0) / 10000.0, 2),
+            'schedule_finish_date': _iso(contract.schedule_finish_date),
+            'whole_ship_date': _iso(contract.whole_ship_date),
+            'delivery_date': _iso(contract.delivery_date),
+            'product_type': contract.product_type or '',
+            'capacity': contract.capacity or 0,
+            'speed': contract.speed or 0,
+            'sign_date': _iso(contract.sign_date),
+            'product_status': contract.product_status or '',
+            'salesperson': contract.salesperson or '',
             'payment_ratio': ratio,
             'payment_ratio_label': _ratio_label(ratio),
-            'sign_date': _iso(contract.sign_date),
-            'schedule_date': _iso(contract.schedule_date),
-            'schedule_finish_date': _iso(contract.schedule_finish_date),
-            'delivery_date': _iso(contract.delivery_date),
-            'whole_ship_date': _iso(contract.whole_ship_date),
-            'plan_month': '',
-            'expected_ship_date': '',
-            'actual_ship_date': _iso(contract.delivery_date),
-            'commit_status': 'unplanned',
-            'commit_label': '未提交',
-            'booking_status': '',
-            'business_remark': '',
-            'plan_status': '',
-            'status': 'shipped' if contract.delivery_date else 'ledger',
-            'status_label': '已发货' if contract.delivery_date else '台账明细',
-            'data_source': '台账',
-        }
-
-    items = TrackingItem.query.all()
-    for item in items:
-        key = _row_key(item.contract_no, item.ladder_no or item.ladder_key)
-        row = rows_by_key.get(key)
-        if row is None:
-            if item.module_name not in module_set:
-                continue
-            ratio = _ratio(item.payment_ratio)
-            status, status_label = _tracking_status(item)
-            row = {
-                'ladder_key': item.ladder_key or key,
-                'contract_no': item.contract_no or '',
-                'ladder_no': item.ladder_no or '',
-                'module_name': item.module_name or '',
-                'project_name': item.project_name or '',
-                'country': '',
-                'region': item.business_region or '',
-                'salesperson': item.salesperson or '',
-                'currency': '',
-                'unit_count': item.unit_count or 0,
-                'amount_wan': round((item.amount_rmb or 0) / 10000.0, 2),
-                'payment_ratio': ratio,
-                'payment_ratio_label': _ratio_label(ratio),
-                'sign_date': '',
-                'schedule_date': '',
-                'schedule_finish_date': _iso(item.schedule_finish_date),
-                'delivery_date': '',
-                'whole_ship_date': _iso(item.whole_ship_date),
-                'plan_month': item.plan_month or '',
-                'expected_ship_date': _iso(item.expected_ship_date),
-                'actual_ship_date': _iso(item.actual_ship_date),
-                'commit_status': item.commit_status or 'unplanned',
-                'commit_label': _commit_label(item.commit_status),
-                'booking_status': item.booking_status or '',
-                'business_remark': item.business_remark or '',
-                'plan_status': item.plan_status or '',
-                'status': status,
-                'status_label': status_label,
-                'data_source': '计划',
-            }
-            rows_by_key[key] = row
-            continue
-
-        ratio = _ratio(item.payment_ratio)
-        if ratio is not None:
-            row['payment_ratio'] = ratio
-            row['payment_ratio_label'] = _ratio_label(ratio)
-        status, status_label = _tracking_status(item)
-        row.update({
-            'plan_month': item.plan_month or '',
-            'expected_ship_date': _iso(item.expected_ship_date),
-            'actual_ship_date': _iso(item.actual_ship_date) or row.get('actual_ship_date', ''),
-            'commit_status': item.commit_status or 'unplanned',
-            'commit_label': _commit_label(item.commit_status),
-            'booking_status': item.booking_status or '',
-            'business_remark': item.business_remark or '',
-            'plan_status': item.plan_status or '',
-            'status': status,
-            'status_label': status_label,
-            'data_source': '台账+计划',
         })
 
-    rows = [
-        row for row in rows_by_key.values()
-        if row.get('plan_status') != 'removed' or row.get('actual_ship_date')
-    ]
-    rows.sort(key=lambda row: (
-        row.get('module_name') or '',
-        row.get('expected_ship_date') or '9999-12-31',
-        row.get('ladder_no') or '',
-    ))
     return rows
 
 
 def _matches_month(row, month):
-    if not month:
-        return True
-    for key in (
-        'plan_month', 'expected_ship_date', 'actual_ship_date', 'delivery_date',
-        'schedule_date', 'sign_date', 'schedule_finish_date', 'whole_ship_date',
-    ):
-        value = row.get(key) or ''
-        if value[:7] == month:
-            return True
-    return False
+    return (row.get('sign_date') or '')[:7] == month
 
 
 def _matches_year(row, year):
-    if not year:
-        return True
-    prefix = str(year)
-    for key in (
-        'plan_month', 'expected_ship_date', 'actual_ship_date', 'delivery_date',
-        'schedule_date', 'sign_date', 'schedule_finish_date', 'whole_ship_date',
-    ):
-        value = row.get(key) or ''
-        if value[:4] == prefix:
-            return True
-    return False
+    return (row.get('sign_date') or '')[:4] == str(year)
 
 
 def _filter_ladder_rows(rows, month='', year=None, module='', keyword=''):
@@ -522,8 +393,8 @@ def _filter_ladder_rows(rows, month='', year=None, module='', keyword=''):
             text = ' '.join([
                 row.get('contract_no') or '', row.get('ladder_no') or '',
                 row.get('project_name') or '', row.get('module_name') or '',
-                row.get('country') or '', row.get('salesperson') or '',
-                row.get('business_remark') or '',
+                row.get('product_type') or '', row.get('product_status') or '',
+                row.get('salesperson') or '',
             ]).upper()
             if keyword not in text:
                 continue
@@ -555,11 +426,6 @@ def get_ladders(user, month=None, year=None, module=None, keyword='', page=1, pa
     summary = {
         'total': len(rows),
         'units': round(sum(row.get('unit_count') or 0 for row in rows), 2),
-        'shipped': sum(1 for row in rows if row.get('actual_ship_date')),
-        'shipped_units': round(sum(
-            row.get('unit_count') or 0 for row in rows if row.get('actual_ship_date')
-        ), 2),
-        'overdue': sum(1 for row in rows if row.get('status') == 'overdue'),
     }
     page_rows, page, page_size = _paginate(rows, page, page_size)
     return {
@@ -657,11 +523,6 @@ def export_workbook(user, month=None, module=None, keyword='', year=None):
         user, month=month, year=overview.get('year'), module=module,
         keyword=keyword, page_size=0,
     )
-    payments = get_payments(
-        user, month=month, year=overview.get('year'), module=module,
-        keyword=keyword, page_size=0,
-    )
-
     workbook = Workbook()
     header_fill = PatternFill('solid', fgColor='DCE8F8')
     header_font = Font(bold=True, color='17365D')
@@ -703,38 +564,18 @@ def export_workbook(user, month=None, module=None, keyword='', year=None):
 
     sheet = workbook.create_sheet('梯号明细')
     headers = [
-        '模块', '合同号', '梯号', '项目名称', '国家', '大区', '业务员', '台数', '金额(万元)',
-        '币种', '回款比例', '签订日期', '排产日期', '排产完工日期', '整梯发货日期',
-        '计划月份', '预计发货日期', '实际发货日期', '提交状态', '订舱状态', '业务备注',
+        '合同号', '梯号', '项目名称', '台数', '金额(万元)', '排产完工日期',
+        '整梯发货日期', '组A日期', '产品型号', '载重', '速度', '签订日期',
+        '产品状态', '业务员', '已回款比例',
     ]
     sheet.append(headers)
     for row in ladders['rows']:
         sheet.append([
-            row['module_name'], row['contract_no'], row['ladder_no'], row['project_name'],
-            row['country'], row['region'], row['salesperson'], row['unit_count'],
-            row['amount_wan'], row['currency'], row['payment_ratio_label'], row['sign_date'],
-            row['schedule_date'], row['schedule_finish_date'], row['whole_ship_date'],
-            row['plan_month'], row['expected_ship_date'], row['actual_ship_date'],
-            row['commit_label'], row['booking_status'], row['business_remark'],
-        ])
-    for cell in sheet[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = center
-    sheet.freeze_panes = 'A2'
-
-    sheet = workbook.create_sheet('回款明细')
-    headers = [
-        '模块', '合同号', '梯号', '项目名称', '回款日期', '原币金额', '币种',
-        '人民币金额', '折万元', '节点', '付款方式', '大区', '备注',
-    ]
-    sheet.append(headers)
-    for row in payments['rows']:
-        sheet.append([
-            row['module_name'], row['contract_no'], row['ladder_no'], row['project_name'],
-            row['payment_date'], row['payment_amount_orig'], row['currency'],
-            row['payment_amount_rmb'], row['payment_amount_wan'], row['node_type'],
-            row['payment_method'], row['region'], row['remark'],
+            row['contract_no'], row['ladder_no'], row['project_name'], row['unit_count'],
+            row['amount_wan'], row['schedule_finish_date'], row['whole_ship_date'],
+            row['delivery_date'], row['product_type'], row['capacity'], row['speed'],
+            row['sign_date'], row['product_status'], row['salesperson'],
+            row['payment_ratio_label'],
         ])
     for cell in sheet[1]:
         cell.fill = header_fill

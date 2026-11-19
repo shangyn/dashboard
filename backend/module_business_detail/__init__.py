@@ -3,7 +3,7 @@ from models import db
 
 PERMISSION = 'module_business_detail'
 MODULE_NAME = '模块经营明细'
-MODULE_DESC = '按模块查看合同、梯号、签排发、回款与计划明细（只读）'
+MODULE_DESC = '按模块查看台账合同与梯号明细（只读）'
 MODULE_URL = '/module-business-detail'
 MODULE_ICON = 'DataLine'
 MODULE_SORT = 12
@@ -38,7 +38,7 @@ def _ensure_module():
     else:
         if not module.name:
             module.name = MODULE_NAME
-        if not module.description:
+        if module.description in ('', '按模块查看合同、梯号、签排发、回款与计划明细（只读）'):
             module.description = MODULE_DESC
         if not module.url:
             module.url = MODULE_URL

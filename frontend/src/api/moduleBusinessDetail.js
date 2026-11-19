@@ -12,10 +12,6 @@ export function getLadders(params) {
   return request.get('/api/module-business-detail/ladders', { params })
 }
 
-export function getPayments(params) {
-  return request.get('/api/module-business-detail/payments', { params })
-}
-
 export function downloadExport(params, filename) {
   const token = localStorage.getItem('token')
   const query = new URLSearchParams()
