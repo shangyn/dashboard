@@ -7,7 +7,7 @@ from sqlalchemy import or_
 
 from dashboards.contract_completion.constants import MODULE_REGION, REGION_DISPLAY
 from dashboards.contract_completion.models import LedgerContract, PaymentCollection
-from dashboards.contract_completion.services import get_annual_completion
+from dashboards.contract_completion.services import AZT_MODULE_MAP, get_annual_completion
 from monthly_forecast.models import UserScope
 from monthly_forecast import services as mf_svc
 from ship_tracking.excel_reader import canonical_ladder, normalize_text
@@ -69,6 +69,16 @@ def _month_range(month):
 
 def _year_range(year):
     return dt.date(int(year), 1, 1), dt.date(int(year) + 1, 1, 1)
+
+
+def _year_value(value):
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        raise ValueError('年份格式不正确，应为 YYYY')
+    if not 2000 <= year <= 2100:
+        raise ValueError('年份格式不正确，应为 YYYY')
+    return year
 
 
 def _empty_metrics(keys):
@@ -137,14 +147,36 @@ def _module_maps(contracts, module_map):
     return contract_modules, ladder_modules, contract_detail
 
 
-def _payment_module(payment, ladder_modules, contract_modules):
-    key = canonical_ladder(payment.ladder_no or '')
-    if key and ladder_modules.get(key):
-        return ladder_modules[key]
-    modules = contract_modules.get(payment.contract_no or '') or set()
-    if len(modules) == 1:
-        return next(iter(modules))
-    return ''
+def _annual_payment_contract_map(module_map):
+    """回款模块归属与两年对比保持一致：合同号 → 模块。"""
+    contract_modules = {}
+    contracts = LedgerContract.query.filter(LedgerContract.source == 'ledger').all()
+    for contract in contracts:
+        if not contract.contract_no or not contract.country:
+            continue
+        if contract.product_type and '改造' in str(contract.product_type):
+            contract_modules[contract.contract_no] = '改造'
+        else:
+            module = module_map.get(contract.country)
+            if module:
+                contract_modules[contract.contract_no] = module
+    contract_modules.update(AZT_MODULE_MAP)
+    return contract_modules
+
+
+def _annual_payment_query(start, end):
+    return PaymentCollection.query.filter(
+        PaymentCollection.payment_date >= start,
+        PaymentCollection.payment_date < end,
+        ~PaymentCollection.node_type.in_(['抵佣金', '手续费']),
+        PaymentCollection.agent_name != '新加坡分公司(关联方)',
+        ~PaymentCollection.contract_no.like('DHN%'),
+        ~PaymentCollection.contract_no.like('YBN%'),
+    )
+
+
+def _payment_module(payment, annual_contract_modules):
+    return annual_contract_modules.get(payment.contract_no or '') or ''
 
 
 def _monthly_actual(modules, month):
@@ -152,7 +184,7 @@ def _monthly_actual(modules, month):
     module_set = set(modules)
     module_map = mf_svc.load_module_map()
     contracts = _ledger_contracts()
-    contract_modules, ladder_modules, contract_detail = _module_maps(contracts, module_map)
+    annual_contract_modules = _annual_payment_contract_map(module_map)
     result = {module: _empty_metrics(MONTH_METRICS) for module in modules}
 
     for contract in contracts:
@@ -170,12 +202,9 @@ def _monthly_actual(modules, month):
             metrics['ship_units'] += contract.unit_count or 0
             metrics['ship_amount'] += contract.contract_amount_rmb or 0
 
-    payments = PaymentCollection.query.filter(
-        PaymentCollection.payment_date >= start,
-        PaymentCollection.payment_date < end,
-    ).all()
+    payments = _annual_payment_query(start, end).all()
     for payment in payments:
-        module = _payment_module(payment, ladder_modules, contract_modules)
+        module = _payment_module(payment, annual_contract_modules)
         if module in module_set:
             result[module]['payment_amount'] += payment.payment_amount_rmb or 0
 
@@ -235,20 +264,26 @@ def get_context(user):
     }
 
 
-def get_overview(user, month=None, module=None):
-    month = normalize_text(month) or mf_svc.default_month()
+def get_overview(user, month=None, module=None, year=None):
+    month = normalize_text(month)
+    year = _year_value(year or dt.date.today().year)
     modules, scoped = _resolve_modules(user, module)
     annual_data = get_annual_completion()
+    annual_year = _year_value(annual_data.get('year') or year)
     annual_rows = {
         row.get('module'): row
         for row in annual_data.get('rows', [])
         if row.get('type') in ('data', 'trade') and row.get('module') in set(modules)
     }
-    plan_rows = {
-        row.get('module_name'): row
-        for row in mf_svc.get_summary(month, modules).get('rows', [])
-    }
-    actual_rows = _monthly_actual(modules, month)
+    if month:
+        plan_rows = {
+            row.get('module_name'): row
+            for row in mf_svc.get_summary(month, modules).get('rows', [])
+        }
+        actual_rows = _monthly_actual(modules, month)
+    else:
+        plan_rows = {}
+        actual_rows = {}
 
     rows = []
     for module_name in modules:
@@ -285,7 +320,9 @@ def get_overview(user, month=None, module=None):
     }
     return {
         'month': month,
-        'year': annual_data.get('year') or dt.date.today().year,
+        'year': annual_year,
+        'mode': 'month' if month else 'year',
+        'period_label': month or ('%s年度' % annual_year),
         'data_date': annual_data.get('data_date') or '',
         'scoped': scoped,
         'modules': rows,
@@ -455,7 +492,21 @@ def _matches_month(row, month):
     return False
 
 
-def _filter_ladder_rows(rows, month='', module='', keyword=''):
+def _matches_year(row, year):
+    if not year:
+        return True
+    prefix = str(year)
+    for key in (
+        'plan_month', 'expected_ship_date', 'actual_ship_date', 'delivery_date',
+        'schedule_date', 'sign_date', 'schedule_finish_date', 'whole_ship_date',
+    ):
+        value = row.get(key) or ''
+        if value[:4] == prefix:
+            return True
+    return False
+
+
+def _filter_ladder_rows(rows, month='', year=None, module='', keyword=''):
     month = normalize_text(month)
     module = normalize_text(module)
     keyword = normalize_text(keyword).upper()
@@ -463,7 +514,9 @@ def _filter_ladder_rows(rows, month='', module='', keyword=''):
     for row in rows:
         if module and row.get('module_name') != module:
             continue
-        if not _matches_month(row, month):
+        if month and not _matches_month(row, month):
+            continue
+        if not month and not _matches_year(row, year):
             continue
         if keyword:
             text = ' '.join([
@@ -488,11 +541,14 @@ def _paginate(rows, page, page_size):
     return rows[start:start + size], page, size
 
 
-def get_ladders(user, month=None, module=None, keyword='', page=1, page_size=50):
+def get_ladders(user, month=None, year=None, module=None, keyword='', page=1, page_size=50):
+    month = normalize_text(month)
+    year = _year_value(year or dt.date.today().year)
     modules, scoped = _resolve_modules(user, module)
     rows = _filter_ladder_rows(
         _build_ladder_rows(modules),
         month=month,
+        year=None if month else year,
         module=module,
         keyword=keyword,
     )
@@ -520,20 +576,18 @@ def _build_payment_rows(user, month=None, year=None, module=None, include_unmatc
     module_set = set(modules)
     module_map = mf_svc.load_module_map()
     contracts = _ledger_contracts()
-    contract_modules, ladder_modules, contract_detail = _module_maps(contracts, module_map)
+    _, _, contract_detail = _module_maps(contracts, module_map)
+    annual_contract_modules = _annual_payment_contract_map(module_map)
 
     if month:
         start, end = _month_range(month)
     else:
         start, end = _year_range(year or dt.date.today().year)
-    payments = PaymentCollection.query.filter(
-        PaymentCollection.payment_date >= start,
-        PaymentCollection.payment_date < end,
-    ).all()
+    payments = _annual_payment_query(start, end).all()
 
     result = []
     for payment in payments:
-        owner = _payment_module(payment, ladder_modules, contract_modules)
+        owner = _payment_module(payment, annual_contract_modules)
         if owner:
             if owner not in module_set:
                 continue
@@ -594,12 +648,15 @@ def get_payments(user, month=None, year=None, module=None, keyword='', page=1, p
     }
 
 
-def export_workbook(user, month=None, module=None, keyword=''):
+def export_workbook(user, month=None, module=None, keyword='', year=None):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    overview = get_overview(user, month=month, module=module)
-    ladders = get_ladders(user, month='', module=module, keyword=keyword, page_size=0)
+    overview = get_overview(user, month=month, module=module, year=year)
+    ladders = get_ladders(
+        user, month=month, year=overview.get('year'), module=module,
+        keyword=keyword, page_size=0,
+    )
     payments = get_payments(
         user, month=month, year=overview.get('year'), module=module,
         keyword=keyword, page_size=0,
@@ -613,25 +670,31 @@ def export_workbook(user, month=None, module=None, keyword=''):
     sheet = workbook.active
     sheet.title = '经营概览'
     headers = [
-        '模块', '大区', '年签单额', '年签单目标', '年签单完成率',
+        '模块', '大区', '年签单额', '年签单目标',
         '年排产额', '年发货额', '年回款额',
-        '本月计划签单额', '本月计划排产额', '本月计划发货额', '本月计划回款额',
-        '本月实际签单额', '本月实际排产额', '本月实际发货额', '本月实际回款额',
     ]
+    if month:
+        headers.extend([
+            '本月计划签单额', '本月计划排产额', '本月计划发货额', '本月计划回款额',
+            '本月实际签单额', '本月实际排产额', '本月实际发货额', '本月实际回款额',
+        ])
     sheet.append(headers)
     for row in overview['modules']:
         annual = row['annual']
         plan = row['month_plan']
         actual = row['month_actual']
-        sheet.append([
+        values = [
             row['module_name'], row['region'],
             annual['sign_amount']['actual'], annual['sign_amount']['target'],
-            annual['sign_amount']['ratio'],
             annual['schedule_amount']['actual'], annual['ship_amount']['actual'],
             annual['payment_amount']['actual'],
-            plan['sign_amount'], plan['prod_amount'], plan['ship_amount'], plan['payment_amount'],
-            actual['sign_amount'], actual['prod_amount'], actual['ship_amount'], actual['payment_amount'],
-        ])
+        ]
+        if month:
+            values.extend([
+                plan['sign_amount'], plan['prod_amount'], plan['ship_amount'], plan['payment_amount'],
+                actual['sign_amount'], actual['prod_amount'], actual['ship_amount'], actual['payment_amount'],
+            ])
+        sheet.append(values)
     for cell in sheet[1]:
         cell.fill = header_fill
         cell.font = header_font

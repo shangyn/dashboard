@@ -7,6 +7,7 @@
           <el-tag :type="context.scoped ? 'info' : 'success'" effect="plain">
             {{ context.scoped ? '仅本人模块' : '全部模块' }}
           </el-tag>
+          <el-tag effect="plain">{{ periodLabel }}</el-tag>
         </div>
         <p>合同、梯号、签排发、回款与计划明细（只读）</p>
       </div>
@@ -17,7 +18,7 @@
       <div class="filter-item">
         <span>月份</span>
         <el-select v-model="filters.month" style="width: 150px" @change="handleFilterChange">
-          <el-option label="全部月份" value="" />
+          <el-option :label="yearOptionLabel" value="" />
           <el-option v-for="item in context.months" :key="item" :label="item" :value="item" />
         </el-select>
       </div>
@@ -48,7 +49,7 @@
         <div class="stat-value">{{ formatAmount(item.metric.actual) }}<span>万元</span></div>
         <div class="stat-foot">
           目标 {{ formatAmount(item.metric.target) }} 万元
-          <b>{{ formatRatio(item.metric.ratio) }}</b>
+          <b v-if="item.showRatio !== false">{{ formatRatio(item.metric.ratio) }}</b>
         </div>
       </div>
     </div>
@@ -70,31 +71,28 @@
           <el-table-column label="年度回款额" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.annual.payment_amount.actual) }}</template>
           </el-table-column>
-          <el-table-column label="年签单完成率" align="right" width="120">
-            <template #default="{ row }">{{ formatRatio(row.annual.sign_amount.ratio) }}</template>
-          </el-table-column>
-          <el-table-column label="本月计划签单" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月计划签单" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_plan.sign_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月计划排产" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月计划排产" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_plan.prod_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月计划发货" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月计划发货" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_plan.ship_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月计划回款" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月计划回款" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_plan.payment_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月实际签单" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月实际签单" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_actual.sign_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月实际排产" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月实际排产" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_actual.prod_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月实际发货" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月实际发货" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_actual.ship_amount) }}</template>
           </el-table-column>
-          <el-table-column label="本月实际回款" align="right" width="130">
+          <el-table-column v-if="filters.month" label="本月实际回款" align="right" width="130">
             <template #default="{ row }">{{ formatAmount(row.month_actual.payment_amount) }}</template>
           </el-table-column>
         </el-table>
@@ -212,10 +210,13 @@ const loading = reactive({ overview: false, ladders: false, payments: false, exp
 const ladderState = reactive({ rows: [], summary: {}, page: 1, pageSize: 20 })
 const paymentState = reactive({ rows: [], summary: {}, page: 1, pageSize: 20 })
 
+const yearOptionLabel = computed(() => `${context.year}年度`)
+const periodLabel = computed(() => filters.month || yearOptionLabel.value)
+
 const statCards = computed(() => {
   const annual = overview.value?.totals?.annual || {}
   return [
-    { key: 'sign_amount', label: '年度签单额', metric: annual.sign_amount || {} },
+    { key: 'sign_amount', label: '年度签单额', metric: annual.sign_amount || {}, showRatio: false },
     { key: 'schedule_amount', label: '年度排产额', metric: annual.schedule_amount || {} },
     { key: 'ship_amount', label: '年度发货额', metric: annual.ship_amount || {} },
     { key: 'payment_amount', label: '年度回款额', metric: annual.payment_amount || {} },
@@ -259,7 +260,8 @@ async function loadOverview() {
   loading.overview = true
   try {
     const response = await getOverview({
-      month: filters.month || context.default_month,
+      month: filters.month,
+      year: context.year,
       module: filters.module,
     })
     overview.value = response.data
@@ -273,6 +275,7 @@ async function loadLadders() {
   try {
     const response = await getLadders({
       month: filters.month,
+      year: context.year,
       module: filters.module,
       q: filters.keyword,
       page: ladderState.page,
@@ -326,8 +329,8 @@ async function handleExport() {
   loading.export = true
   try {
     await downloadExport(
-      { month: filters.month || context.default_month, module: filters.module, q: filters.keyword },
-      `模块经营明细_${filters.month || context.default_month || '全部'}.xlsx`,
+      { month: filters.month, year: context.year, module: filters.module, q: filters.keyword },
+      `模块经营明细_${periodLabel.value}.xlsx`,
     )
     ElMessage.success('导出已开始')
   } finally {

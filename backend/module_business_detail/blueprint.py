@@ -1,3 +1,5 @@
+import datetime as dt
+
 from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_current_user, jwt_required
 
@@ -47,6 +49,7 @@ def api_overview():
     try:
         return _ok(svc.get_overview(
             get_current_user(), month=args['month'], module=args['module'],
+            year=args['year'] or None,
         ))
     except PermissionError as exc:
         return _fail(str(exc), 403)
@@ -65,6 +68,7 @@ def api_ladders():
         return _ok(svc.get_ladders(
             get_current_user(),
             month=args['month'],
+            year=args['year'] or None,
             module=args['module'],
             keyword=args['keyword'],
             page=args['page'],
@@ -112,8 +116,10 @@ def api_export():
             month=args['month'],
             module=args['module'],
             keyword=args['keyword'],
+            year=args['year'] or None,
         )
-        filename = '模块经营明细_%s.xlsx' % (args['month'] or '全部')
+        period_label = args['month'] or ('%s年度' % (args['year'] or dt.date.today().year))
+        filename = '模块经营明细_%s.xlsx' % period_label
         return send_file(
             output,
             as_attachment=True,
