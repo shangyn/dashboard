@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_current_user, jwt_required
 
 from business_assistant import exporting
+from business_assistant import model_client
 from business_assistant import services
 
 
@@ -82,9 +83,15 @@ def api_chat():
     payload = request.get_json(silent=True) or {}
     question = payload.get('question') or ''
     page_context = payload.get('page_context') or {}
+    conversation_id = payload.get('conversation_id') or ''
     user = get_current_user()
     try:
-        result = services.answer(user, question, page_context=page_context)
+        result = services.answer(
+            user,
+            question,
+            page_context=page_context,
+            conversation_id=conversation_id,
+        )
         logger.info(
             'assistant query user=%s trace=%s action=%s',
             user.id,
@@ -101,6 +108,62 @@ def api_chat():
     except Exception as exc:
         logger.exception('经营助手查询失败')
         return _fail('查询失败: %s' % exc, 500)
+
+
+@assistant_bp.route('/api/business-assistant/admin/query-log', methods=['GET'])
+@jwt_required()
+def api_admin_query_log():
+    user = _admin_user()
+    if user is None:
+        return _fail('仅管理员可以查看经营助手查询日志', 403)
+    status = (request.args.get('status') or '').strip() or None
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    limit = max(1, min(limit, 200))
+    try:
+        return _ok(services.list_query_logs(status=status, limit=limit))
+    except Exception as exc:
+        logger.exception('读取经营助手查询日志失败')
+        return _fail('读取查询日志失败: %s' % exc, 500)
+
+
+@assistant_bp.route('/api/business-assistant/admin/model-status', methods=['GET'])
+@jwt_required()
+def api_admin_model_status():
+    user = _admin_user()
+    if user is None:
+        return _fail('仅管理员可以查看经营助手模型状态', 403)
+    try:
+        status = model_client.connection_status()
+        status['assistant_enabled'] = services.enabled()
+        return _ok(status)
+    except Exception as exc:
+        logger.exception('读取经营助手模型状态失败')
+        return _fail('读取模型状态失败: %s' % exc, 500)
+
+
+@assistant_bp.route('/api/business-assistant/admin/model-test', methods=['POST'])
+@jwt_required()
+def api_admin_model_test():
+    user = _admin_user()
+    if user is None:
+        return _fail('仅管理员可以测试经营助手模型连接', 403)
+    try:
+        result = model_client.test_connection()
+        logger.info(
+            'assistant model test user=%s success=%s reachable=%s action=%s latency_ms=%s',
+            user.id,
+            result.get('success'),
+            result.get('reachable'),
+            result.get('action'),
+            result.get('latency_ms'),
+        )
+        return _ok(result)
+    except Exception as exc:
+        logger.exception('测试经营助手模型连接失败')
+        return _fail('测试模型连接失败: %s' % exc, 500)
 
 
 @assistant_bp.route('/api/business-assistant/export', methods=['GET'])

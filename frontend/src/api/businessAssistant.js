@@ -16,6 +16,18 @@ export function updateAssistantAdminSetting(enabled) {
   return request.put('/api/business-assistant/admin/setting', { enabled })
 }
 
+export function getAssistantModelStatus() {
+  return request.get('/api/business-assistant/admin/model-status')
+}
+
+export function testAssistantModelConnection() {
+  return request.post('/api/business-assistant/admin/model-test')
+}
+
+export function getAssistantQueryLogs(params) {
+  return request.get('/api/business-assistant/admin/query-log', { params })
+}
+
 export function downloadAssistantExport(token, filename) {
   const authToken = localStorage.getItem('token')
   const query = new URLSearchParams({ token })

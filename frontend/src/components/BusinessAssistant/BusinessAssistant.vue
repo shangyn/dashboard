@@ -37,7 +37,7 @@
             <div class="welcome-meta">
               {{ context.scope.module_count ? `可见 ${context.scope.module_count} 个模块` : '暂无模块数据权限' }}
               · 数据截止 {{ context.data_date }}
-              · {{ context.model_enabled ? '模型意图识别已启用' : '固定查询模式' }}
+              · {{ context.model_enabled ? (context.model_answer_enabled ? '模型意图识别与答复整理已启用' : '模型意图识别已启用') : '固定查询模式' }}
             </div>
             <div class="assistant-chips">
               <button v-for="item in context.default_questions" :key="item" type="button" class="assistant-chip" @click="send(item)">
@@ -78,6 +78,50 @@
                   <template #default="{ row }">{{ formatCell(cellValue(row, column.key)) }}</template>
                 </el-table-column>
               </el-table>
+
+              <div v-if="message.sections?.length" class="assistant-sections">
+                <section v-for="(section, sectionIndex) in message.sections" :key="sectionIndex" class="assistant-section">
+                  <div class="assistant-section-head">
+                    <span>{{ section.title || section.action }}</span>
+                    <el-tag v-if="section.status && section.status !== 'success'" size="small" type="warning" effect="plain">
+                      {{ sectionStatusLabel(section) }}
+                    </el-tag>
+                  </div>
+                  <div v-if="section.message" class="assistant-text assistant-section-text">{{ section.message }}</div>
+                  <div v-if="section.data_date || section.period" class="assistant-meta">
+                    <span v-if="section.period">{{ section.period }}</span>
+                    <span v-if="section.data_date">截至 {{ section.data_date }}</span>
+                  </div>
+                  <el-table
+                    v-if="section.columns?.length && section.rows?.length"
+                    :data="section.rows"
+                    size="small"
+                    border
+                    stripe
+                    class="assistant-table"
+                    max-height="260"
+                  >
+                    <el-table-column
+                      v-for="column in section.columns"
+                      :key="column.key"
+                      :label="column.label"
+                      min-width="100"
+                      show-overflow-tooltip
+                    >
+                      <template #default="{ row }">{{ formatCell(cellValue(row, column.key)) }}</template>
+                    </el-table-column>
+                  </el-table>
+                  <div v-if="section.notes?.length" class="assistant-notes">
+                    <div v-for="note in section.notes" :key="note">{{ note }}</div>
+                  </div>
+                  <div v-if="section.export_token" class="assistant-answer-actions">
+                    <el-button type="primary" size="small" plain @click="downloadExport(section)">
+                      <el-icon><Download /></el-icon>
+                      导出 Excel
+                    </el-button>
+                  </div>
+                </section>
+              </div>
 
               <div v-if="message.notes?.length" class="assistant-notes">
                 <div v-for="note in message.notes" :key="note">{{ note }}</div>
@@ -134,6 +178,7 @@ const sending = ref(false)
 const question = ref('')
 const bodyRef = ref(null)
 const messages = ref([])
+const conversationId = ref('')
 let contextRefreshTimer = null
 const context = reactive({
   enabled: false,
@@ -141,6 +186,7 @@ const context = reactive({
   default_questions: [],
   data_date: '',
   model_enabled: false,
+  model_answer_enabled: false,
 })
 
 const pageContext = computed(() => ({
@@ -184,8 +230,11 @@ async function send(text) {
     const response = await askBusinessAssistant({
       question: content,
       page_context: pageContext.value,
+      conversation_id: conversationId.value || undefined,
     })
-    Object.assign(answer, response.data || {}, { loading: false })
+    const data = response.data || {}
+    if (data.conversation_id) conversationId.value = data.conversation_id
+    Object.assign(answer, data, { loading: false })
   } catch (error) {
     answer.loading = false
     answer.message = error?.message || '查询失败，请稍后重试。'
@@ -198,6 +247,7 @@ async function send(text) {
 function clearConversation() {
   messages.value = []
   question.value = ''
+  conversationId.value = ''
 }
 
 function cellValue(row, path) {
@@ -212,6 +262,14 @@ function formatCell(value) {
     return value.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
   }
   return value === null || value === undefined || value === '' ? '—' : value
+}
+
+function sectionStatusLabel(section) {
+  if (section.status === 'needs_input') return '需补充'
+  if (section.status === 'forbidden') return '无权限'
+  if (section.status === 'unsupported') return '不支持'
+  if (section.status === 'partial_success') return '部分完成'
+  return '未完成'
 }
 
 async function downloadExport(message) {
@@ -303,6 +361,11 @@ onBeforeUnmount(() => {
 @keyframes assistant-pulse { 50% { opacity: 0.3; transform: scale(0.8); } }
 .assistant-table { margin-top: 10px; width: 100%; font-size: 12px; }
 .assistant-notes { margin-top: 9px; padding: 8px 9px; border-radius: 8px; background: #f5f8fc; color: #6f7d90; font-size: 11px; line-height: 1.6; }
+.assistant-sections { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.assistant-section { padding-top: 10px; border-top: 1px solid #edf2f8; }
+.assistant-section:first-child { padding-top: 0; border-top: 0; }
+.assistant-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #243b5a; font-size: 13px; font-weight: 700; }
+.assistant-section-text { margin-top: 6px; color: #4f6076; }
 .assistant-answer-actions { margin-top: 10px; }
 .assistant-followups { margin-top: 10px; }
 .assistant-footer { flex-shrink: 0; padding: 12px 14px 14px; background: #fff; border-top: 1px solid #e8edf4; }

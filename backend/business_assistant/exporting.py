@@ -68,13 +68,14 @@ def _append_summary(worksheet, scope, result):
 def _append_ladders(workbook, result):
     sheet = workbook.create_sheet('梯号明细')
     headers = [
-        '合同号', '梯号', '项目名称', '台数', '金额(万元)', '排产完工日期',
+        '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '排产完工日期',
         '整梯发货日期', '组A日期', '产品型号', '载重', '速度', '签订日期',
         '产品状态', '业务员', '已回款比例',
     ]
     sheet.append(headers)
     for row in result.get('rows') or []:
         sheet.append([
+            row.get('module_name') or '',
             row.get('contract_no') or '',
             row.get('ladder_no') or '',
             row.get('project_name') or '',

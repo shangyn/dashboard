@@ -52,4 +52,5 @@ class Config:
     ASSISTANT_MODEL_API_KEY = os.environ.get('ASSISTANT_MODEL_API_KEY', '')
     ASSISTANT_MODEL_NAME = os.environ.get('ASSISTANT_MODEL_NAME', 'deepseek-chat')
     ASSISTANT_MODEL_TIMEOUT = int(os.environ.get('ASSISTANT_MODEL_TIMEOUT', '25'))
+    ASSISTANT_MODEL_ANSWER_ENABLED = os.environ.get('ASSISTANT_MODEL_ANSWER_ENABLED', '1') == '1'
     ASSISTANT_EXPORT_MAX_AGE = int(os.environ.get('ASSISTANT_EXPORT_MAX_AGE', '900'))

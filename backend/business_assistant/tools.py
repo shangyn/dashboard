@@ -11,7 +11,7 @@ from dashboards.contract_completion.models import LedgerContract, PaymentCollect
 from dashboards.contract_completion.services import get_annual_completion, get_two_year_comparison
 from module_business_detail.services import _build_ladder_rows, _monthly_actual
 from monthly_forecast import services as mf_svc
-from monthly_forecast.models import ShipSelection
+from monthly_forecast.models import MonthlyInput, ShipSelection, Submission
 from ship_tracking.excel_reader import canonical_ladder, normalize_text
 from ship_tracking.models import DailyShipment, PlanItem, TrackingItem
 
@@ -19,6 +19,7 @@ from business_assistant.scope import requested_modules
 
 
 LADDER_COLUMNS = [
+    {'key': 'module_name', 'label': '模块'},
     {'key': 'contract_no', 'label': '合同号'},
     {'key': 'ladder_no', 'label': '梯号'},
     {'key': 'project_name', 'label': '项目名称'},
@@ -95,7 +96,7 @@ def _module_name(value):
 
 
 def _ladder_filters(scope, args):
-    modules = requested_modules(scope, args.get('module'))
+    modules = requested_modules(scope, args.get('modules') or args.get('module'))
     year = _year(args.get('year') or dt.date.today().year)
     month = _month(args.get('month'))
     keyword = normalize_text(args.get('keyword') or args.get('q')).upper()
@@ -138,7 +139,7 @@ def _filter_ladder_rows(rows, filters):
 
 def performance(scope, args=None):
     args = args or {}
-    modules = requested_modules(scope, args.get('module'))
+    modules = requested_modules(scope, args.get('modules') or args.get('module'))
     year = _year(args.get('year') or dt.date.today().year)
     month = _month(args.get('month'))
     comparison_data = get_two_year_comparison()
@@ -283,6 +284,7 @@ def ladders(scope, args=None, limit=30):
         'export_args': {
             'year': filters['year'],
             'month': filters['month'] or '',
+            'modules': filters['modules'],
             'module': args.get('module') or '',
             'keyword': args.get('keyword') or '',
             'contract_no': args.get('contract_no') or '',
@@ -444,5 +446,334 @@ def diagnose(scope, args=None):
         ],
         'rows': results,
         'notes': ['诊断只解释现有规则，不会修改台账、计划或填报数据。'],
+        'exportable': False,
+    }
+
+
+CONTRACT_PAYMENT_COLUMNS = [
+    {'key': 'contract_no', 'label': '合同号'},
+    {'key': 'module_name', 'label': '模块'},
+    {'key': 'project_name', 'label': '项目名称'},
+    {'key': 'ladder_count', 'label': '梯号数'},
+    {'key': 'ladder_nos', 'label': '梯号'},
+    {'key': 'ledger_amount_wan', 'label': '合同金额(万元)'},
+    {'key': 'payment_wan', 'label': '回款(万元)'},
+    {'key': 'payment_count', 'label': '回款笔数'},
+    {'key': 'payment_match', 'label': '回款匹配'},
+    {'key': 'first_payment_date', 'label': '首次回款'},
+    {'key': 'last_payment_date', 'label': '最近回款'},
+    {'key': 'payment_ratio', 'label': '台账已回款比例'},
+]
+
+
+def contract_payment(scope, args=None):
+    """Summarize payments for contracts or ladders already in the user's scope."""
+    args = args or {}
+    if not any(args.get(key) for key in ('contract_no', 'ladder_no', 'keyword')):
+        return {
+            'kind': 'contract_payment',
+            'status': 'needs_input',
+            'failure_code': 'missing_contract',
+            'needs_input': True,
+            'message': '请提供合同号或梯号，我再查询对应回款汇总。',
+            'columns': [],
+            'rows': [],
+            'notes': [],
+            'exportable': False,
+        }
+
+    ledger_rows, filters = _matching_ladder_rows(scope, args)
+    if not ledger_rows:
+        scoped = bool(scope.get('scoped'))
+        return {
+            'kind': 'contract_payment',
+            'status': 'needs_input',
+            'failure_code': 'contract_forbidden' if scoped else 'contract_not_found',
+            'needs_input': True,
+            'message': (
+                '当前账号无法查询这个合同或梯号的回款，请确认号码是否属于你负责的模块。'
+                if scoped else
+                '当前权限范围内没有找到匹配的合同或梯号，请核对合同号或梯号后重试。'
+            ),
+            'columns': [],
+            'rows': [],
+            'notes': ['回款查询先通过台账确认合同归属，再做权限校验。'],
+            'exportable': False,
+        }
+
+    contract_rows = {}
+    for row in ledger_rows:
+        contract_no = normalize_text(row.get('contract_no')).upper()
+        if not contract_no:
+            continue
+        contract_rows.setdefault(contract_no, []).append(row)
+
+    contracts = sorted(contract_rows)
+    if not contracts:
+        return {
+            'kind': 'contract_payment',
+            'message': '匹配记录缺少合同号，无法汇总回款。',
+            'columns': [],
+            'rows': [],
+            'notes': [],
+            'exportable': False,
+        }
+
+    payments = PaymentCollection.query.filter(
+        PaymentCollection.contract_no.in_(contracts)
+    ).all()
+    month = _month(args.get('month'))
+    time_scope = normalize_text(args.get('time_scope')) or 'all'
+    year = _year(args.get('year'))
+    if month:
+        payments = [
+            item for item in payments
+            if item.payment_date and item.payment_date.strftime('%Y-%m') == month
+        ]
+    elif time_scope == 'year':
+        payments = [
+            item for item in payments
+            if item.payment_date and item.payment_date.year == year
+        ]
+
+    payments_by_contract = {}
+    for item in payments:
+        key = normalize_text(item.contract_no).upper()
+        payments_by_contract.setdefault(key, []).append(item)
+
+    result_rows = []
+    for contract_no in contracts:
+        rows = contract_rows[contract_no]
+        ladder_keys = {
+            canonical_ladder(row.get('ladder_no') or '') for row in rows
+            if canonical_ladder(row.get('ladder_no') or '')
+        }
+        contract_payments = payments_by_contract.get(contract_no, [])
+        ladder_payments = [
+            item for item in contract_payments
+            if item.ladder_no and canonical_ladder(item.ladder_no) in ladder_keys
+        ]
+        contract_level_payments = [
+            item for item in contract_payments
+            if not canonical_ladder(item.ladder_no or '')
+        ]
+        matched = ladder_payments or contract_level_payments or contract_payments
+        if ladder_payments and contract_level_payments:
+            payment_match = '梯号级+合同级'
+        elif ladder_payments:
+            payment_match = '梯号级'
+        elif contract_level_payments:
+            payment_match = '合同级'
+        else:
+            payment_match = '未匹配'
+
+        dates = sorted(
+            item.payment_date for item in contract_payments if item.payment_date
+        )
+        ladder_nos = sorted({
+            normalize_text(row.get('ladder_no')) for row in rows if row.get('ladder_no')
+        })
+        modules = sorted({
+            normalize_text(row.get('module_name')) for row in rows if row.get('module_name')
+        })
+        projects = sorted({
+            normalize_text(row.get('project_name')) for row in rows if row.get('project_name')
+        })
+        amount = round(sum((item.payment_amount_rmb or 0) for item in matched) / 10000.0, 2)
+        ledger_amount = round(sum(_number(row.get('amount_wan')) for row in rows), 2)
+        ratio_values = [
+            row.get('payment_ratio_label') for row in rows
+            if row.get('payment_ratio_label') and row.get('payment_ratio_label') != '—'
+        ]
+        result_rows.append({
+            'contract_no': contract_no,
+            'module_name': '、'.join(modules),
+            'project_name': '、'.join(projects[:2]) + ('等' if len(projects) > 2 else ''),
+            'ladder_count': len(ladder_nos),
+            'ladder_nos': '、'.join(ladder_nos[:8]) + ('等' if len(ladder_nos) > 8 else ''),
+            'ledger_amount_wan': ledger_amount,
+            'payment_wan': amount,
+            'payment_count': len(matched),
+            'payment_match': payment_match,
+            'first_payment_date': dates[0].isoformat() if dates else '',
+            'last_payment_date': dates[-1].isoformat() if dates else '',
+            'payment_ratio': ratio_values[0] if ratio_values else '—',
+        })
+
+    if month:
+        period = month
+    elif time_scope == 'year':
+        period = '%s年' % year
+    else:
+        period = '全部日期'
+    total_payment = round(sum(row['payment_wan'] for row in result_rows), 2)
+    matched_count = sum(1 for row in result_rows if row['payment_count'])
+    return {
+        'kind': 'contract_payment',
+        'scope_label': scope['label'],
+        'period': period,
+        'message': '共匹配 %s 个合同，其中 %s 个有回款记录；回款合计 %s 万元。' % (
+            len(result_rows), matched_count, total_payment
+        ),
+        'columns': CONTRACT_PAYMENT_COLUMNS,
+        'rows': result_rows,
+        'notes': [
+            '回款金额按人民币汇总，不展示逐笔日期、节点、付款方式或备注。',
+            '合同级回款与梯号级回款分开匹配，不把合同级回款重复分摊到每个梯号。',
+            '查询前已通过台账确认合同归属，只统计当前账号权限范围内的合同。',
+        ],
+        'exportable': False,
+    }
+
+
+SUBMISSION_COLUMNS = [
+    {'key': 'module_name', 'label': '模块'},
+    {'key': 'month', 'label': '月份'},
+    {'key': 'status_label', 'label': '提交状态'},
+    {'key': 'submitted_at', 'label': '提交时间'},
+    {'key': 'submitted_by_name', 'label': '提交人'},
+    {'key': 'submission_version', 'label': '快照版本'},
+    {'key': 'ship_selection_count', 'label': '发货勾选数'},
+]
+
+
+def submission_status(scope, args=None):
+    """Check monthly forecast input submission status for scoped modules."""
+    args = args or {}
+    modules = requested_modules(scope, args.get('modules') or args.get('module'))
+    month = _month(args.get('month')) or mf_svc.default_month()
+
+    inputs = MonthlyInput.query.filter_by(data_month=month).filter(
+        MonthlyInput.module_name.in_(modules)
+    ).all()
+    submissions = Submission.query.filter_by(data_month=month).filter(
+        Submission.module_name.in_(modules)
+    ).all()
+    selections = ShipSelection.query.filter_by(data_month=month).filter(
+        ShipSelection.module_name.in_(modules)
+    ).all()
+
+    input_map = {item.module_name: item for item in inputs}
+    submission_map = {}
+    for item in submissions:
+        current = submission_map.get(item.module_name)
+        if current is None or (item.version or 0) > (current.version or 0):
+            submission_map[item.module_name] = item
+    selection_count = {}
+    for item in selections:
+        selection_count[item.module_name] = selection_count.get(item.module_name, 0) + 1
+
+    rows = []
+    for module in modules:
+        input_row = input_map.get(module)
+        submission = submission_map.get(module)
+        submitted = bool(input_row and input_row.status == 'submitted')
+        status_label = '已提交' if submitted else ('草稿未提交' if input_row else '未填报')
+        submitted_at = ''
+        submitted_by_name = ''
+        if input_row:
+            submitted_by_name = input_row.updated_by_name or ''
+            if input_row.submitted_at:
+                submitted_at = input_row.submitted_at.strftime('%Y-%m-%d %H:%M:%S')
+        if not submitted_at and submission and submission.submitted_at:
+            submitted_at = submission.submitted_at.strftime('%Y-%m-%d %H:%M:%S')
+            submitted_by_name = submission.submitted_by_name or submitted_by_name
+        rows.append({
+            'module_name': module,
+            'month': month,
+            'status_label': status_label,
+            'submitted_at': submitted_at or '—',
+            'submitted_by_name': submitted_by_name or '—',
+            'submission_version': submission.version if submission else '—',
+            'ship_selection_count': selection_count.get(module, 0),
+        })
+
+    submitted_count = sum(1 for row in rows if row['status_label'] == '已提交')
+    return {
+        'kind': 'submission_status',
+        'scope_label': scope['label'],
+        'period': month,
+        'message': '%s 共检查 %s 个模块，其中 %s 个已提交。' % (
+            month, len(rows), submitted_count
+        ),
+        'columns': SUBMISSION_COLUMNS,
+        'rows': rows,
+        'notes': [
+            '“已提交”取单月填报状态；“快照版本”取该月最新提交快照。',
+            '发货勾选数来自该月发货明细，仅作为提交完整性参考。',
+        ],
+        'exportable': False,
+    }
+
+
+SOURCE_CATALOG = {
+    'performance': [
+        ('签单、合同、梯号', 'cc_ledger_contract', '台账合同与梯号明细'),
+        ('模块归属', 'cc_country_mapping', '国家到模块、大区和业务员映射'),
+        ('年度目标', 'cc_annual_target', '年度签单、排产、发货、回款目标'),
+        ('实际回款', 'cc_payment_collection', '回款明细汇总'),
+        ('月度填报', 'mf_monthly_input', '单月签单、排产、回款预计'),
+        ('商贸数据', 'cc_trade_module_data', '商贸模块汇总数据'),
+        ('发货额数据', 'cc_shipment_data', '年度发货额和台数'),
+    ],
+    'ladders': [
+        ('合同、梯号、签排发日期', 'cc_ledger_contract', '台账合同与梯号明细'),
+        ('模块归属', 'cc_country_mapping', '国家到模块映射'),
+    ],
+    'ladder_status': [
+        ('合同和梯号', 'cc_ledger_contract', '台账基础信息与产品状态'),
+        ('回款', 'cc_payment_collection', '合同级或梯号级回款汇总'),
+        ('单月发货勾选', 'mf_ship_selection', '该月填报选中的发货梯号'),
+        ('发货计划', 'st_plan_item', '计划版本与预计发货日期'),
+        ('每日实发', 'st_tracking_item', '实际发货和订舱跟踪'),
+    ],
+    'diagnose': [
+        ('台账与产品状态', 'cc_ledger_contract', '判断作废、排产和发货日期'),
+        ('国家模块映射', 'cc_country_mapping', '判断模块归属'),
+        ('候选池选择', 'mf_ship_selection', '判断是否已经勾选'),
+    ],
+    'contract_payment': [
+        ('合同归属', 'cc_ledger_contract', '先确认合同和梯号在当前权限范围内'),
+        ('回款汇总', 'cc_payment_collection', '按合同号汇总人民币回款'),
+    ],
+    'submission_status': [
+        ('单月填报', 'mf_monthly_input', '当前填报状态与提交时间'),
+        ('提交快照', 'mf_submission', '每次提交保留的版本快照'),
+        ('发货勾选', 'mf_ship_selection', '该月已选择的发货梯号'),
+    ],
+}
+
+
+def data_source(scope, args=None):
+    """Explain the fixed database tables behind a read-only assistant action."""
+    args = args or {}
+    topic = normalize_text(args.get('topic')) or 'general'
+    items = SOURCE_CATALOG.get(topic)
+    if not items:
+        items = []
+        seen = set()
+        for source_items in SOURCE_CATALOG.values():
+            for item in source_items:
+                if item[1] not in seen:
+                    seen.add(item[1])
+                    items.append(item)
+    rows = [
+        {'data_name': name, 'table_name': table, 'description': description}
+        for name, table, description in items
+    ]
+    return {
+        'kind': 'data_source',
+        'scope_label': scope['label'],
+        'message': '本次说明来自后端固定的数据来源清单；助手只通过只读工具访问这些表。',
+        'columns': [
+            {'key': 'data_name', 'label': '数据内容'},
+            {'key': 'table_name', 'label': '来源表'},
+            {'key': 'description', 'label': '用途'},
+        ],
+        'rows': rows,
+        'notes': [
+            '模型不会直接连接数据库，也不会生成或执行任意 SQL。',
+            '权限过滤在查询合同、梯号和回款之前由后端完成。',
+        ],
         'exportable': False,
     }

@@ -10,6 +10,8 @@ from monthly_forecast.models import UserScope
 from monthly_forecast import services as mf_svc
 from ship_tracking.excel_reader import normalize_text
 
+from business_assistant import resolver
+
 
 GLOBAL_PERMISSIONS = {'user_manage', 'dashboard_contract_completion'}
 
@@ -64,22 +66,19 @@ def resolve_scope(user):
     }
 
 
+def resolve_requested_modules(scope, requested):
+    """Resolve a module filter and distinguish missing from forbidden names."""
+    all_module_names = scope['modules'] if not scope.get('scoped') else mf_svc.all_modules()
+    return resolver.resolve_modules(scope, requested, all_module_names)
+
+
 def requested_modules(scope, requested):
     """Validate a requested module filter against the resolved scope."""
     if not requested:
         return list(scope['modules'])
-    if isinstance(requested, str):
-        values = [requested]
-    else:
-        values = list(requested)
-    allowed = set(scope['modules'])
-    result = []
-    for value in values:
-        module = normalize_text(value)
-        if not module:
-            continue
-        if module not in allowed:
-            raise PermissionError('无权限查询该模块')
-        if module not in result:
-            result.append(module)
-    return result
+    resolution = resolve_requested_modules(scope, requested)
+    if resolution['status'] == resolver.STATUS_FORBIDDEN:
+        raise PermissionError(resolution['message'])
+    if resolution['status'] == resolver.STATUS_NOT_FOUND:
+        raise ValueError(resolution['message'])
+    return resolution['modules']
