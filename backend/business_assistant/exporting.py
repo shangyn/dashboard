@@ -70,7 +70,7 @@ def _append_ladders(workbook, result):
     headers = [
         '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '排产完工日期',
         '整梯发货日期', '组A日期', '产品型号', '载重', '速度', '签订日期',
-        '产品状态', '业务员', '已回款比例',
+        '产品状态', '业务员', '回款比例', '比例来源',
     ]
     sheet.append(headers)
     for row in result.get('rows') or []:
@@ -91,6 +91,7 @@ def _append_ladders(workbook, result):
             row.get('product_status') or '',
             row.get('salesperson') or '',
             row.get('payment_ratio_label') or '—',
+            row.get('payment_ratio_source') or '',
         ])
     _style_header(sheet)
 
@@ -166,7 +167,8 @@ def export_workbook(user, token):
     notes = workbook.create_sheet('口径说明')
     notes.append(['说明'])
     notes.append(['实际业绩、月度预计和发货计划是不同口径，导出结果按查询类型展示。'])
-    notes.append(['已回款比例直接取台账 payment_ratio，不在本导出中重新分摊回款。'])
+    notes.append(['回款比例优先取发货梯号明细最近一次成功回款计算；未参与计算的梯号回退台账比例。'])
+    notes.append(['“比例来源”会标明回款计算、台账回退、无回款或已满 100% 等口径。'])
     notes.append(['回款逐笔日期、节点、付款方式、备注不纳入本导出。'])
     notes.append(['导出行数：%s' % (result.get('total') or len(result.get('rows') or []))])
     notes.append(['生成时间：%s' % dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')])

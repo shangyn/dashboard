@@ -360,10 +360,10 @@ def plan_actions(question, scope, page_context, history=None, last_entities=None
         'today': dt.date.today().isoformat(),
         'actions': [
             {'name': 'performance', 'description': '查询模块年度或自然月签单、排产、发货、回款及目标完成率'},
-            {'name': 'ladders', 'description': '查询或准备导出当前权限内的台账梯号明细'},
-            {'name': 'ladder_status', 'description': '查询合同或梯号在台账、填报、发货计划、实发、回款中的状态'},
+            {'name': 'ladders', 'description': '查询或准备导出当前权限内的梯号明细；回款比例优先使用回款计算结果'},
+            {'name': 'ladder_status', 'description': '查询合同或梯号在台账、填报、发货计划、实发、回款中的状态，并标注回款比例来源'},
             {'name': 'diagnose', 'description': '解释梯号没有进入候选池或无法选择的原因'},
-            {'name': 'contract_payment', 'description': '查询某个合同或梯号的回款汇总；没有合同号或梯号时留空，由后端追问'},
+            {'name': 'contract_payment', 'description': '查询某个合同或梯号的回款汇总和计算口径回款比例；没有合同号或梯号时留空，由后端追问'},
             {'name': 'submission_status', 'description': '查询模块某月单月签排发填报是否已提交、提交时间、快照版本'},
             {'name': 'data_source', 'description': '说明当前业务查询读取了哪些固定数据库表；用于“从哪张表读取”的追问'},
             {'name': 'unsupported', 'description': '问题与经营数据无关，或当前版本没有可用的只读工具'},

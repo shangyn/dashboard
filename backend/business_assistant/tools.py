@@ -13,7 +13,9 @@ from module_business_detail.services import _build_ladder_rows, _monthly_actual
 from monthly_forecast import services as mf_svc
 from monthly_forecast.models import MonthlyInput, ShipSelection, Submission
 from ship_tracking.excel_reader import canonical_ladder, normalize_text
-from ship_tracking.models import DailyShipment, PlanItem, TrackingItem
+from ship_tracking.models import (
+    DailyShipment, PaymentCalcDetail, PaymentCalcRun, PlanItem, TrackingItem,
+)
 
 from business_assistant.scope import requested_modules
 
@@ -34,7 +36,8 @@ LADDER_COLUMNS = [
     {'key': 'sign_date', 'label': '签订日期'},
     {'key': 'product_status', 'label': '产品状态'},
     {'key': 'salesperson', 'label': '业务员'},
-    {'key': 'payment_ratio_label', 'label': '已回款比例'},
+    {'key': 'payment_ratio_label', 'label': '回款比例'},
+    {'key': 'payment_ratio_source', 'label': '比例来源'},
 ]
 
 
@@ -67,6 +70,84 @@ def _ratio(actual, target):
     if not target:
         return 0.0
     return round(float(actual or 0) / float(target), 4)
+
+
+def _payment_ratio_value(value):
+    if value is None or value == '':
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 0:
+        number = 0.0
+    if number >= 1:
+        number = 1.0
+    return number
+
+
+def _payment_ratio_label(value):
+    return '—' if value is None else '%.2f%%' % (value * 100.0)
+
+
+def _latest_payment_details():
+    run = PaymentCalcRun.query.filter_by(status='success')\
+        .order_by(PaymentCalcRun.id.desc()).first()
+    if run is None:
+        return None, {}
+    details = PaymentCalcDetail.query.filter_by(run_id=run.id).all()
+    result = {}
+    for detail in details:
+        ladder_key = canonical_ladder(detail.ladder_key or detail.ladder_no or '')
+        if ladder_key:
+            result[ladder_key] = detail
+    return run, result
+
+
+def _payment_ratio_source(detail, ledger_ratio, run):
+    if detail is None:
+        if ledger_ratio is not None and ledger_ratio >= 1:
+            return '台账已满100%'
+        if run is None:
+            return '台账比例（无成功计算批次）'
+        return '台账比例（未参与最近计算）'
+    status = detail.status or ''
+    if status == 'calculated':
+        return '回款计算'
+    if status == 'no_payment_keep_ledger':
+        return '回款计算（无回款，保留台账）'
+    if status == 'no_payment_zero':
+        return '回款计算（无回款，0%）'
+    if status == 'no_payment_no_ledger_ratio':
+        return '回款计算（无回款，空值）'
+    if status == 'no_contract_amount':
+        return '台账比例（合同额无效）'
+    if status == 'ledger_not_found':
+        return '台账比例（计算未匹配台账）'
+    if status == 'ledger_paid':
+        return '台账已满100%'
+    return '回款计算'
+
+
+def _enrich_payment_ratios(rows):
+    """Use the latest successful payment calculation, then fall back to ledger."""
+    if not rows:
+        return rows
+    run, details = _latest_payment_details()
+    for row in rows:
+        ledger_ratio = _payment_ratio_value(row.get('payment_ratio'))
+        ladder_key = canonical_ladder(row.get('ladder_no') or '')
+        detail = details.get(ladder_key)
+        if detail is not None:
+            ratio = _payment_ratio_value(detail.calculated_ratio_display)
+            if ratio is None:
+                ratio = _payment_ratio_value(detail.calculated_ratio)
+        else:
+            ratio = ledger_ratio
+        row['payment_ratio'] = ratio
+        row['payment_ratio_label'] = _payment_ratio_label(ratio)
+        row['payment_ratio_source'] = _payment_ratio_source(detail, ledger_ratio, run)
+    return rows
 
 
 def _annual_values(row, comparison_row, year, current_year):
@@ -262,7 +343,9 @@ def performance(scope, args=None):
 def ladders(scope, args=None, limit=30):
     args = args or {}
     filters = _ladder_filters(scope, args)
-    rows = _filter_ladder_rows(_build_ladder_rows(filters['modules']), filters)
+    rows = _filter_ladder_rows(
+        _enrich_payment_ratios(_build_ladder_rows(filters['modules'])), filters
+    )
     units = round(sum(_number(row.get('unit_count')) for row in rows), 2)
     amount = round(sum(_number(row.get('amount_wan')) for row in rows), 2)
     shown = rows if limit is None else rows[:limit]
@@ -278,7 +361,8 @@ def ladders(scope, args=None, limit=30):
         'message': '共找到 %s 行梯号，台数 %s，合同金额 %s 万元。' % (len(rows), units, amount),
         'notes': [
             '明细直接来自台账 cc_ledger_contract，按签订日期筛选，不按梯号去重。' ,
-            '已回款比例取台账 payment_ratio，不重新计算回款分摊。' ,
+            '回款比例优先取发货梯号明细最近一次成功回款计算；未参与计算的梯号回退台账比例。' ,
+            '“比例来源”用于区分回款计算、台账回退和已满 100% 的梯号。' ,
         ],
         'exportable': bool(rows),
         'export_args': {
@@ -304,7 +388,7 @@ def _matching_ladder_rows(scope, args):
     })
     if filters['month']:
         filters['month'] = ''
-    rows = _build_ladder_rows(filters['modules'])
+    rows = _enrich_payment_ratios(_build_ladder_rows(filters['modules']))
     if filters['contract_no']:
         rows = [row for row in rows if (row.get('contract_no') or '').upper() == filters['contract_no']]
     if filters['ladder_no']:
@@ -358,6 +442,7 @@ def ladder_status(scope, args=None):
             'payment_match': payment_scope,
             'payment_wan': round(payment_amount, 2),
             'payment_ratio': row.get('payment_ratio_label') or '—',
+            'payment_ratio_source': row.get('payment_ratio_source') or '',
         })
     return {
         'kind': 'ladder_status',
@@ -372,10 +457,14 @@ def ladder_status(scope, args=None):
             {'key': 'actual_ship', 'label': '实际发货'},
             {'key': 'payment_match', 'label': '回款匹配'},
             {'key': 'payment_wan', 'label': '回款(万元)'},
-            {'key': 'payment_ratio', 'label': '已回款比例'},
+            {'key': 'payment_ratio', 'label': '回款比例'},
+            {'key': 'payment_ratio_source', 'label': '比例来源'},
         ],
         'rows': result,
-        'notes': ['回款只展示汇总和匹配状态，不展示逐笔日期、节点、付款方式或备注。'],
+        'notes': [
+            '回款只展示汇总和匹配状态，不展示逐笔日期、节点、付款方式或备注。',
+            '回款比例优先取最近一次成功回款计算，未参与计算的梯号回退台账比例。',
+        ],
         'exportable': False,
     }
 
@@ -462,7 +551,8 @@ CONTRACT_PAYMENT_COLUMNS = [
     {'key': 'payment_match', 'label': '回款匹配'},
     {'key': 'first_payment_date', 'label': '首次回款'},
     {'key': 'last_payment_date', 'label': '最近回款'},
-    {'key': 'payment_ratio', 'label': '台账已回款比例'},
+    {'key': 'payment_ratio', 'label': '回款比例'},
+    {'key': 'payment_ratio_source', 'label': '比例来源'},
 ]
 
 
@@ -581,10 +671,34 @@ def contract_payment(scope, args=None):
         })
         amount = round(sum((item.payment_amount_rmb or 0) for item in matched) / 10000.0, 2)
         ledger_amount = round(sum(_number(row.get('amount_wan')) for row in rows), 2)
-        ratio_values = [
-            row.get('payment_ratio_label') for row in rows
-            if row.get('payment_ratio_label') and row.get('payment_ratio_label') != '—'
-        ]
+        ratio_amount_rmb = 0.0
+        paid_equivalent_rmb = 0.0
+        ratio_sources = []
+        for row in rows:
+            ratio = _payment_ratio_value(row.get('payment_ratio'))
+            if ratio is not None:
+                row_amount_rmb = _number(row.get('amount_rmb'))
+                ratio_amount_rmb += row_amount_rmb
+                paid_equivalent_rmb += row_amount_rmb * ratio
+            source = row.get('payment_ratio_source') or ''
+            if source:
+                ratio_sources.append(source)
+        contract_ratio = None
+        if ratio_amount_rmb > 0:
+            contract_ratio = _payment_ratio_value(
+                paid_equivalent_rmb / ratio_amount_rmb
+            )
+        calc_source_count = sum(
+            1 for source in ratio_sources if source.startswith('回款计算')
+        )
+        if ratio_sources and calc_source_count == len(ratio_sources):
+            ratio_source = '回款计算汇总'
+        elif calc_source_count:
+            ratio_source = '回款计算 + 台账回退'
+        elif ratio_sources:
+            ratio_source = '台账比例汇总'
+        else:
+            ratio_source = ''
         result_rows.append({
             'contract_no': contract_no,
             'module_name': '、'.join(modules),
@@ -597,7 +711,8 @@ def contract_payment(scope, args=None):
             'payment_match': payment_match,
             'first_payment_date': dates[0].isoformat() if dates else '',
             'last_payment_date': dates[-1].isoformat() if dates else '',
-            'payment_ratio': ratio_values[0] if ratio_values else '—',
+            'payment_ratio': _payment_ratio_label(contract_ratio),
+            'payment_ratio_source': ratio_source,
         })
 
     if month:
@@ -620,6 +735,8 @@ def contract_payment(scope, args=None):
         'notes': [
             '回款金额按人民币汇总，不展示逐笔日期、节点、付款方式或备注。',
             '合同级回款与梯号级回款分开匹配，不把合同级回款重复分摊到每个梯号。',
+            '回款比例优先取发货梯号明细最近一次成功回款计算，并按合同金额加权汇总。',
+            '未参与计算的梯号回退台账比例，结果中会标明“回款计算 + 台账回退”。',
             '查询前已通过台账确认合同归属，只统计当前账号权限范围内的合同。',
         ],
         'exportable': False,
@@ -719,6 +836,8 @@ SOURCE_CATALOG = {
     'ladders': [
         ('合同、梯号、签排发日期', 'cc_ledger_contract', '台账合同与梯号明细'),
         ('模块归属', 'cc_country_mapping', '国家到模块映射'),
+        ('回款计算批次', 'st_payment_calc_run', '最近一次成功回款计算的批次与统计'),
+        ('梯号回款计算结果', 'st_payment_calc_detail', '梯号计算比例、已回款和台账回退状态'),
     ],
     'ladder_status': [
         ('合同和梯号', 'cc_ledger_contract', '台账基础信息与产品状态'),
@@ -726,6 +845,7 @@ SOURCE_CATALOG = {
         ('单月发货勾选', 'mf_ship_selection', '该月填报选中的发货梯号'),
         ('发货计划', 'st_plan_item', '计划版本与预计发货日期'),
         ('每日实发', 'st_tracking_item', '实际发货和订舱跟踪'),
+        ('梯号回款计算结果', 'st_payment_calc_detail', '梯号回款比例及其计算状态'),
     ],
     'diagnose': [
         ('台账与产品状态', 'cc_ledger_contract', '判断作废、排产和发货日期'),
@@ -735,6 +855,7 @@ SOURCE_CATALOG = {
     'contract_payment': [
         ('合同归属', 'cc_ledger_contract', '先确认合同和梯号在当前权限范围内'),
         ('回款汇总', 'cc_payment_collection', '按合同号汇总人民币回款'),
+        ('梯号回款计算结果', 'st_payment_calc_detail', '按合同金额加权汇总梯号回款比例'),
     ],
     'submission_status': [
         ('单月填报', 'mf_monthly_input', '当前填报状态与提交时间'),
