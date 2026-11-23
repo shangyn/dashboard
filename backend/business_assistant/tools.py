@@ -307,6 +307,26 @@ def _ladder_filters(scope, args):
     }
 
 
+def _contract_matches(value, query):
+    raw_value = normalize_text(value).upper()
+    raw_query = normalize_text(query).upper()
+    if not raw_query:
+        return True
+    if raw_value == raw_query:
+        return True
+    compact_value = re.sub(r'[^A-Z0-9]', '', raw_value)
+    compact_query = re.sub(r'[^A-Z0-9]', '', raw_query)
+    if (
+        compact_query.isdigit()
+        and len(compact_query) == 4
+        and 2000 <= int(compact_query) <= 2099
+    ):
+        return False
+    if len(raw_query) >= 4 and raw_query in raw_value:
+        return True
+    return len(compact_query) >= 4 and compact_query in compact_value
+
+
 def _filter_ladder_rows(rows, filters):
     result = []
     date_field = filters.get('date_field') or 'sign_date'
@@ -317,7 +337,9 @@ def _filter_ladder_rows(rows, filters):
                 continue
         elif date_value[:4] != str(filters['year']):
             continue
-        if filters['contract_no'] and (row.get('contract_no') or '').upper() != filters['contract_no']:
+        if filters['contract_no'] and not _contract_matches(
+            row.get('contract_no'), filters['contract_no']
+        ):
             continue
         if filters['ladder_no'] and canonical_ladder(row.get('ladder_no') or '') != filters['ladder_no']:
             continue
@@ -710,7 +732,10 @@ def _matching_ladder_rows(scope, args):
         filters['month'] = ''
     rows = _enrich_payment_ratios(_build_ladder_rows(filters['modules']))
     if filters['contract_no']:
-        rows = [row for row in rows if (row.get('contract_no') or '').upper() == filters['contract_no']]
+        rows = [
+            row for row in rows
+            if _contract_matches(row.get('contract_no'), filters['contract_no'])
+        ]
     if filters['ladder_no']:
         rows = [row for row in rows if canonical_ladder(row.get('ladder_no') or '') == filters['ladder_no']]
     if filters['keyword']:
