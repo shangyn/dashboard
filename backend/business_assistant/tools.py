@@ -27,6 +27,7 @@ LADDER_COLUMNS = [
     {'key': 'project_name', 'label': '项目名称'},
     {'key': 'unit_count', 'label': '台数'},
     {'key': 'amount_wan', 'label': '金额(万元)'},
+    {'key': 'schedule_date', 'label': '排产日期'},
     {'key': 'schedule_finish_date', 'label': '排产完工日期'},
     {'key': 'whole_ship_date', 'label': '整梯发货日期'},
     {'key': 'delivery_date', 'label': '组A日期'},
@@ -39,6 +40,47 @@ LADDER_COLUMNS = [
     {'key': 'payment_ratio_label', 'label': '回款比例'},
     {'key': 'payment_ratio_source', 'label': '比例来源'},
 ]
+
+
+DATE_DIMENSIONS = {
+    'sign': {'field': 'sign_date', 'label': '签订日期'},
+    'schedule': {'field': 'schedule_date', 'label': '排产日期'},
+    'ship': {'field': 'delivery_date', 'label': '发货日期'},
+    'whole_ship': {'field': 'whole_ship_date', 'label': '整梯发货日期'},
+}
+DATE_DIMENSION_ALIASES = {
+    'sign': 'sign',
+    'sign_date': 'sign',
+    '签订': 'sign',
+    '签订日期': 'sign',
+    'schedule': 'schedule',
+    'schedule_date': 'schedule',
+    '排产': 'schedule',
+    '排产日期': 'schedule',
+    'ship': 'ship',
+    'delivery': 'ship',
+    'delivery_date': 'ship',
+    '发货': 'ship',
+    '发货日期': 'ship',
+    '组a': 'ship',
+    '组a日期': 'ship',
+    'whole_ship': 'whole_ship',
+    'whole_ship_date': 'whole_ship',
+    '整梯发货': 'whole_ship',
+    '整梯发货日期': 'whole_ship',
+}
+PERFORMANCE_METRICS = (
+    ('sign_amount', '签单'),
+    ('schedule_amount', '排产'),
+    ('ship_amount', '发货'),
+    ('payment_amount', '回款'),
+)
+MONTH_ACTUAL_KEYS = {
+    'sign_amount': 'sign_amount',
+    'schedule_amount': 'prod_amount',
+    'ship_amount': 'ship_amount',
+    'payment_amount': 'payment_amount',
+}
 
 
 def _year(value):
@@ -163,7 +205,7 @@ def _annual_values(row, comparison_row, year, current_year):
         actual = row.get(key + '_actual') if is_current else comparison_row.get(comparison_prefix + '_prev')
         ratio = _optional_number(row.get(key + '_ratio')) if is_current else None
         result[key] = {
-            'target': _number(row.get(key + '_target')) if is_current else None,
+            'target': _optional_number(row.get(key + '_target')) if is_current else None,
             'actual': _number(actual),
             'ratio': round(ratio * 100.0, 2) if ratio is not None else None,
             'previous': _optional_number(comparison_row.get(comparison_prefix + '_prev')) if is_current else None,
@@ -176,10 +218,79 @@ def _module_name(value):
     return normalize_text(value)
 
 
+def _normalize_date_dimension(value, default='sign'):
+    text = normalize_text(value).lower().replace('-', '_')
+    if not text:
+        return default
+    return DATE_DIMENSION_ALIASES.get(text, default)
+
+
+def _date_field(date_dimension):
+    return DATE_DIMENSIONS.get(date_dimension, DATE_DIMENSIONS['sign'])['field']
+
+
+def _date_dimension_label(date_dimension):
+    return DATE_DIMENSIONS.get(date_dimension, DATE_DIMENSIONS['sign'])['label']
+
+
+def _fact(fact_id, subject, metric, metric_key, value, unit='万元', period='',
+          grain='', data_date='', source_table='', comparison=''):
+    return {
+        'fact_id': fact_id,
+        'subject': subject,
+        'metric': metric,
+        'metric_key': metric_key,
+        'value': value,
+        'unit': unit,
+        'period': period,
+        'grain': grain,
+        'comparison': comparison,
+        'data_date': data_date,
+        'source_table': source_table,
+    }
+
+
+def _schedule_date_index(modules):
+    '''Read schedule dates without changing the shared ledger service.'''
+    module_set = set(modules)
+    if not module_set:
+        return {}
+    module_map = mf_svc.load_module_map()
+    result = {}
+    for contract in LedgerContract.query.filter(LedgerContract.source == 'ledger').all():
+        if (contract.product_status or '') == '已作废':
+            continue
+        module = mf_svc.resolve_module(contract, module_map)
+        if module not in module_set or not contract.schedule_date:
+            continue
+        contract_no = normalize_text(contract.contract_no).upper()
+        ladder_key = canonical_ladder(contract.ladder_no or '')
+        if contract_no and ladder_key:
+            result[(module, contract_no, ladder_key)] = contract.schedule_date.isoformat()
+    return result
+
+
+def _enrich_schedule_dates(rows):
+    if not rows:
+        return rows
+    modules = sorted({row.get('module_name') for row in rows if row.get('module_name')})
+    index = _schedule_date_index(modules)
+    for row in rows:
+        contract_no = normalize_text(row.get('contract_no')).upper()
+        ladder_key = canonical_ladder(row.get('ladder_no') or '')
+        row['schedule_date'] = index.get(
+            (row.get('module_name'), contract_no, ladder_key)
+        ) or ''
+    return rows
+
+
 def _ladder_filters(scope, args):
     modules = requested_modules(scope, args.get('modules') or args.get('module'))
     year = _year(args.get('year') or dt.date.today().year)
     month = _month(args.get('month'))
+    date_dimension = _normalize_date_dimension(
+        args.get('date_dimension') or args.get('date_field')
+    )
     keyword = normalize_text(args.get('keyword') or args.get('q')).upper()
     contract_no = normalize_text(args.get('contract_no')).upper()
     ladder_no = canonical_ladder(args.get('ladder_no') or '')
@@ -187,6 +298,9 @@ def _ladder_filters(scope, args):
         'modules': modules,
         'year': year,
         'month': month,
+        'date_dimension': date_dimension,
+        'date_field': _date_field(date_dimension),
+        'date_dimension_label': _date_dimension_label(date_dimension),
         'keyword': keyword,
         'contract_no': contract_no,
         'ladder_no': ladder_no,
@@ -195,12 +309,13 @@ def _ladder_filters(scope, args):
 
 def _filter_ladder_rows(rows, filters):
     result = []
+    date_field = filters.get('date_field') or 'sign_date'
     for row in rows:
-        sign_date = row.get('sign_date') or ''
+        date_value = row.get(date_field) or ''
         if filters['month']:
-            if sign_date[:7] != filters['month']:
+            if date_value[:7] != filters['month']:
                 continue
-        elif sign_date[:4] != str(filters['year']):
+        elif date_value[:4] != str(filters['year']):
             continue
         if filters['contract_no'] and (row.get('contract_no') or '').upper() != filters['contract_no']:
             continue
@@ -216,6 +331,122 @@ def _filter_ladder_rows(rows, filters):
                 continue
         result.append(row)
     return result
+
+
+def _performance_facts(rows, period, grain, data_date):
+    facts = [
+        _fact(
+            'performance:%s:total:module_count' % period,
+            '当前范围', '模块数', 'module_count', len(rows), unit='个',
+            period=period, grain=grain, data_date=data_date,
+            source_table='cc_ledger_contract',
+        ),
+    ]
+    source = 'cc_ledger_contract / cc_payment_collection'
+    for row in rows:
+        subject = row.get('module_name') or ''
+        if grain == 'month':
+            actual_values = row.get('month_actual') or {}
+            plan_values = row.get('month_plan') or {}
+            for key, label in PERFORMANCE_METRICS:
+                actual_key = MONTH_ACTUAL_KEYS[key]
+                facts.append(_fact(
+                    'performance:%s:%s:%s:actual' % (period, subject, key),
+                    subject, label, key, _number(actual_values.get(actual_key)),
+                    period=period, grain='month', data_date=data_date,
+                    source_table=source,
+                ))
+                facts.append(_fact(
+                    'performance:%s:%s:%s:plan' % (period, subject, key),
+                    subject, label + '计划', key + '_plan',
+                    _number(plan_values.get(actual_key)),
+                    period=period, grain='month', data_date=data_date,
+                    source_table='mf_monthly_input',
+                ))
+        else:
+            annual_values = row.get('annual') or {}
+            for key, label in PERFORMANCE_METRICS:
+                metric = annual_values.get(key) or {}
+                facts.append(_fact(
+                    'performance:%s:%s:%s:actual' % (period, subject, key),
+                    subject, label, key, _number(metric.get('actual')),
+                    period=period, grain='year', data_date=data_date,
+                    source_table=source,
+                ))
+                if metric.get('target') is not None:
+                    facts.append(_fact(
+                        'performance:%s:%s:%s:target' % (period, subject, key),
+                        subject, label + '目标', key + '_target',
+                        _number(metric.get('target')),
+                        period=period, grain='year', data_date=data_date,
+                        source_table='cc_annual_target',
+                    ))
+                if metric.get('ratio') is not None:
+                    facts.append(_fact(
+                        'performance:%s:%s:%s:ratio' % (period, subject, key),
+                        subject, label + '完成率', key + '_ratio',
+                        _number(metric.get('ratio')), unit='%',
+                        period=period, grain='year', data_date=data_date,
+                        source_table='cc_annual_target',
+                    ))
+                if metric.get('growth') is not None:
+                    facts.append(_fact(
+                        'performance:%s:%s:%s:growth' % (period, subject, key),
+                        subject, label + '同比', key + '_growth',
+                        _number(metric.get('growth')), unit='%',
+                        period=period, grain='year', data_date=data_date,
+                        source_table=source,
+                    ))
+    if grain == 'month':
+        for key, label in PERFORMANCE_METRICS:
+            actual_key = MONTH_ACTUAL_KEYS[key]
+            actual = round(sum(
+                _number((row.get('month_actual') or {}).get(actual_key)) for row in rows
+            ), 2)
+            plan = round(sum(
+                _number((row.get('month_plan') or {}).get(actual_key)) for row in rows
+            ), 2)
+            facts.append(_fact(
+                'performance:%s:total:%s:actual' % (period, key),
+                '当前范围', label, key, actual, period=period, grain='month',
+                data_date=data_date, source_table=source,
+            ))
+            facts.append(_fact(
+                'performance:%s:total:%s:plan' % (period, key),
+                '当前范围', label + '计划', key + '_plan', plan,
+                period=period, grain='month', data_date=data_date,
+                source_table='mf_monthly_input',
+            ))
+    else:
+        for key, label in PERFORMANCE_METRICS:
+            metric_values = [row.get('annual', {}).get(key, {}) for row in rows]
+            actual = round(sum(_number(item.get('actual')) for item in metric_values), 2)
+            target_values = [
+                item.get('target') for item in metric_values
+                if item.get('target') is not None
+            ]
+            target = round(sum(_number(value) for value in target_values), 2) if target_values else None
+            facts.append(_fact(
+                'performance:%s:total:%s:actual' % (period, key),
+                '当前范围', label, key, actual, period=period, grain='year',
+                data_date=data_date, source_table=source,
+            ))
+            if target is not None:
+                facts.append(_fact(
+                    'performance:%s:total:%s:target' % (period, key),
+                    '当前范围', label + '目标', key + '_target', target,
+                    period=period, grain='year', data_date=data_date,
+                    source_table='cc_annual_target',
+                ))
+                ratio = round(_ratio(actual, target) * 100, 2) if target else None
+                if ratio is not None:
+                    facts.append(_fact(
+                        'performance:%s:total:%s:ratio' % (period, key),
+                        '当前范围', label + '完成率', key + '_ratio', ratio,
+                        unit='%', period=period, grain='year', data_date=data_date,
+                        source_table='cc_annual_target',
+                    ))
+    return facts
 
 
 def performance(scope, args=None):
@@ -310,57 +541,145 @@ def performance(scope, args=None):
     payment_total = sum(row['annual']['payment_amount']['actual'] for row in rows)
     payment_target = sum(row['annual']['payment_amount']['target'] or 0 for row in rows)
     period = month or ('%s年度' % year)
-    if year == current_year:
+    time_grain = 'month' if month else 'year'
+    if month:
+        actual_totals = {}
+        plan_totals = {}
+        for metric_key, _label in PERFORMANCE_METRICS:
+            actual_key = MONTH_ACTUAL_KEYS[metric_key]
+            plan_key = MONTH_ACTUAL_KEYS[metric_key]
+            actual_totals[metric_key] = round(sum(
+                _number((row.get('month_actual') or {}).get(actual_key)) for row in rows
+            ), 2)
+            plan_totals[metric_key] = round(sum(
+                _number((row.get('month_plan') or {}).get(plan_key)) for row in rows
+            ), 2)
         message = (
-            '%s，当前范围共 %s 个模块；签单额 %s 万元（目标 %s，完成率 %s），'
-            '回款额 %s 万元（目标 %s，完成率 %s）。'
+            '%s，当前范围共 %s 个模块；月度实际签单 %s 万元（计划 %s），'
+            '月度实际排产 %s 万元（计划 %s），月度实际发货 %s 万元（计划 %s），'
+            '月度实际回款 %s 万元（计划 %s）。'
         ) % (
-            period, len(rows), round(sign_total, 2), round(sign_target, 2),
-            _ratio(sign_total, sign_target) * 100,
-            round(payment_total, 2), round(payment_target, 2),
-            _ratio(payment_total, payment_target) * 100,
+            period, len(rows),
+            actual_totals['sign_amount'], plan_totals['sign_amount'],
+            actual_totals['schedule_amount'], plan_totals['schedule_amount'],
+            actual_totals['ship_amount'], plan_totals['ship_amount'],
+            actual_totals['payment_amount'], plan_totals['payment_amount'],
+        )
+    elif year == current_year:
+        sign_target_present = any(
+            row['annual']['sign_amount']['target'] is not None for row in rows
+        )
+        payment_target_present = any(
+            row['annual']['payment_amount']['target'] is not None for row in rows
+        )
+        sign_target_text = (
+            '目标 %s，完成率 %s%%' % (
+                round(sign_target, 2), _ratio(sign_total, sign_target) * 100,
+            )
+            if sign_target_present else '目标未维护'
+        )
+        payment_target_text = (
+            '目标 %s，完成率 %s%%' % (
+                round(payment_target, 2), _ratio(payment_total, payment_target) * 100,
+            )
+            if payment_target_present else '目标未维护'
+        )
+        message = (
+            '%s，当前范围共 %s 个模块；签单额 %s 万元（%s），'
+            '回款额 %s 万元（%s）。'
+        ) % (
+            period, len(rows), round(sign_total, 2), sign_target_text,
+            round(payment_total, 2), payment_target_text,
         )
     else:
         message = '%s，当前范围共 %s 个模块；签单额 %s 万元，回款额 %s 万元。' % (
             period, len(rows), round(sign_total, 2), round(payment_total, 2))
+    data_date = annual_data.get('data_date') if year == current_year else comparison_data.get('date_prev_end', '')
+    facts = _performance_facts(rows, period, time_grain, data_date)
     return {
         'kind': 'performance',
         'scope_label': scope['label'],
         'period': period,
-        'data_date': annual_data.get('data_date') if year == current_year else comparison_data.get('date_prev_end', ''),
+        'time_grain': time_grain,
+        'data_date': data_date,
         'columns': columns,
         'rows': rows,
+        'facts': facts,
         'message': message,
         'notes': [
             '年度金额沿用两年对比/年度完成情况口径，含已上传海外差额。' ,
             '月度计划来自单月签排发填报，月度实际来自台账与实际回款。' ,
+            '月度问题只使用月度实际和月度计划，不把年度累计当作月度数据。' ,
             '完成率与同比按当前数据截止日计算；上年目标未维护时不展示完成率。' ,
         ],
         'exportable': True,
     }
 
 
+def _ladders_facts(rows, filters, units, amount):
+    data_date = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    period = filters['month'] or ('%s年度' % filters['year'])
+    source = 'cc_ledger_contract'
+    facts = [
+        _fact('ladders:%s:total:row_count' % period, '当前范围', '梯号行数',
+              'row_count', len(rows), unit='行', period=period,
+              grain='period', data_date=data_date, source_table=source),
+        _fact('ladders:%s:total:units' % period, '当前范围', '台数',
+              'units', units, unit='台', period=period,
+              grain='period', data_date=data_date, source_table=source),
+        _fact('ladders:%s:total:amount' % period, '当前范围', '合同金额',
+              'amount_wan', amount, period=period, grain='period',
+              data_date=data_date, source_table=source),
+    ]
+    grouped = {}
+    for row in rows:
+        module = row.get('module_name') or ''
+        item = grouped.setdefault(module, {'rows': 0, 'units': 0, 'amount': 0.0})
+        item['rows'] += 1
+        item['units'] += _number(row.get('unit_count'))
+        item['amount'] += _number(row.get('amount_wan'))
+    for module, item in grouped.items():
+        facts.append(_fact(
+            'ladders:%s:%s:units' % (period, module), module, '台数',
+            'units', round(item['units'], 2), unit='台', period=period,
+            grain='period', data_date=data_date, source_table=source,
+        ))
+        facts.append(_fact(
+            'ladders:%s:%s:amount' % (period, module), module, '合同金额',
+            'amount_wan', round(item['amount'], 2), period=period,
+            grain='period', data_date=data_date, source_table=source,
+        ))
+    return facts
+
+
 def ladders(scope, args=None, limit=30):
     args = args or {}
     filters = _ladder_filters(scope, args)
-    rows = _filter_ladder_rows(
-        _enrich_payment_ratios(_build_ladder_rows(filters['modules'])), filters
-    )
+    rows = _build_ladder_rows(filters['modules'])
+    rows = _enrich_schedule_dates(rows)
+    rows = _filter_ladder_rows(_enrich_payment_ratios(rows), filters)
     units = round(sum(_number(row.get('unit_count')) for row in rows), 2)
     amount = round(sum(_number(row.get('amount_wan')) for row in rows), 2)
     shown = rows if limit is None else rows[:limit]
+    facts = _ladders_facts(rows, filters, units, amount)
     return {
         'kind': 'ladders',
         'scope_label': scope['label'],
         'period': filters['month'] or ('%s年度' % filters['year']),
+        'date_dimension': filters['date_dimension'],
+        'date_dimension_label': filters['date_dimension_label'],
         'columns': LADDER_COLUMNS,
         'rows': shown,
+        'facts': facts,
         'total': len(rows),
         'units': units,
         'amount_wan': amount,
-        'message': '共找到 %s 行梯号，台数 %s，合同金额 %s 万元。' % (len(rows), units, amount),
+        'message': '按%s筛选，共找到 %s 行梯号，台数 %s，合同金额 %s 万元。' % (
+            filters['date_dimension_label'], len(rows), units, amount
+        ),
         'notes': [
-            '明细直接来自台账 cc_ledger_contract，按签订日期筛选，不按梯号去重。' ,
+            '明细直接来自台账 cc_ledger_contract，不按梯号去重。' ,
+            '时间筛选维度：%s。' % filters['date_dimension_label'],
             '回款比例优先取发货梯号明细最近一次成功回款计算；未参与计算的梯号回退台账比例。' ,
             '“比例来源”用于区分回款计算、台账回退和已满 100% 的梯号。' ,
         ],
@@ -370,6 +689,7 @@ def ladders(scope, args=None, limit=30):
             'month': filters['month'] or '',
             'modules': filters['modules'],
             'module': args.get('module') or '',
+            'date_dimension': filters['date_dimension'],
             'keyword': args.get('keyword') or '',
             'contract_no': args.get('contract_no') or '',
             'ladder_no': args.get('ladder_no') or '',
@@ -546,7 +866,10 @@ CONTRACT_PAYMENT_COLUMNS = [
     {'key': 'ladder_count', 'label': '梯号数'},
     {'key': 'ladder_nos', 'label': '梯号'},
     {'key': 'ledger_amount_wan', 'label': '合同金额(万元)'},
-    {'key': 'payment_wan', 'label': '回款(万元)'},
+    {'key': 'ladder_payment_wan', 'label': '梯号级回款(万元)'},
+    {'key': 'contract_payment_wan', 'label': '合同级回款(万元)'},
+    {'key': 'other_payment_wan', 'label': '其他梯号回款(万元)'},
+    {'key': 'payment_wan', 'label': '回款合计(万元)'},
     {'key': 'payment_count', 'label': '回款笔数'},
     {'key': 'payment_match', 'label': '回款匹配'},
     {'key': 'first_payment_date', 'label': '首次回款'},
@@ -554,6 +877,57 @@ CONTRACT_PAYMENT_COLUMNS = [
     {'key': 'payment_ratio', 'label': '回款比例'},
     {'key': 'payment_ratio_source', 'label': '比例来源'},
 ]
+
+
+def _contract_payment_facts(rows, period, matched_count=None):
+    data_date = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    facts = [
+        _fact(
+            'contract_payment:%s:total:contract_count' % period,
+            '当前范围', '合同数', 'contract_count', len(rows), unit='个',
+            period=period, grain='period', data_date=data_date,
+            source_table='cc_ledger_contract',
+        ),
+    ]
+    if matched_count is not None:
+        facts.append(_fact(
+            'contract_payment:%s:total:paid_contract_count' % period,
+            '当前范围', '有回款合同数', 'paid_contract_count',
+            matched_count, unit='个', period=period, grain='period',
+            data_date=data_date,
+            source_table='cc_payment_collection',
+        ))
+    source = 'cc_payment_collection / st_payment_calc_detail'
+    metrics = (
+        ('ladder_payment_wan', '梯号级回款', 'ladder_payment'),
+        ('contract_payment_wan', '合同级回款', 'contract_payment'),
+        ('other_payment_wan', '其他梯号回款', 'other_payment'),
+        ('payment_wan', '回款合计', 'payment_total'),
+    )
+    for row in rows:
+        subject = row.get('contract_no') or ''
+        for key, label, metric_key in metrics:
+            facts.append(_fact(
+                'contract_payment:%s:%s:%s' % (period, subject, metric_key),
+                subject, label, metric_key, _number(row.get(key)),
+                period=period, grain='period', data_date=data_date,
+                source_table=source,
+            ))
+        facts.append(_fact(
+            'contract_payment:%s:%s:payment_count' % (period, subject),
+            subject, '回款笔数', 'payment_count', _number(row.get('payment_count')),
+            unit='笔', period=period, grain='period', data_date=data_date,
+            source_table='cc_payment_collection',
+        ))
+    for key, label, metric_key in metrics:
+        facts.append(_fact(
+            'contract_payment:%s:total:%s' % (period, metric_key),
+            '当前范围', label, metric_key,
+            round(sum(_number(row.get(key)) for row in rows), 2),
+            period=period, grain='period', data_date=data_date,
+            source_table=source,
+        ))
+    return facts
 
 
 def contract_payment(scope, args=None):
@@ -647,15 +1021,20 @@ def contract_payment(scope, args=None):
             item for item in contract_payments
             if not canonical_ladder(item.ladder_no or '')
         ]
-        matched = ladder_payments or contract_level_payments or contract_payments
-        if ladder_payments and contract_level_payments:
-            payment_match = '梯号级+合同级'
-        elif ladder_payments:
-            payment_match = '梯号级'
-        elif contract_level_payments:
-            payment_match = '合同级'
-        else:
-            payment_match = '未匹配'
+        other_payments = [
+            item for item in contract_payments
+            if canonical_ladder(item.ladder_no or '')
+            and canonical_ladder(item.ladder_no or '') not in ladder_keys
+        ]
+        matched = ladder_payments + contract_level_payments + other_payments
+        match_labels = []
+        if ladder_payments:
+            match_labels.append('梯号级')
+        if contract_level_payments:
+            match_labels.append('合同级')
+        if other_payments:
+            match_labels.append('其他梯号')
+        payment_match = '+'.join(match_labels) if match_labels else '未匹配'
 
         dates = sorted(
             item.payment_date for item in contract_payments if item.payment_date
@@ -669,7 +1048,16 @@ def contract_payment(scope, args=None):
         projects = sorted({
             normalize_text(row.get('project_name')) for row in rows if row.get('project_name')
         })
-        amount = round(sum((item.payment_amount_rmb or 0) for item in matched) / 10000.0, 2)
+        ladder_payment_wan = round(sum(
+            (item.payment_amount_rmb or 0) for item in ladder_payments
+        ) / 10000.0, 2)
+        contract_payment_wan = round(sum(
+            (item.payment_amount_rmb or 0) for item in contract_level_payments
+        ) / 10000.0, 2)
+        other_payment_wan = round(sum(
+            (item.payment_amount_rmb or 0) for item in other_payments
+        ) / 10000.0, 2)
+        amount = round(ladder_payment_wan + contract_payment_wan + other_payment_wan, 2)
         ledger_amount = round(sum(_number(row.get('amount_wan')) for row in rows), 2)
         ratio_amount_rmb = 0.0
         paid_equivalent_rmb = 0.0
@@ -706,6 +1094,9 @@ def contract_payment(scope, args=None):
             'ladder_count': len(ladder_nos),
             'ladder_nos': '、'.join(ladder_nos[:8]) + ('等' if len(ladder_nos) > 8 else ''),
             'ledger_amount_wan': ledger_amount,
+            'ladder_payment_wan': ladder_payment_wan,
+            'contract_payment_wan': contract_payment_wan,
+            'other_payment_wan': other_payment_wan,
             'payment_wan': amount,
             'payment_count': len(matched),
             'payment_match': payment_match,
@@ -721,20 +1112,29 @@ def contract_payment(scope, args=None):
         period = '%s年' % year
     else:
         period = '全部日期'
-    total_payment = round(sum(row['payment_wan'] for row in result_rows), 2)
+    total_ladder = round(sum(row['ladder_payment_wan'] for row in result_rows), 2)
+    total_contract = round(sum(row['contract_payment_wan'] for row in result_rows), 2)
+    total_other = round(sum(row['other_payment_wan'] for row in result_rows), 2)
+    total_payment = round(total_ladder + total_contract + total_other, 2)
     matched_count = sum(1 for row in result_rows if row['payment_count'])
+    facts = _contract_payment_facts(result_rows, period, matched_count)
     return {
         'kind': 'contract_payment',
         'scope_label': scope['label'],
         'period': period,
-        'message': '共匹配 %s 个合同，其中 %s 个有回款记录；回款合计 %s 万元。' % (
-            len(result_rows), matched_count, total_payment
+        'message': (
+            '共匹配 %s 个合同，其中 %s 个有回款记录；'
+            '梯号级回款 %s 万元，合同级回款 %s 万元，其他梯号回款 %s 万元，合计 %s 万元。'
+        ) % (
+            len(result_rows), matched_count, total_ladder, total_contract,
+            total_other, total_payment
         ),
         'columns': CONTRACT_PAYMENT_COLUMNS,
         'rows': result_rows,
+        'facts': facts,
         'notes': [
             '回款金额按人民币汇总，不展示逐笔日期、节点、付款方式或备注。',
-            '合同级回款与梯号级回款分开匹配，不把合同级回款重复分摊到每个梯号。',
+            '梯号级、合同级和其他梯号回款分别列示，不做静默取舍；合计为三类记录相加。',
             '回款比例优先取发货梯号明细最近一次成功回款计算，并按合同金额加权汇总。',
             '未参与计算的梯号回退台账比例，结果中会标明“回款计算 + 台账回退”。',
             '查询前已通过台账确认合同归属，只统计当前账号权限范围内的合同。',

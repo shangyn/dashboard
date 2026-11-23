@@ -26,7 +26,12 @@ from business_assistant.models import (
     BusinessAssistantQueryLog,
     BusinessAssistantSetting,
 )
-from business_assistant.scope import resolve_requested_modules, resolve_scope
+from business_assistant.scope import (
+    ASSISTANT_FORBIDDEN_MESSAGE,
+    assistant_allowed,
+    resolve_requested_modules,
+    resolve_scope,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +79,12 @@ UNSUPPORTED_MARKERS = (
 DATA_SOURCE_MARKERS = (
     '哪个表', '哪张表', '什么表', '数据来源', '来源表', '从哪来', '从哪里来',
     '读取的', '取数',
+)
+DATE_DIMENSION_MARKERS = (
+    ('whole_ship', ('整梯发货', '整梯发运')),
+    ('ship', ('发货', '发运', '组A', '组a')),
+    ('schedule', ('排产', '生产')),
+    ('sign', ('签单', '签订', '签约')),
 )
 SUBMISSION_MARKERS = (
     '填报', '报送', '提交成功', '是否提交', '提交状态', '已经提交',
@@ -154,9 +165,27 @@ def _default_questions(scope):
 
 
 def _context_payload(user):
-    scope = resolve_scope(user)
+    if assistant_allowed(user):
+        scope = resolve_scope(user)
+        context_enabled = enabled()
+        months = mf_svc.month_options()
+        questions = _default_questions(scope)
+        current_model_enabled = model_enabled()
+        current_model_answer_enabled = answer_composition_enabled()
+    else:
+        scope = {
+            'mode': 'none',
+            'label': '暂无经营助手权限',
+            'modules': [],
+            'scoped': True,
+        }
+        context_enabled = False
+        months = []
+        questions = []
+        current_model_enabled = False
+        current_model_answer_enabled = False
     return {
-        'enabled': enabled(),
+        'enabled': context_enabled,
         'scope': {
             'mode': scope['mode'],
             'label': scope['label'],
@@ -164,11 +193,11 @@ def _context_payload(user):
             'module_count': len(scope['modules']),
         },
         'year': dt.date.today().year,
-        'months': mf_svc.month_options(),
+        'months': months,
         'data_date': (dt.date.today() - dt.timedelta(days=1)).isoformat(),
-        'default_questions': _default_questions(scope),
-        'model_enabled': model_enabled(),
-        'model_answer_enabled': answer_composition_enabled(),
+        'default_questions': questions,
+        'model_enabled': current_model_enabled,
+        'model_answer_enabled': current_model_answer_enabled,
         'version': '2026-11-20',
     }
 
@@ -239,6 +268,22 @@ def _extract_month(question, page_context, last_entities=None):
     if page_value:
         return page_value
     return ''
+
+
+def _extract_date_dimension(question, last_entities=None, default='sign'):
+    text = question or ''
+    if '整梯发货' in text or '整梯发运' in text:
+        return 'whole_ship'
+    matched = []
+    for dimension, markers in DATE_DIMENSION_MARKERS:
+        if any(marker in text for marker in markers):
+            matched.append(dimension)
+    if len(matched) == 1:
+        return matched[0]
+    last_dimension = (last_entities or {}).get('date_dimension')
+    if last_dimension and _inherits_context(text):
+        return last_dimension
+    return default
 
 
 def _extract_year(question, page_context, last_entities=None):
@@ -344,6 +389,7 @@ def _heuristic_plan(question, page_context, last_entities=None):
     last_entities = last_entities or {}
     year = _extract_year(text, page_context, last_entities)
     month = _extract_month(text, page_context, last_entities)
+    date_dimension = _extract_date_dimension(text, last_entities)
     module = _extract_page_module(page_context)
     identifier = _extract_identifier(text, page_context, last_entities)
     args = {
@@ -353,6 +399,7 @@ def _heuristic_plan(question, page_context, last_entities=None):
         'keyword': identifier,
         'contract_no': '',
         'ladder_no': '',
+        'date_dimension': date_dimension,
         'topic': '',
         'time_scope': '',
     }
@@ -371,7 +418,9 @@ def _heuristic_plan(question, page_context, last_entities=None):
             'action': 'submission_status',
             'args': dict(args, time_scope=_extract_time_scope(text, month)),
         }
-    if '回款' in text and any(word in text for word in ('合同', '梯号')):
+    if '回款' in text and (
+        identifier or any(word in text for word in ('合同', '梯号'))
+    ):
         return {
             'action': 'contract_payment',
             'args': dict(args, time_scope=_extract_time_scope(text, month)),
@@ -384,6 +433,11 @@ def _heuristic_plan(question, page_context, last_entities=None):
         return {'action': 'ladder_status', 'args': args}
     if any(word in text for word in ('合同', '梯号')):
         return {'action': 'ladders', 'args': args}
+    if (
+        ('计划' in text and any(word in text for word in ('实际', '完成')))
+        or any(word in text for word in ('本月计划', '月度计划'))
+    ):
+        return {'action': 'performance', 'args': args}
     if any(word in text for word in (
         '回款', '签单', '排产', '发货', '完成率', '同比', '经营', '业绩', '目标',
     )):
@@ -418,7 +472,7 @@ def _plan_signature(plan):
     relevant = {
         key: args.get(key) for key in (
             'year', 'month', 'module', 'modules', 'keyword', 'contract_no',
-            'ladder_no', 'topic', 'time_scope',
+            'ladder_no', 'date_dimension', 'topic', 'time_scope',
         )
         if args.get(key)
     }
@@ -622,6 +676,11 @@ def _build_args(plan_args, question, page_context, last_entities, modules):
     if time_scope not in VALID_TIME_SCOPES:
         time_scope = ''
     topic = plan_args.get('topic') or ''
+    extracted_dimension = _extract_date_dimension(question, last_entities)
+    date_dimension = tools._normalize_date_dimension(
+        plan_args.get('date_dimension') or extracted_dimension,
+        default=extracted_dimension,
+    )
 
     keyword = plan_args.get('keyword') or _extract_identifier(question, page_context, last_entities)
     contract_no = plan_args.get('contract_no') or _query_value(
@@ -643,6 +702,7 @@ def _build_args(plan_args, question, page_context, last_entities, modules):
         'keyword': keyword or '',
         'contract_no': contract_no or '',
         'ladder_no': ladder_no or '',
+        'date_dimension': date_dimension,
         'topic': topic,
         'time_scope': time_scope,
     }
@@ -728,6 +788,7 @@ def _run_plan(user, scope, question, page_context, plan, last_entities,
         'year': safe_args.get('year') or '',
         'contract_no': safe_args.get('contract_no') or '',
         'ladder_no': safe_args.get('ladder_no') or '',
+        'date_dimension': safe_args.get('date_dimension') or '',
         'keyword': safe_args.get('keyword') or '',
         'time_scope': safe_args.get('time_scope') or '',
         'action': action,
@@ -762,7 +823,7 @@ def _merge_entities(items):
             actions.append(action)
         for key in (
             'modules', 'month', 'year', 'contract_no', 'ladder_no',
-            'keyword', 'time_scope',
+            'date_dimension', 'keyword', 'time_scope',
         ):
             if not merged.get(key) and item.get(key):
                 merged[key] = item[key]
@@ -772,12 +833,27 @@ def _merge_entities(items):
     return merged
 
 
+def _namespace_section_facts(section, section_no):
+    facts = []
+    for item in section.get('facts') or []:
+        if not isinstance(item, dict):
+            continue
+        fact = dict(item)
+        fact_id = str(fact.get('fact_id') or '')
+        if fact_id:
+            fact['fact_id'] = 'section%s:%s' % (section_no, fact_id)
+        facts.append(fact)
+    section['facts'] = facts
+    return facts
+
+
 def _run_plans(user, scope, question, page_context, plans, last_entities):
     sections = []
     steps = []
     entity_items = []
     suggestion_items = []
     periods = []
+    facts = []
 
     for plan in list(plans or [])[:MAX_PLANS]:
         action = plan.get('action') or 'unsupported'
@@ -797,6 +873,7 @@ def _run_plans(user, scope, question, page_context, plans, last_entities):
             prefer_explicit=True,
         )
         section = _section_from_result(result, action)
+        section_facts = _namespace_section_facts(section, len(sections) + 1)
         if section.get('exportable') and section.get('status') == 'success':
             export_args = section.get('export_args') or safe_args
             section['export_kind'] = section.get('kind') or action
@@ -817,6 +894,7 @@ def _run_plans(user, scope, question, page_context, plans, last_entities):
         period = section.get('period')
         if period and period not in periods:
             periods.append(period)
+        facts.extend(section_facts)
 
     failures = [item for item in sections if item.get('status') != 'success']
     success_count = len(sections) - len(failures)
@@ -849,6 +927,7 @@ def _run_plans(user, scope, question, page_context, plans, last_entities):
         'period': '；'.join(periods),
         'columns': [],
         'rows': [],
+        'facts': facts,
         'notes': [],
         'suggestions': unique_suggestions[:4],
         'sections': sections,
@@ -860,6 +939,7 @@ def _run_plans(user, scope, question, page_context, plans, last_entities):
 def _decorate_result(result, user, scope, conversation, trace_id, action, intent_source, model_used, safe_args):
     result.setdefault('columns', [])
     result.setdefault('rows', [])
+    result.setdefault('facts', [])
     result.setdefault('notes', [])
     result.setdefault('exportable', False)
     result.setdefault('status', 'success')
@@ -1033,6 +1113,8 @@ def _finish_error(user, conversation, question, trace_id, action, intent_source,
 
 
 def answer(user, question, page_context=None, conversation_id=None):
+    if not assistant_allowed(user):
+        raise PermissionError(ASSISTANT_FORBIDDEN_MESSAGE)
     if not enabled():
         raise RuntimeError('经营助手暂未开启')
     question = (question or '').strip()
@@ -1106,6 +1188,7 @@ def answer(user, question, page_context=None, conversation_id=None):
                 result['message'] = composed.get('answer') or result.get('message') or ''
                 result['answer_source'] = 'model'
                 result['answer_model'] = composed.get('model') or ''
+                result['answer_fact_ids'] = composed.get('fact_ids') or []
             else:
                 result['answer_source'] = 'template'
                 result['answer_fallback_code'] = composed.get('error_code') or 'answer_failed'

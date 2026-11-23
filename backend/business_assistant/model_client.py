@@ -25,6 +25,7 @@ ACTIONS = (
 )
 
 ANSWER_MAX_ROWS = 8
+ANSWER_MAX_FACTS = 60
 
 
 def model_enabled():
@@ -205,6 +206,24 @@ def _column_labels(columns):
     ]
 
 
+def _column_meta(columns):
+    return [
+        {
+            'key': str(item.get('key') or ''),
+            'label': str(item.get('label') or item.get('key') or ''),
+        }
+        for item in (columns or [])[:20]
+        if isinstance(item, dict)
+    ]
+
+
+def _priority_facts(facts, limit=ANSWER_MAX_FACTS):
+    items = [item for item in (facts or []) if isinstance(item, dict)]
+    totals = [item for item in items if item.get('subject') == '当前范围']
+    others = [item for item in items if item.get('subject') != '当前范围']
+    return _answer_value((totals + others)[:limit])
+
+
 def _answer_context(result):
     context = {
         'status': result.get('status') or 'success',
@@ -213,9 +232,12 @@ def _answer_context(result):
         'scope_label': result.get('scope_label') or '',
         'data_date': result.get('data_date') or '',
         'row_count': len(result.get('rows') or []),
-        'columns': _column_labels(result.get('columns')),
+        'columns': _column_meta(result.get('columns')),
         'rows': _answer_value((result.get('rows') or [])[:ANSWER_MAX_ROWS]),
+        'facts': _priority_facts(result.get('facts')),
         'notes': _answer_value((result.get('notes') or [])[:5]),
+        'total': result.get('total') or 0,
+        'truncated': bool(result.get('total') and len(result.get('rows') or []) < result.get('total')),
     }
     sections = []
     for section in (result.get('sections') or [])[:3]:
@@ -228,8 +250,9 @@ def _answer_context(result):
             'period': section.get('period') or '',
             'failure_code': section.get('failure_code') or '',
             'row_count': len(section.get('rows') or []),
-            'columns': _column_labels(section.get('columns')),
+            'columns': _column_meta(section.get('columns')),
             'rows': _answer_value((section.get('rows') or [])[:ANSWER_MAX_ROWS]),
+            'facts': _priority_facts(section.get('facts')),
         })
     if sections:
         context['sections'] = sections
@@ -272,11 +295,15 @@ def compose_answer(question, result, timeout=None):
     context = _answer_context(result)
     system = (
         '你是经营数据助手的答复整理器。后端只读工具已经完成权限校验、查询和计算。'
+        'facts 是唯一权威事实；rows 和 columns 只用于辅助理解明细。'
+        '必须遵守 fact 的 period 和 grain：月度问题不得引用年度事实，年度问题不得把月度事实当作年度累计。'
+        '数值沿用 fact 的单位和精度，不得自行换算亿元/万元或百分比。'
         '只能使用给定 tool_result 中的事实，不得新增、推测或重算任何金额、数量、百分比、'
         '日期、模块、合同号、梯号或表名。不得生成 SQL，不得声称访问了未提供的数据，'
         '不得回答经营数据之外的话题。若 status 为 partial_success，必须说明哪些子查询未完成；'
         '若某项需要补充信息，要明确缺少什么。用简洁中文回答 1 到 3 句，不要 Markdown、'
-        '不要表格、不要复述全部字段。只输出一个 JSON 对象，字段名为 answer，值为字符串。'
+        '不要表格、不要复述全部字段。只输出一个 JSON 对象，字段为 answer（字符串）'
+        '和 fact_ids（引用的事实 ID 字符串数组）。答案中的每个数字都必须来自 fact_ids 对应事实。'
     )
     user = json.dumps({
         'question': question,
@@ -313,15 +340,40 @@ def compose_answer(question, result, timeout=None):
             'message': '模型答复格式不符合要求。',
         }
 
-    context_text = json.dumps(context, ensure_ascii=False, default=str)
-    new_numbers = _number_tokens(answer) - _number_tokens(context_text)
+    available_facts = {
+        str(item.get('fact_id')): item
+        for item in (context.get('facts') or [])
+        if isinstance(item, dict) and item.get('fact_id')
+    }
+    cited_facts = []
+    if available_facts:
+        raw_ids = data.get('fact_ids')
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return {
+                'ok': False,
+                'error_code': 'answer_evidence_missing',
+                'message': '模型答复没有引用事实 ID，已退回固定答复。',
+            }
+        for fact_id in raw_ids:
+            if not isinstance(fact_id, str) or fact_id not in available_facts:
+                return {
+                    'ok': False,
+                    'error_code': 'answer_unverified_fact',
+                    'message': '模型答复引用了未知事实，已退回固定答复。',
+                }
+            if available_facts[fact_id] not in cited_facts:
+                cited_facts.append(available_facts[fact_id])
+        evidence_text = json.dumps(cited_facts, ensure_ascii=False, default=str)
+    else:
+        evidence_text = json.dumps(context, ensure_ascii=False, default=str)
+    new_numbers = _number_tokens(answer) - _number_tokens(evidence_text)
     if new_numbers:
         return {
             'ok': False,
             'error_code': 'answer_unverified_number',
-            'message': '模型答复包含工具结果中不存在的数字，已退回固定答复。',
+            'message': '模型答复包含引用事实中不存在的数字，已退回固定答复。',
         }
-    new_tables = _table_tokens(answer) - _table_tokens(context_text)
+    new_tables = _table_tokens(answer) - _table_tokens(evidence_text)
     if new_tables:
         return {
             'ok': False,
@@ -332,6 +384,7 @@ def compose_answer(question, result, timeout=None):
         'ok': True,
         'answer': answer,
         'model': response.get('model') or '',
+        'fact_ids': [item.get('fact_id') for item in cited_facts],
     }
 
 
@@ -347,6 +400,8 @@ def plan_actions(question, scope, page_context, history=None, last_entities=None
         '不要把同一动作拆成多个，也不要为同一个查询重复返回动作。'
         '问某类数据来自哪张表、从哪里读取时选择 data_source，并在 topic 中填写对应的'
         '业务动作；没有明确新主题时沿用 last_entities.action。'
+        '梯号明细要区分时间维度：签订选 sign，排产选 schedule，发货选 ship，'
+        '整梯发货选 whole_ship；不确定时使用 sign。'
         '只问某个合同或梯号的回款选择 contract_payment；问模块单月填报是否提交选择'
         'submission_status。不得直接回答数据库内容，也不得生成 SQL。'
         '只输出 JSON，不要 Markdown。'
@@ -379,6 +434,7 @@ def plan_actions(question, scope, page_context, history=None, last_entities=None
                     'keyword': 'contract/ladder/project keyword or empty',
                     'contract_no': 'contract number or empty',
                     'ladder_no': 'ladder number or empty',
+                    'date_dimension': 'sign|schedule|ship|whole_ship or empty',
                     'topic': 'for data_source: performance|ladders|ladder_status|diagnose|contract_payment|submission_status|general',
                     'time_scope': 'all|year|month or empty',
                 },
@@ -535,9 +591,21 @@ def test_connection(timeout=None):
             'scope_label': '全部模块',
             'columns': [
                 {'key': 'contract_no', 'label': '合同号'},
-                {'key': 'payment_wan', 'label': '回款(万元)'},
+                {'key': 'payment_wan', 'label': '回款合计(万元)'},
             ],
             'rows': [{'contract_no': 'HT-TEST-001', 'payment_wan': 1234.5}],
+            'facts': [{
+                'fact_id': 'contract_payment:test:HT-TEST-001:payment_total',
+                'subject': 'HT-TEST-001',
+                'metric': '回款合计',
+                'metric_key': 'payment_total',
+                'value': 1234.5,
+                'unit': '万元',
+                'period': '全部日期',
+                'grain': 'period',
+                'data_date': dt.date.today().isoformat(),
+                'source_table': 'cc_payment_collection',
+            }],
             'notes': [],
         }
         composed = compose_answer(

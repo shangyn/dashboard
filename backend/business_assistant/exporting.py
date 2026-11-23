@@ -11,7 +11,11 @@ from flask import current_app
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from business_assistant import tools
-from business_assistant.scope import resolve_scope
+from business_assistant.scope import (
+    ASSISTANT_FORBIDDEN_MESSAGE,
+    assistant_allowed,
+    resolve_scope,
+)
 
 
 SALT = 'business-assistant-export'
@@ -68,7 +72,8 @@ def _append_summary(worksheet, scope, result):
 def _append_ladders(workbook, result):
     sheet = workbook.create_sheet('梯号明细')
     headers = [
-        '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '排产完工日期',
+        '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '排产日期',
+        '排产完工日期',
         '整梯发货日期', '组A日期', '产品型号', '载重', '速度', '签订日期',
         '产品状态', '业务员', '回款比例', '比例来源',
     ]
@@ -81,6 +86,7 @@ def _append_ladders(workbook, result):
             row.get('project_name') or '',
             row.get('unit_count') or 0,
             row.get('amount_wan') or 0,
+            row.get('schedule_date') or '',
             row.get('schedule_finish_date') or '',
             row.get('whole_ship_date') or '',
             row.get('delivery_date') or '',
@@ -138,6 +144,8 @@ def export_workbook(user, token):
     payload = load_export_payload(token)
     if int(payload.get('uid') or 0) != int(user.id):
         raise PermissionError('无权下载该导出文件')
+    if not assistant_allowed(user):
+        raise PermissionError(ASSISTANT_FORBIDDEN_MESSAGE)
     scope = resolve_scope(user)
     if scope['mode'] == 'none':
         raise PermissionError('当前账号没有经营数据权限')
