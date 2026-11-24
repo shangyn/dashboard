@@ -360,12 +360,15 @@ def _plan_diff(items, overwrite_expected=False):
                 'old': current_remark,
                 'new': file_remark,
             })
-        old_expected = row.original_expected_ship_date
+        old_expected = (
+            row.expected_ship_date or row.committed_expected_ship_date
+            or row.original_expected_ship_date
+        )
         file_expected = item.get('original_expected_ship_date')
         # 草稿不再写入 expected，也不参与预览/提交的已有日期判断。
         existing_expected = (
-            row.original_expected_ship_date or row.expected_ship_date
-            or row.committed_expected_ship_date
+            row.expected_ship_date or row.committed_expected_ship_date
+            or row.original_expected_ship_date
         )
         if file_expected and not existing_expected:
             expected_filled.append({
@@ -588,6 +591,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
 
     changed_keys = []
     remark_overwritten_count = 0
+    expected_overwritten_count = 0
     for key, item in new_by_key.items():
         expected = _parse_iso_date(item.get('original_expected_ship_date'))
         row = current_rows.get(key)
@@ -629,7 +633,10 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
 
         old = {
             'module_name': row.module_name or '',
-            'expected_ship_date': iso(row.original_expected_ship_date),
+            'expected_ship_date': iso(row.expected_ship_date),
+            'original_expected_ship_date': iso(row.original_expected_ship_date),
+            'committed_expected_ship_date': iso(row.committed_expected_ship_date),
+            'committed_week_start': iso(row.committed_week_start),
             'unit_count': row.unit_count,
             'amount_rmb': row.amount_rmb,
             'plan_status': row.plan_status,
@@ -642,6 +649,17 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
             row.original_expected_ship_date or row.expected_ship_date
             or row.committed_expected_ship_date
         )
+        date_values_to_update = [
+            row.expected_ship_date, row.original_expected_ship_date,
+        ]
+        if row.commit_status == 'committed':
+            date_values_to_update.append(row.committed_expected_ship_date)
+        will_overwrite_date = bool(
+            overwrite_expected and file_expected and existing_expected
+            and any(value != file_expected for value in date_values_to_update)
+        )
+        if will_overwrite_date:
+            expected_overwritten_count += 1
         # 已有预计日期一律保留；只有空值才用文件补。
         # overwrite_expected 是预览弹窗里显式勾选的高级选项，默认关闭。
         if overwrite_expected and file_expected:
@@ -707,15 +725,18 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
             row.whole_ship_date = new_whole or row.whole_ship_date
         row.original_expected_ship_date = effective_expected
         preserved_flags = set(row.flags()) - PLAN_FLAGS
-        if (
-            row.commit_status == 'committed'
-            and file_expected
-            and row.committed_expected_ship_date
-            and file_expected != row.committed_expected_ship_date
-        ):
-            # 文件想改已提交承诺的日期：只提示冲突，不改承诺。
-            new_flags.add('committed_plan_changed')
-        if row.commit_status != 'committed':
+        if row.commit_status == 'committed':
+            if (file_expected and row.committed_expected_ship_date
+                    and file_expected != row.committed_expected_ship_date
+                    and not overwrite_expected):
+                # 默认只提示冲突；导入人员显式勾选后才覆盖已提交的承诺日期。
+                new_flags.add('committed_plan_changed')
+            if overwrite_expected and file_expected:
+                row.expected_ship_date = file_expected
+                row.committed_expected_ship_date = file_expected
+                row.committed_week_start = week_start(file_expected)
+                new_flags.discard('committed_plan_changed')
+        else:
             # 草稿只存在于 draft_* 字段，不再参与预计日期优先级，
             # 否则旧草稿会压过本次文件日期。
             row.expected_ship_date = (
@@ -726,7 +747,10 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
         row.set_flags(preserved_flags | new_flags)
         changed = any([
             old['module_name'] != (row.module_name or ''),
-            old['expected_ship_date'] != iso(effective_expected),
+            old['expected_ship_date'] != iso(row.expected_ship_date),
+            old['original_expected_ship_date'] != iso(row.original_expected_ship_date),
+            old['committed_expected_ship_date'] != iso(row.committed_expected_ship_date),
+            old['committed_week_start'] != iso(row.committed_week_start),
             old['unit_count'] != row.unit_count,
             old['amount_rmb'] != row.amount_rmb,
             old['business_remark'] != (row.business_remark or ''),
@@ -737,7 +761,10 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
             _audit(user, 'plan', 'update', key, batch_id=batch.id,
                    old_values=old, new_values={
                        'module_name': row.module_name or '',
-                       'expected_ship_date': iso(effective_expected),
+                       'expected_ship_date': iso(row.expected_ship_date),
+                       'original_expected_ship_date': iso(row.original_expected_ship_date),
+                       'committed_expected_ship_date': iso(row.committed_expected_ship_date),
+                       'committed_week_start': iso(row.committed_week_start),
                        'unit_count': row.unit_count,
                        'amount_rmb': row.amount_rmb,
                        'business_remark': row.business_remark or '',
@@ -779,6 +806,8 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
                'version': batch.version,
                'unique_count': batch.unique_count,
                'changed_count': len(set(changed_keys)),
+               'overwrite_expected': overwrite_expected,
+               'expected_overwritten_count': expected_overwritten_count,
                'overwrite_remark': overwrite_remark,
                'remark_overwritten_count': remark_overwritten_count,
            })
@@ -795,6 +824,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
         'unique_count': batch.unique_count,
         'total_units': batch.total_units,
         'changed_count': len(set(changed_keys)),
+        'expected_overwritten_count': expected_overwritten_count,
         'remark_overwritten_count': remark_overwritten_count,
         'preserved_absent_count': len(preserved_absent),
         'sync': sync_result,
@@ -937,42 +967,64 @@ def _forecast_expected_date(item):
             or _parse_iso_date(item.get('original_expected_ship_date')))
 
 
-def _row_has_expected_date(row):
-    """已有任何形态的预计日期都视为业务已填，导入时不覆盖。"""
-    return bool(
+def _forecast_date_action(row, item):
+    """返回 (fill/overwrite, 日期)。单月填报的空日期永远不参与覆盖。"""
+    expected = _forecast_expected_date(item)
+    if expected is None:
+        return '', None
+    existing = (
         row.expected_ship_date
         or row.original_expected_ship_date
         or row.committed_expected_ship_date
-        or row.draft_expected_ship_date
     )
+    if not existing:
+        return 'fill', expected
+    committed_date_changed = (
+        row.commit_status == 'committed'
+        and (row.committed_expected_ship_date != expected
+             or row.committed_week_start != week_start(expected))
+    )
+    if (row.expected_ship_date != expected
+            or row.original_expected_ship_date != expected
+            or committed_date_changed):
+        return 'overwrite', expected
+    return '', expected
 
 
-def _fillable_expected_date(row, item):
-    return not _row_has_expected_date(row) and _forecast_expected_date(item) is not None
-
-
-def _fill_missing_expected_date(row, item, user, batch_id):
-    """给已有明细补空的预计日期；来源、备注、订舱、承诺、实发和月份全部不动。"""
-    if not _fillable_expected_date(row, item):
-        return False
-    expected = _forecast_expected_date(item)
+def _apply_forecast_expected_date(row, item, user, batch_id):
+    """用单月填报的最新非空日期更新明细，并同步已提交的承诺日期。"""
+    action, expected = _forecast_date_action(row, item)
+    if not action:
+        return ''
     old_values = {
         'expected_ship_date': iso(row.expected_ship_date),
         'original_expected_ship_date': iso(row.original_expected_ship_date),
+        'committed_expected_ship_date': iso(row.committed_expected_ship_date),
+        'committed_week_start': iso(row.committed_week_start),
         'business_expected_raw': row.business_expected_raw or '',
     }
     row.expected_ship_date = expected
     row.original_expected_ship_date = expected
     row.business_expected_raw = expected.isoformat()
+    if row.commit_status == 'committed':
+        row.committed_expected_ship_date = expected
+        row.committed_week_start = week_start(expected)
+        flags = set(row.flags())
+        if 'committed_plan_changed' in flags:
+            flags.discard('committed_plan_changed')
+            row.set_flags(flags)
     row.plan_change_count = (row.plan_change_count or 0) + 1
-    _audit(user, 'forecast', 'fill_expected_date', row.ladder_key, batch_id=batch_id,
+    action_name = 'fill_expected_date' if action == 'fill' else 'overwrite_expected_date'
+    _audit(user, 'forecast', action_name, row.ladder_key, batch_id=batch_id,
            old_values=old_values,
            new_values={
                'expected_ship_date': expected.isoformat(),
                'original_expected_ship_date': expected.isoformat(),
+               'committed_expected_ship_date': iso(row.committed_expected_ship_date),
+               'committed_week_start': iso(row.committed_week_start),
                'business_expected_raw': expected.isoformat(),
            })
-    return True
+    return action
 
 
 def preview_plan_from_forecast(month, user):
@@ -985,7 +1037,7 @@ def preview_plan_from_forecast(month, user):
     items, issues, stats = _forecast_plan_items(month)
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
-    added = existing = moved = restored = skipped_shipped = date_fill = 0
+    added = existing = moved = restored = skipped_shipped = date_fill = date_update = 0
     breakdown = stats.get('module_breakdown') or {}
     for item in items:
         entry = breakdown.setdefault(
@@ -998,6 +1050,7 @@ def preview_plan_from_forecast(month, user):
         entry.setdefault('moved', 0)
         entry.setdefault('restored', 0)
         entry.setdefault('date_fill', 0)
+        entry.setdefault('date_update', 0)
         row = current_rows.get(item['ladder_key'])
         if row is None:
             added += 1
@@ -1015,10 +1068,14 @@ def preview_plan_from_forecast(month, user):
             restored += 1
             entry['restored'] += 1
         if (row is not None and not row.actual_ship_date
-                and row.source_kind != 'actual_only'
-                and _fillable_expected_date(row, item)):
-            date_fill += 1
-            entry['date_fill'] += 1
+                and row.source_kind != 'actual_only'):
+            action, _ = _forecast_date_action(row, item)
+            if action == 'fill':
+                date_fill += 1
+                entry['date_fill'] += 1
+            elif action == 'overwrite':
+                date_update += 1
+                entry['date_update'] += 1
 
     warnings = [issue for issue in issues if issue.get('severity') == 'warning']
     errors = [issue for issue in issues if issue.get('severity') == 'error']
@@ -1044,6 +1101,7 @@ def preview_plan_from_forecast(month, user):
         'moved_count': moved,
         'restored_count': restored,
         'date_fill_count': date_fill,
+        'date_update_count': date_update,
         'skipped_shipped_count': skipped_shipped,
         'module_breakdown': breakdown,
         'warning_count': len(warnings),
@@ -1081,7 +1139,7 @@ def preview_plan_from_forecast(month, user):
 
 
 def commit_forecast_import(batch_id, user):
-    """把单月填报批次并入追踪表：新增、恢复、转入本月；已有明细只补空的预计日期。"""
+    """把单月填报批次并入追踪表：新增、恢复、转入本月，并覆盖已有预计日期。"""
     if not can_import(user):
         raise PermissionError('无导入权限')
     batch = db.session.get(ImportBatch, batch_id)
@@ -1106,7 +1164,8 @@ def commit_forecast_import(batch_id, user):
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
     now = dt.datetime.now()
-    added = moved = restored = skipped_existing = skipped_shipped = date_filled = 0
+    added = moved = restored = skipped_existing = skipped_shipped = 0
+    date_filled = date_updated = 0
     for item in items:
         key = item['ladder_key']
         row = current_rows.get(key)
@@ -1116,8 +1175,11 @@ def commit_forecast_import(batch_id, user):
                 continue
             if row.plan_status == 'active':
                 if row.plan_month == batch.plan_month:
-                    if _fill_missing_expected_date(row, item, user, batch.id):
+                    action = _apply_forecast_expected_date(row, item, user, batch.id)
+                    if action == 'fill':
                         date_filled += 1
+                    elif action == 'overwrite':
+                        date_updated += 1
                     else:
                         skipped_existing += 1
                     continue
@@ -1140,8 +1202,11 @@ def commit_forecast_import(batch_id, user):
                            'plan_batch_id': row.plan_batch_id,
                            'plan_version': row.plan_version,
                        })
-                if _fill_missing_expected_date(row, item, user, batch.id):
+                action = _apply_forecast_expected_date(row, item, user, batch.id)
+                if action == 'fill':
                     date_filled += 1
+                elif action == 'overwrite':
+                    date_updated += 1
                 moved += 1
                 continue
             # 已移除但未实发：恢复计划状态，日期/承诺/订舱原样保留。
@@ -1161,8 +1226,11 @@ def commit_forecast_import(batch_id, user):
                    new_values={'plan_status': 'active', 'module_name': row.module_name or '',
                                'plan_month': row.plan_month, 'plan_batch_id': row.plan_batch_id,
                                'plan_version': row.plan_version})
-            if _fill_missing_expected_date(row, item, user, batch.id):
+            action = _apply_forecast_expected_date(row, item, user, batch.id)
+            if action == 'fill':
                 date_filled += 1
+            elif action == 'overwrite':
+                date_updated += 1
             restored += 1
             continue
 
@@ -1217,7 +1285,8 @@ def commit_forecast_import(batch_id, user):
                'added_count': added,
                'moved_count': moved,
                'restored_count': restored,
-                'date_filled_count': date_filled,
+               'date_filled_count': date_filled,
+               'date_updated_count': date_updated,
            })
     db.session.commit()
     try:
@@ -1233,6 +1302,7 @@ def commit_forecast_import(batch_id, user):
         'moved_count': moved,
         'restored_count': restored,
         'date_filled_count': date_filled,
+        'date_updated_count': date_updated,
         'skipped_existing': skipped_existing,
         'skipped_shipped': skipped_shipped,
         'sync': sync_result,

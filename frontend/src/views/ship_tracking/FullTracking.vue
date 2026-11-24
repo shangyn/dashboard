@@ -376,7 +376,7 @@
           <div class="st-import-card">
             <div class="st-import-title">从单月填报生成计划</div>
             <p class="st-import-desc">
-              取同月份各模块<strong>最新已提交版本</strong>的发货梯号，增量并入发货明细。补缺失、恢复已移除，并把其他月份的有效计划转入本月；保留原预计日期、备注、实际发货、订舱和承诺；草稿不参与。
+              取同月份各模块<strong>最新已提交版本</strong>的发货梯号，增量并入发货明细。补缺失、恢复已移除，并把其他月份的有效计划转入本月；单月填报里的非空预计日期会覆盖明细原日期，备注、实际发货、订舱和来源保持不变；草稿不参与。
             </p>
             <div class="st-import-form">
               <el-date-picker v-model="planMonth" size="small" type="month" value-format="YYYY-MM" placeholder="计划月份" style="width: 140px" />
@@ -688,6 +688,7 @@
             <el-descriptions-item label="已有明细">{{ forecastSummary.existing_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="恢复已移除">{{ forecastSummary.restored_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="补预计日期">{{ forecastSummary.date_fill_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="覆盖预计日期">{{ forecastSummary.date_update_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已实发跳过">{{ forecastSummary.skipped_shipped_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="台账未命中">{{ forecastSummary.ledger_missing_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="带预计日期">{{ forecastSummary.expected_date_count ?? 0 }}</el-descriptions-item>
@@ -704,6 +705,7 @@
             <el-table-column prop="existing" label="已存在" width="72" align="right" />
             <el-table-column prop="restored" label="恢复" width="66" align="right" />
             <el-table-column prop="date_fill" label="补日期" width="66" align="right" />
+            <el-table-column prop="date_update" label="覆盖日期" width="76" align="right" />
           </el-table>
           <el-alert
             v-if="forecastSummary.ledger_missing_count || forecastSummary.duplicate_submission_count || forecastSummary.module_mismatch_count"
@@ -718,7 +720,7 @@
             :closable="false"
             show-icon
             style="margin-top: 10px"
-            title="本次补缺失/已移除梯号，并把其他月份的有效计划转入本月；原预计日期、备注、实际发货、订舱和承诺保持不变。新增行会带入单月填报里填写的预计发货日期；已有明细只补空的预计日期，不覆盖其他字段。"
+            title="本次补缺失/已移除梯号，并把其他月份的有效计划转入本月。单月填报里的预计日期会覆盖已有明细日期；未填日期时保留原值。备注、实际发货、订舱和来源不会被覆盖。"
           />
         </template>
         <template v-else>
@@ -731,11 +733,11 @@
             <el-descriptions-item label="新增">{{ planPreview.data.summary.added_count }}</el-descriptions-item>
             <el-descriptions-item label="将移除（纯计划行）">{{ planPreview.data.summary.removed_count }}</el-descriptions-item>
             <el-descriptions-item label="文件未含但保留">{{ planPreview.data.summary.preserved_absent_count ?? 0 }}</el-descriptions-item>
-            <el-descriptions-item label="文件中日期与已有不同">{{ planPreview.data.summary.expected_changed_count }}</el-descriptions-item>
+            <el-descriptions-item :label="planPreview.overwriteExpected ? '预计日期将覆盖' : '预计日期冲突（保留原值）'">{{ planPreview.data.summary.expected_changed_count }}</el-descriptions-item>
             <el-descriptions-item label="补空日期">{{ planPreview.data.summary.expected_filled_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="导入备注">{{ planPreview.data.summary.remark_imported_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item :label="planPreview.overwriteRemark ? '备注将被覆盖' : '备注冲突（保留已有）'">{{ planPreview.data.summary.remark_conflict_count ?? 0 }}</el-descriptions-item>
-            <el-descriptions-item label="已提交承诺冲突（保留承诺）">{{ planPreview.data.summary.committed_conflict_count }}</el-descriptions-item>
+            <el-descriptions-item :label="planPreview.overwriteExpected ? '已提交承诺日期将覆盖' : '已提交承诺冲突（保留承诺）'">{{ planPreview.data.summary.committed_conflict_count }}</el-descriptions-item>
             <el-descriptions-item label="文件未含但已实发/已订舱">{{ (planPreview.data.summary.shipped_absent_count ?? 0) + (planPreview.data.summary.booked_absent_count ?? 0) }}</el-descriptions-item>
             <el-descriptions-item label="警告">{{ planPreview.data.warning_count }}</el-descriptions-item>
             <el-descriptions-item label="错误">{{ planPreview.data.error_count }}</el-descriptions-item>
@@ -769,7 +771,16 @@
             :title="`未提供可选列：${planHeaderInfo.missing_optional.map((item) => item.label).join('、')}`"
           />
           <el-alert v-if="planPreview.data.summary.duplicate_import" type="warning" :closable="false" show-icon style="margin-top: 12px" title="该文件与历史已导入文件相同。如确认重新生成版本，请在下方勾选强制导入。" />
-          <el-alert v-if="planPreview.data.summary.committed_conflict_count" type="error" :closable="false" show-icon style="margin-top: 12px" title="文件中的日期与已提交承诺不一致。系统保留原承诺并标记冲突，不会静默覆盖。" />
+          <el-alert
+            v-if="planPreview.data.summary.committed_conflict_count"
+            :type="planPreview.overwriteExpected ? 'warning' : 'error'"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+            :title="planPreview.overwriteExpected
+              ? `已勾选覆盖，${planPreview.data.summary.committed_conflict_count} 条已提交承诺日期将按文件更新。`
+              : '文件中的日期与已提交承诺不一致。未勾选覆盖时保留原承诺并标记冲突。'"
+          />
           <el-alert
             v-if="planPreview.data.summary.remark_conflict_count"
             :type="planPreview.overwriteRemark ? 'error' : 'warning'"
@@ -780,7 +791,15 @@
               ? `文件中的备注将覆盖 ${planPreview.data.summary.remark_conflict_count} 条已有业务备注，请确认。`
               : '文件中的备注与系统已有业务备注不一致。系统保留已有备注，不会静默覆盖。'"
           />
-          <el-alert type="info" :closable="false" show-icon style="margin-top: 10px" title="默认保留已有预计日期和业务备注，只有空值才会被文件补上；实际发货/订舱/承诺不会被覆盖。勾选下方选项后，才会按文件更新对应字段。" />
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-top: 10px"
+            :title="planPreview.overwriteExpected
+              ? '已勾选覆盖预计日期：已有日期（含已提交承诺日期）会按文件更新；文件日期为空时仍保留原值，实际发货和订舱不受影响。'
+              : '默认保留已有预计日期和业务备注，只有空值才会被文件补上；勾选覆盖后才会按文件更新预计日期。实际发货和订舱不会被覆盖。'"
+          />
         </template>
         <el-table :data="planPreview.data.issues.slice(0, 200)" size="small" border max-height="300" style="margin-top: 12px">
           <el-table-column prop="row_number" label="行号" width="65" align="center" />
@@ -790,7 +809,7 @@
         <div class="st-preview-foot">
           <template v-if="planPreview.mode !== 'forecast'">
             <el-checkbox v-model="planPreview.force">强制重新导入相同文件</el-checkbox>
-            <el-checkbox v-model="planPreview.overwriteExpected">用文件中的预计日期覆盖已有预计日期</el-checkbox>
+            <el-checkbox v-model="planPreview.overwriteExpected">用文件中的预计日期覆盖已有日期（含已提交承诺日期）</el-checkbox>
             <el-checkbox v-model="planPreview.overwriteRemark">用文件中的备注覆盖已有业务备注（空值保留）</el-checkbox>
           </template>
           <span>预览共 {{ planPreview.data.issue_total || 0 }} 条提示</span>
@@ -1823,7 +1842,8 @@ async function commitPlan() {
       const data = res.data || {}
       ElMessage.success(
         `已新增 ${data.added_count || 0} 条，转入 ${data.moved_count || 0} 条，恢复 ${data.restored_count || 0} 条，` +
-          `补预计日期 ${data.date_filled_count || 0} 条，其余已存在跳过 ${data.skipped_existing || 0} 条`
+          `补预计日期 ${data.date_filled_count || 0} 条，覆盖预计日期 ${data.date_updated_count || 0} 条，` +
+          `其余已存在跳过 ${data.skipped_existing || 0} 条`
       )
     } else {
       const res = await commitPlanImport(
@@ -1834,8 +1854,10 @@ async function commitPlan() {
       )
       const preserved = res.data.preserved_absent_count || 0
       const remarkOverwritten = res.data.remark_overwritten_count || 0
+      const expectedOverwritten = res.data.expected_overwritten_count || 0
       ElMessage.success(
         `计划版本 ${res.data.version} 已生效，变更 ${res.data.changed_count} 条` +
+          (expectedOverwritten ? `，覆盖预计日期 ${expectedOverwritten} 条` : '') +
           (remarkOverwritten ? `，覆盖备注 ${remarkOverwritten} 条` : '') +
           (preserved ? `，文件未含但保留 ${preserved} 条` : '')
       )
