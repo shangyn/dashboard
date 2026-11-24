@@ -141,6 +141,7 @@
             type="date"
             size="small"
             value-format="YYYY-MM-DD"
+            :default-value="expectedDateDefault"
             placeholder="选择日期"
             :disabled="!filteredCandidates.length"
             style="width: 150px"
@@ -210,6 +211,7 @@
                 type="date"
                 size="small"
                 value-format="YYYY-MM-DD"
+                :default-value="expectedDateDefault"
                 placeholder="选择日期"
                 style="width: 126px"
                 @update:model-value="(value) => updateSelectionDate(row.ladder_no, value)"
@@ -263,6 +265,7 @@
                 type="date"
                 size="small"
                 value-format="YYYY-MM-DD"
+                :default-value="expectedDateDefault"
                 placeholder="选择日期"
                 style="width: 126px"
                 @update:model-value="(value) => updateSelectionDate(row.ladder_no, value)"
@@ -347,6 +350,11 @@ const keyword = ref('')
 const scheduleFilter = ref('scheduled')
 const manualLadder = ref('')
 const batchDate = ref('')
+const expectedDateDefault = computed(() => {
+  const match = /^(\d{4})-(\d{2})$/.exec(month.value || '')
+  if (!match) return new Date()
+  return new Date(Number(match[1]), Number(match[2]) - 1, 1)
+})
 const page = ref(1)
 const pageSize = ref(20)
 // 候选表格高度跟随窗口，避免表格下方留一大片空白
