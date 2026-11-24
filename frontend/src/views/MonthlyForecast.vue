@@ -134,6 +134,32 @@
           />
         </div>
 
+        <div class="mf-batch">
+          <span class="mf-batch-title">批量设置预计发货日期</span>
+          <el-date-picker
+            v-model="batchDate"
+            type="date"
+            size="small"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            :disabled="!filteredCandidates.length"
+            style="width: 150px"
+          />
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :disabled="!batchDate || !selectedFilteredCount"
+            @click="applyBatchDate"
+          >
+            应用到已勾选（{{ selectedFilteredCount }}）
+          </el-button>
+          <el-button size="small" :disabled="!filteredCandidates.length" @click="toggleFilteredSelection">
+            {{ isAllFilteredSelected ? '取消勾选当前结果' : '勾选当前结果' }}
+          </el-button>
+          <span class="mf-hint">只作用于当前搜索结果；设置后请保存或提交</span>
+        </div>
+
         <div class="mf-manual">
           <el-input
             v-model="manualLadder"
@@ -287,7 +313,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getContext,
   getEntry,
@@ -320,6 +346,7 @@ const moduleName = ref('')
 const keyword = ref('')
 const scheduleFilter = ref('scheduled')
 const manualLadder = ref('')
+const batchDate = ref('')
 const page = ref(1)
 const pageSize = ref(20)
 // 候选表格高度跟随窗口，避免表格下方留一大片空白
@@ -342,6 +369,8 @@ const form = ref({
 const candidates = ref([])
 // 已选发货梯号的唯一数据源：{ 梯号: 行数据(含 is_manual) }
 const selections = ref({})
+// 进入页面时的已保存勾选快照：只在页面/月份/模块加载时更新，勾选过程中保持当前顺序不跳动。
+const pinnedSelectedLadders = ref(new Set())
 
 const summaryRows = ref([])
 const summaryTotal = ref(null)
@@ -380,13 +409,24 @@ const filteredCandidates = computed(() => {
     if (scheduleFilter.value === 'unplanned' && row.schedule_date) return false
     return true
   })
-  // 已报梯号排在最前，确保打开页面就能补/改日期，而不是藏在后面的分页里。
-  return rows.sort((left, right) => Number(isSelected(right.ladder_no)) - Number(isSelected(left.ladder_no)))
+  // 只按进入页面时的快照置顶；本次勾选/取消勾选不改变行位置，下次进入再按最新选择置顶。
+  return rows.sort((left, right) => (
+    Number(pinnedSelectedLadders.value.has(right.ladder_no))
+    - Number(pinnedSelectedLadders.value.has(left.ladder_no))
+  ))
 })
 const pagedCandidates = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filteredCandidates.value.slice(start, start + pageSize.value)
 })
+const selectedFilteredRows = computed(() =>
+  filteredCandidates.value.filter((row) => isSelected(row.ladder_no))
+)
+const selectedFilteredCount = computed(() => selectedFilteredRows.value.length)
+const isAllFilteredSelected = computed(() =>
+  filteredCandidates.value.length > 0 &&
+  selectedFilteredCount.value === filteredCandidates.value.length
+)
 const pageSelectedCount = computed(() =>
   pagedCandidates.value.filter((row) => isSelected(row.ladder_no)).length
 )
@@ -430,6 +470,54 @@ function toggleSelect(row, checked) {
   } else {
     delete selections.value[row.ladder_no]
   }
+}
+
+function toggleFilteredSelection() {
+  const next = { ...selections.value }
+  if (isAllFilteredSelected.value) {
+    for (const row of filteredCandidates.value) {
+      delete next[row.ladder_no]
+    }
+  } else {
+    for (const row of filteredCandidates.value) {
+      if (!next[row.ladder_no]) {
+        next[row.ladder_no] = { ...row, is_manual: false }
+      }
+    }
+  }
+  selections.value = next
+}
+
+async function applyBatchDate() {
+  const value = batchDate.value || ''
+  if (!value) {
+    ElMessage.warning('请先选择预计发货日期')
+    return
+  }
+  const rows = selectedFilteredRows.value
+  if (!rows.length) {
+    ElMessage.warning('请先勾选当前搜索结果中的梯号')
+    return
+  }
+  const existingCount = rows.filter((row) => !!selectionDate(row.ladder_no)).length
+  if (existingCount) {
+    try {
+      await ElMessageBox.confirm(
+        `当前已勾选的 ${rows.length} 个梯号中，有 ${existingCount} 个已填写预计发货日期。继续将覆盖这些日期。`,
+        '确认覆盖预计发货日期',
+        { type: 'warning', confirmButtonText: '覆盖并设置', cancelButtonText: '取消' }
+      )
+    } catch (error) {
+      return
+    }
+  }
+  for (const row of rows) {
+    if (selections.value[row.ladder_no]) {
+      selections.value[row.ladder_no].expected_ship_date = value
+    }
+  }
+  batchDate.value = ''
+  ElMessage.success(`已为 ${rows.length} 个梯号设置预计发货日期`)
 }
 
 function togglePageSelect(checked) {
@@ -481,6 +569,10 @@ function applyEntry(data) {
   }
 }
 
+function snapshotPinnedSelections() {
+  pinnedSelectedLadders.value = new Set(Object.keys(selections.value))
+}
+
 async function loadCandidates() {
   const res = await getCandidates(moduleName.value, month.value)
   candidates.value = res.data || []
@@ -504,6 +596,7 @@ async function loadPage() {
   try {
     if (isScoped.value) {
       await Promise.all([loadEntry(), loadCandidates()])
+      snapshotPinnedSelections()
     } else {
       await loadSummary()
     }
@@ -807,6 +900,22 @@ onBeforeUnmount(() => {
   background: #f7f9fc;
   border: 1px solid #e8eef5;
   border-radius: 6px;
+}
+.mf-batch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #f7fcf9;
+  border: 1px solid #cfe3d6;
+  border-radius: 6px;
+}
+.mf-batch-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1d7a46;
 }
 .mf-table {
   width: 100%;
