@@ -26,6 +26,10 @@ GAIZAO_MODULE = '改造'
 UNPLANNED_SIGN_START = date(2026, 1, 1)
 UNPLANNED_SIGN_END = date(2027, 1, 1)
 
+# 改造梯候选只保留 2026 年签订的合同，避免历史改造项目长期占用候选池。
+GAIZAO_SIGN_START = date(2026, 1, 1)
+GAIZAO_SIGN_END = date(2027, 1, 1)
+
 
 # 月份工具
 
@@ -200,6 +204,17 @@ def list_candidates(module_name, data_month=None, keyword=None):
 
     module_map = load_module_map()
     rows = [c for c in contracts if resolve_module(c, module_map) == module_name]
+
+    # 改造梯按签订年份收窄；非改造梯保持原候选规则。
+    # 已勾选但离开候选池的历史行仍由下方逻辑补回，不影响已有填报。
+    rows = [
+        c for c in rows
+        if '改造' not in (c.product_type or '')
+        or (
+            c.sign_date is not None
+            and GAIZAO_SIGN_START <= c.sign_date < GAIZAO_SIGN_END
+        )
+    ]
 
     # 整梯发货日期（AV）不得晚于填报月份；与 delivery_date（AZ 组A日期）无关
     previous_ladders = _previous_detail_ladders(data_month) if data_month else set()
