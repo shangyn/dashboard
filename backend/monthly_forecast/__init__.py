@@ -40,6 +40,33 @@ def _create_tables():
     from monthly_forecast import models  # noqa: F401  保证模型已登记进 metadata
 
     db.create_all()
+    _ensure_columns()
+
+
+def _ensure_columns():
+    """为已存在的 mf_ 表补新列；db.create_all 不会自动迁移旧表。"""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(db.engine)
+        if 'mf_ship_selection' not in inspector.get_table_names():
+            return
+        columns = {column['name'] for column in inspector.get_columns('mf_ship_selection')}
+        if 'expected_ship_date' in columns:
+            return
+        try:
+            db.session.execute(text(
+                'ALTER TABLE mf_ship_selection ADD COLUMN expected_ship_date DATE'
+            ))
+            db.session.commit()
+        except Exception:
+            # 多 worker 同时启动时可能已被另一个进程补齐；回滚后复核一次。
+            db.session.rollback()
+            columns = {column['name'] for column in inspect(db.engine).get_columns('mf_ship_selection')}
+            if 'expected_ship_date' not in columns:
+                raise
+    except Exception as exc:
+        print('[MonthlyForecast] 预计发货日期字段迁移失败: %s' % exc)
 
 
 def _report_readiness():

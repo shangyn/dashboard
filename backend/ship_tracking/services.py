@@ -54,6 +54,7 @@ FLAG_LABELS = {
     'from_monthly_forecast': '来自单月填报',
     'restored_from_forecast': '单月填报恢复',
     'forecast_module_mismatch': '台账模块与填报模块不一致',
+    'carried_over': '上月结转',
 }
 
 
@@ -373,6 +374,17 @@ def _weekly_action_state(user, item):
 def _tracking_dict(item, region='', region_source='', user=None):
     expected = item.expected_ship_date
     flags = item.flags()
+    source_text = item.source or ''
+    if item.source_kind == 'actual_only':
+        source_label = '计划外实发'
+    elif item.source_kind == 'manual' or 'manual_added' in flags or '手工新增' in source_text:
+        source_label = '业务手工新增'
+    elif 'from_monthly_forecast' in flags or '单月' in source_text:
+        source_label = '单月填报生成'
+    else:
+        source_label = 'Excel计划导入'
+    if 'carried_over' in flags:
+        source_label += '（上月结转）'
     if item.actual_ship_date:
         status = 'shipped'
     elif item.plan_status == 'removed':
@@ -410,6 +422,7 @@ def _tracking_dict(item, region='', region_source='', user=None):
         ),
         'payment_ratio_source': 'ledger_bn' if payment_ratio is not None else '',
         'source': item.source or '',
+        'source_label': source_label,
         'reporter': item.reporter or '',
         'business_expected_raw': item.business_expected_raw or '',
         'schedule_finish_date': iso(item.schedule_finish_date),
@@ -1462,7 +1475,7 @@ def export_tracking(user, filters=None):
     sheet = workbook.active
     sheet.title = '发货明细'
     headers = [
-        '大区', '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人',
+        '大区', '模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '数据来源', '填报人',
         '排产完工日期', '整梯发货日期', '预计发货日期', '实际发货日期',
         '实际发货日期来源', '订舱状态', '订舱审核状态', '回款比例', '备注',
     ]
@@ -1493,7 +1506,7 @@ def export_tracking(user, filters=None):
             row['region'], row['module_name'], row['contract_no'], row['ladder_no'],
             row['project_name'],
             _excel_number(row['unit_count']), _excel_number(row['amount_wan']),
-            row['source'], row['reporter'],
+            row['source_label'], row['reporter'],
             _excel_date(row['schedule_finish_date']), _excel_date(row['whole_ship_date']),
             _excel_date(row['expected_ship_date']), _excel_date(row['actual_ship_date']),
             row['actual_ship_source_label'], row['booking_status'],

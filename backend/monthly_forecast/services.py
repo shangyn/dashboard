@@ -142,6 +142,35 @@ def _date_str(value):
     return value.strftime('%Y-%m-%d') if value else ''
 
 
+def _parse_iso_date(value):
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _previous_month(data_month):
+    year, month = int(data_month[:4]), int(data_month[5:7])
+    if month == 1:
+        return f'{year - 1}-12'
+    return f'{year}-{month - 1:02d}'
+
+
+def _previous_detail_ladders(data_month):
+    """上月发货明细中的有效梯号；已移除的行不算，允许本月重新选择。"""
+    from ship_tracking.models import TrackingItem
+
+    previous = _previous_month(data_month)
+    rows = TrackingItem.query.filter(
+        TrackingItem.plan_month == previous,
+        TrackingItem.plan_status == 'active',
+    ).all()
+    return {normalize_ladder(row.ladder_key or row.ladder_no) for row in rows if row.ladder_key or row.ladder_no}
+
+
 def _ship_within_month(value, data_month):
     """整梯发货日期（台账 AV 列）是否不晚于填报月份；None = 未确定，保留"""
     if value is None:
@@ -173,8 +202,11 @@ def list_candidates(module_name, data_month=None, keyword=None):
     rows = [c for c in contracts if resolve_module(c, module_map) == module_name]
 
     # 整梯发货日期（AV）不得晚于填报月份；与 delivery_date（AZ 组A日期）无关
+    previous_ladders = _previous_detail_ladders(data_month) if data_month else set()
     if data_month:
         rows = [c for c in rows if _ship_within_month(c.whole_ship_date, data_month)]
+        if previous_ladders:
+            rows = [c for c in rows if normalize_ladder(c.ladder_no) not in previous_ladders]
 
     # 稳定排序：先按合同号 / 梯号数字升序，再按排产日期倒序
     rows.sort(key=lambda c: (
@@ -183,14 +215,7 @@ def list_candidates(module_name, data_month=None, keyword=None):
     ))
     rows.sort(key=lambda c: c.schedule_date or date.min, reverse=True)
 
-    if keyword:
-        text = str(keyword).strip().lower()
-        if text:
-            rows = [c for c in rows if text in (
-                (c.contract_no or '') + ' ' + (c.ladder_no or '') + ' ' + (c.project_name or '')
-            ).lower()]
-
-    return [{
+    result = [{
         'contract_no': c.contract_no or '',
         'ladder_no': c.ladder_no or '',
         'project_name': c.project_name or '',
@@ -201,6 +226,47 @@ def list_candidates(module_name, data_month=None, keyword=None):
         'whole_ship_date': _date_str(c.whole_ship_date),
         'product_status': c.product_status or '',
     } for c in rows]
+
+    # 已经报过、但后来因台账字段变化而离开候选池的梯号必须继续可见，
+    # 否则业务无法补/改预计日期，勾选记录却仍计入合计。
+    if data_month:
+        existing = {row['ladder_no'] for row in result}
+        selections = ShipSelection.query.filter_by(
+            data_month=data_month, module_name=module_name,
+        ).order_by(ShipSelection.id).all()
+        missing = [s for s in selections
+                   if not s.is_manual and s.ladder_no and s.ladder_no not in existing]
+        if missing:
+            contracts = {
+                c.ladder_no: c for c in LedgerContract.query.filter(
+                    LedgerContract.ladder_no.in_([s.ladder_no for s in missing])
+                ).all()
+            }
+            for selection in missing:
+                contract = contracts.get(selection.ladder_no)
+                result.append({
+                    'contract_no': (contract.contract_no if contract else '') or selection.contract_no or '',
+                    'ladder_no': selection.ladder_no,
+                    'project_name': (contract.project_name if contract else '') or '',
+                    'unit_count': selection.unit_count or 0,
+                    'amount_wan': round((selection.amount_rmb or 0) / 10000.0, 2),
+                    'schedule_date': _date_str(contract.schedule_date) if contract else '',
+                    'schedule_finish_date': _date_str(contract.schedule_finish_date) if contract else '',
+                    'whole_ship_date': _date_str(contract.whole_ship_date) if contract else '',
+                    'product_status': (contract.product_status if contract else '') or '',
+                    'outside_candidate_pool': True,
+                    'previous_detail': normalize_ladder(selection.ladder_no) in previous_ladders,
+                })
+
+    if keyword:
+        text = str(keyword).strip().lower()
+        if text:
+            result = [row for row in result if text in (
+                (row.get('contract_no') or '') + ' ' + (row.get('ladder_no') or '') + ' '
+                + (row.get('project_name') or '')
+            ).lower()]
+
+    return result
 
 
 # 梯号校验
@@ -289,6 +355,13 @@ def validate_ladder(module_name, data_month, ladder_no):
     if owner != module_name:
         return {'ok': False, 'code': 'OTHER_MODULE',
                 'msg': '不属于本模块（台账归属：' + (owner or '未知') + '）',
+                'row': None, 'suggestions': []}
+
+    previous_ladders = _previous_detail_ladders(data_month)
+    if normalize_ladder(contract.ladder_no) in previous_ladders:
+        previous = _previous_month(data_month)
+        return {'ok': False, 'code': 'PREVIOUS_DETAIL',
+                'msg': f'该梯号已在 {previous} 发货明细中，{data_month} 将自动结转，无需重复填报',
                 'row': None, 'suggestions': []}
 
     exists = ShipSelection.query.filter_by(
@@ -422,6 +495,7 @@ def save_draft(data_month, module_name, payload, user):
     selections = payload.get('ship_selections') or []
     ladders = []
     manual_flags = {}
+    expected_dates = {}
     for item in selections:
         item = item or {}
         ladder = str(item.get('ladder_no') or '').strip()
@@ -429,6 +503,7 @@ def save_draft(data_month, module_name, payload, user):
             continue
         ladders.append(ladder)
         manual_flags[ladder] = bool(item.get('is_manual'))
+        expected_dates[ladder] = _parse_iso_date(item.get('expected_ship_date'))
 
     rejected = []
     if ladders:
@@ -449,6 +524,8 @@ def save_draft(data_month, module_name, payload, user):
             ).all():
                 contracts[pending[c.ladder_no]] = c
         module_map = load_module_map()
+        previous_ladders = _previous_detail_ladders(data_month)
+        previous = _previous_month(data_month)
         for ladder in ladders:
             contract = contracts.get(ladder)
             if contract is None:
@@ -457,6 +534,12 @@ def save_draft(data_month, module_name, payload, user):
             if resolve_module(contract, module_map) != module_name:
                 rejected.append({'ladder_no': ladder, 'reason': '不属于本模块'})
                 continue
+            if normalize_ladder(contract.ladder_no) in previous_ladders:
+                rejected.append({
+                    'ladder_no': ladder,
+                    'reason': f'已在 {previous} 发货明细中，将自动结转',
+                })
+                continue
             db.session.add(ShipSelection(
                 data_month=data_month,
                 module_name=module_name,
@@ -464,6 +547,7 @@ def save_draft(data_month, module_name, payload, user):
                 ladder_no=contract.ladder_no or ladder,
                 unit_count=contract.unit_count or 0,
                 amount_rmb=contract.contract_amount_rmb or 0,
+                expected_ship_date=expected_dates.get(ladder),
                 is_manual=manual_flags[ladder],
                 created_by=getattr(user, 'id', None),
                 created_by_name=record.updated_by_name,
@@ -587,7 +671,8 @@ def get_summary(data_month, modules=None):
 FORECAST_HEADERS = ['模块', '签单台数', '签单金额(万元)', '排产台数', '排产金额(万元)', '发货台数', '发货金额(万元)',
                     '月回款额(万元)', '支付佣金(万元)', '支付安装费(万元)',
                     '差旅、招待费(万元)', '其他费用支出计划(万元)']
-SHIPPING_HEADERS = ['模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)', '来源', '填报人']
+SHIPPING_HEADERS = ['模块', '合同号', '梯号', '项目名称', '台数', '金额(万元)',
+                    '预计发货日期', '来源', '填报人']
 
 
 def _new_workbook():
@@ -681,12 +766,15 @@ def export_shipping(data_month, modules=None):
             (contract.project_name or '') if contract else '',
             s.unit_count or 0,
             round((s.amount_rmb or 0) / 10000.0, 2),
+            s.expected_ship_date,
             '手工输入' if s.is_manual else '候选勾选',
             s.created_by_name or '',
         ])
 
     _style_header(ws, len(SHIPPING_HEADERS))
-    _set_widths(ws, [24, 18, 22, 32, 8, 14, 12, 12])
+    _set_widths(ws, [24, 18, 22, 32, 8, 14, 15, 12, 12])
+    for row in range(2, ws.max_row + 1):
+        ws.cell(row=row, column=7).number_format = 'yyyy-mm-dd'
 
     path = os.path.join(tempfile.gettempdir(), 'mf_shipping_' + data_month + '.xlsx')
     wb.save(path)

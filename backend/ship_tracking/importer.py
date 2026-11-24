@@ -870,6 +870,7 @@ def _forecast_plan_items(month):
         unit_count = parse_number(sel.get('unit_count'))
         if unit_count is None or unit_count <= 0:
             unit_count = 1
+        expected_date = parse_excel_date(sel.get('expected_ship_date'))
         amount_rmb = parse_number(ledger_row.get('contract_amount_rmb'))
         if amount_rmb is None:
             amount_wan = parse_number(sel.get('amount_wan'))
@@ -897,8 +898,9 @@ def _forecast_plan_items(month):
             'schedule_finish_date': parse_excel_date(ledger_row.get('schedule_finish_date')),
             'whole_ship_date': parse_excel_date(ledger_row.get('whole_ship_date')),
             '_ledger_found': True,
-            'original_expected_ship_date': None,
-            'business_expected_raw': '',
+            'original_expected_ship_date': expected_date.isoformat() if expected_date else None,
+            'expected_ship_date': expected_date.isoformat() if expected_date else None,
+            'business_expected_raw': expected_date.isoformat() if expected_date else '',
             'validation_status': 'warning' if flags else 'ok',
             'data_flags': flags,
             'raw': {
@@ -921,9 +923,56 @@ def _forecast_plan_items(month):
         'ledger_missing_count': ledger_missing,
         'duplicate_submission_count': duplicate_submission,
         'module_mismatch_count': module_mismatch,
+        'expected_date_count': sum(
+            1 for item in items if item.get('expected_ship_date')
+        ),
         'module_breakdown': module_breakdown,
     }
     return items, issues, stats
+
+
+def _forecast_expected_date(item):
+    """单月填报携带的预计日期；兼容新旧批次字段。"""
+    return (_parse_iso_date(item.get('expected_ship_date'))
+            or _parse_iso_date(item.get('original_expected_ship_date')))
+
+
+def _row_has_expected_date(row):
+    """已有任何形态的预计日期都视为业务已填，导入时不覆盖。"""
+    return bool(
+        row.expected_ship_date
+        or row.original_expected_ship_date
+        or row.committed_expected_ship_date
+        or row.draft_expected_ship_date
+    )
+
+
+def _fillable_expected_date(row, item):
+    return not _row_has_expected_date(row) and _forecast_expected_date(item) is not None
+
+
+def _fill_missing_expected_date(row, item, user, batch_id):
+    """给已有明细补空的预计日期；来源、备注、订舱、承诺、实发和月份全部不动。"""
+    if not _fillable_expected_date(row, item):
+        return False
+    expected = _forecast_expected_date(item)
+    old_values = {
+        'expected_ship_date': iso(row.expected_ship_date),
+        'original_expected_ship_date': iso(row.original_expected_ship_date),
+        'business_expected_raw': row.business_expected_raw or '',
+    }
+    row.expected_ship_date = expected
+    row.original_expected_ship_date = expected
+    row.business_expected_raw = expected.isoformat()
+    row.plan_change_count = (row.plan_change_count or 0) + 1
+    _audit(user, 'forecast', 'fill_expected_date', row.ladder_key, batch_id=batch_id,
+           old_values=old_values,
+           new_values={
+               'expected_ship_date': expected.isoformat(),
+               'original_expected_ship_date': expected.isoformat(),
+               'business_expected_raw': expected.isoformat(),
+           })
+    return True
 
 
 def preview_plan_from_forecast(month, user):
@@ -936,7 +985,7 @@ def preview_plan_from_forecast(month, user):
     items, issues, stats = _forecast_plan_items(month)
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
-    added = existing = moved = restored = skipped_shipped = 0
+    added = existing = moved = restored = skipped_shipped = date_fill = 0
     breakdown = stats.get('module_breakdown') or {}
     for item in items:
         entry = breakdown.setdefault(
@@ -948,6 +997,7 @@ def preview_plan_from_forecast(month, user):
         entry.setdefault('existing', 0)
         entry.setdefault('moved', 0)
         entry.setdefault('restored', 0)
+        entry.setdefault('date_fill', 0)
         row = current_rows.get(item['ladder_key'])
         if row is None:
             added += 1
@@ -964,6 +1014,11 @@ def preview_plan_from_forecast(month, user):
         else:
             restored += 1
             entry['restored'] += 1
+        if (row is not None and not row.actual_ship_date
+                and row.source_kind != 'actual_only'
+                and _fillable_expected_date(row, item)):
+            date_fill += 1
+            entry['date_fill'] += 1
 
     warnings = [issue for issue in issues if issue.get('severity') == 'warning']
     errors = [issue for issue in issues if issue.get('severity') == 'error']
@@ -983,10 +1038,12 @@ def preview_plan_from_forecast(month, user):
         'ledger_missing_count': stats['ledger_missing_count'],
         'duplicate_submission_count': stats['duplicate_submission_count'],
         'module_mismatch_count': stats['module_mismatch_count'],
+        'expected_date_count': stats.get('expected_date_count', 0),
         'added_count': added,
         'existing_count': existing,
         'moved_count': moved,
         'restored_count': restored,
+        'date_fill_count': date_fill,
         'skipped_shipped_count': skipped_shipped,
         'module_breakdown': breakdown,
         'warning_count': len(warnings),
@@ -1024,7 +1081,7 @@ def preview_plan_from_forecast(month, user):
 
 
 def commit_forecast_import(batch_id, user):
-    """把单月填报批次并入追踪表：新增、恢复，或把其他月份的有效计划转入本月。"""
+    """把单月填报批次并入追踪表：新增、恢复、转入本月；已有明细只补空的预计日期。"""
     if not can_import(user):
         raise PermissionError('无导入权限')
     batch = db.session.get(ImportBatch, batch_id)
@@ -1049,7 +1106,7 @@ def commit_forecast_import(batch_id, user):
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
     now = dt.datetime.now()
-    added = moved = restored = skipped_existing = skipped_shipped = 0
+    added = moved = restored = skipped_existing = skipped_shipped = date_filled = 0
     for item in items:
         key = item['ladder_key']
         row = current_rows.get(key)
@@ -1059,7 +1116,10 @@ def commit_forecast_import(batch_id, user):
                 continue
             if row.plan_status == 'active':
                 if row.plan_month == batch.plan_month:
-                    skipped_existing += 1
+                    if _fill_missing_expected_date(row, item, user, batch.id):
+                        date_filled += 1
+                    else:
+                        skipped_existing += 1
                     continue
                 # 其他月份的有效计划被本月重新选中：更新计划归属，
                 # 预计日期、承诺、备注、订舱和实发信息全部保留。
@@ -1080,6 +1140,8 @@ def commit_forecast_import(batch_id, user):
                            'plan_batch_id': row.plan_batch_id,
                            'plan_version': row.plan_version,
                        })
+                if _fill_missing_expected_date(row, item, user, batch.id):
+                    date_filled += 1
                 moved += 1
                 continue
             # 已移除但未实发：恢复计划状态，日期/承诺/订舱原样保留。
@@ -1099,9 +1161,14 @@ def commit_forecast_import(batch_id, user):
                    new_values={'plan_status': 'active', 'module_name': row.module_name or '',
                                'plan_month': row.plan_month, 'plan_batch_id': row.plan_batch_id,
                                'plan_version': row.plan_version})
+            if _fill_missing_expected_date(row, item, user, batch.id):
+                date_filled += 1
             restored += 1
             continue
 
+        expected_date = _parse_iso_date(item.get('expected_ship_date'))
+        if expected_date is None:
+            expected_date = _parse_iso_date(item.get('original_expected_ship_date'))
         row = TrackingItem(
             ladder_key=key,
             plan_month=batch.plan_month,
@@ -1118,11 +1185,11 @@ def commit_forecast_import(batch_id, user):
             amount_rmb=float(item.get('amount_rmb') or 0),
             source=item.get('source') or '单月填报',
             reporter=item.get('reporter') or '',
-            business_expected_raw='',
+            business_expected_raw=expected_date.isoformat() if expected_date else '',
             schedule_finish_date=_parse_iso_date(item.get('schedule_finish_date')),
             whole_ship_date=_parse_iso_date(item.get('whole_ship_date')),
-            original_expected_ship_date=None,
-            expected_ship_date=None,
+            original_expected_ship_date=expected_date,
+            expected_ship_date=expected_date,
             commit_status='unplanned',
             booking_status='未订舱',
             source_kind='plan',
@@ -1150,6 +1217,7 @@ def commit_forecast_import(batch_id, user):
                'added_count': added,
                'moved_count': moved,
                'restored_count': restored,
+                'date_filled_count': date_filled,
            })
     db.session.commit()
     try:
@@ -1164,9 +1232,173 @@ def commit_forecast_import(batch_id, user):
         'added_count': added,
         'moved_count': moved,
         'restored_count': restored,
+        'date_filled_count': date_filled,
         'skipped_existing': skipped_existing,
         'skipped_shipped': skipped_shipped,
         'sync': sync_result,
+    }
+
+
+def _month_ordinal(month):
+    return int(month[:4]) * 12 + int(month[5:7])
+
+
+def preview_carryover(source_month, target_month, user):
+    """预览“上月未发货结转到本月”，只建预览批次，不改追踪表。"""
+    if not can_import(user):
+        raise PermissionError('无导入权限')
+    source = normalize_month(source_month)
+    target = normalize_month(target_month)
+    if not source or not target:
+        raise ValueError('请选择源月份和目标月份')
+    if _month_ordinal(target) <= _month_ordinal(source):
+        raise ValueError('目标月份必须晚于源月份')
+
+    source_rows = TrackingItem.query.filter(TrackingItem.plan_month == source).all()
+    active_rows = [row for row in source_rows if row.plan_status == 'active']
+    shipped_rows = [row for row in active_rows if row.actual_ship_date]
+    removed_rows = [row for row in source_rows if row.plan_status != 'active']
+    carry_rows = [
+        row for row in active_rows
+        if not row.actual_ship_date and row.source_kind != 'actual_only'
+    ]
+    target_keys = {
+        row.ladder_key for row in TrackingItem.query.filter(
+            TrackingItem.plan_month == target
+        ).all()
+    }
+    target_existing = [row for row in carry_rows if row.ladder_key in target_keys]
+    carry_rows = [row for row in carry_rows if row.ladder_key not in target_keys]
+    if not carry_rows:
+        raise ValueError('没有可结转的未发货明细')
+
+    items = [{
+        'ladder_key': row.ladder_key,
+        'contract_no': row.contract_no or '',
+        'ladder_no': row.ladder_no or '',
+        'module_name': row.module_name or '',
+        'project_name': row.project_name or '',
+        'unit_count': row.unit_count or 0,
+        'expected_ship_date': iso(row.expected_ship_date),
+    } for row in carry_rows]
+    summary = {
+        'source': 'carryover',
+        'source_month': source,
+        'plan_month': target,
+        'source_active_count': len(active_rows),
+        'carry_count': len(carry_rows),
+        'shipped_count': len(shipped_rows),
+        'removed_count': len(removed_rows),
+        'target_existing_count': len(target_existing),
+    }
+    version = (db.session.query(func.max(ImportBatch.version)).filter(
+        ImportBatch.data_type == 'plan_carryover',
+        ImportBatch.plan_month == target,
+        ImportBatch.status == 'committed',
+    ).scalar() or 0) + 1
+    batch = ImportBatch(
+        data_type='plan_carryover',
+        plan_month=target,
+        version=version,
+        filename='结转_%s_至_%s' % (source, target),
+        file_hash=hashlib.sha256(('%s->%s' % (source, target)).encode('utf-8')).hexdigest(),
+        status='preview',
+        row_count=len(carry_rows),
+        unique_count=len(carry_rows),
+        total_units=round(sum(float(row.unit_count or 0) for row in carry_rows), 2),
+        summary_json=_dump(summary),
+        payload_json=_dump(items),
+        created_by=user.id,
+        created_by_name=user.real_name or user.username,
+    )
+    db.session.add(batch)
+    db.session.commit()
+    return batch.to_dict()
+
+
+def commit_carryover(batch_id, user):
+    """提交结转批次。提交时重新校验，避免预览后实发/移除造成误转。"""
+    if not can_import(user):
+        raise PermissionError('无导入权限')
+    batch = db.session.get(ImportBatch, batch_id)
+    if not batch or batch.data_type != 'plan_carryover':
+        raise ValueError('结转批次不存在')
+    if batch.status == 'committed':
+        raise ValueError('该结转批次已提交，不能重复提交')
+    if batch.status == 'superseded':
+        raise ValueError('该结转批次已被新版本替代')
+
+    source = (batch.summary().get('source_month') or '').strip()
+    target = batch.plan_month or ''
+    if not source or not target:
+        raise ValueError('结转批次缺少源月份或目标月份')
+    items = _loads(batch.payload_json, [])
+    if not items:
+        raise ValueError('结转批次没有可提交的数据')
+
+    keys = [item.get('ladder_key') for item in items if item.get('ladder_key')]
+    current_rows = {}
+    # SQLite 的 IN 参数有上限（默认 999），按月整批结转很容易超过，分批查。
+    for start in range(0, len(keys), 500):
+        chunk = keys[start:start + 500]
+        for row in TrackingItem.query.filter(TrackingItem.ladder_key.in_(chunk)).all():
+            current_rows[row.ladder_key] = row
+    carried = skipped_shipped = skipped_removed = skipped_missing = skipped_existing = 0
+    for item in items:
+        key = item.get('ladder_key') or ''
+        if not key:
+            continue
+        row = current_rows.get(key)
+        if row is None:
+            skipped_missing += 1
+            continue
+        if row.plan_month == target:
+            skipped_existing += 1
+            continue
+        if row.plan_month != source:
+            skipped_missing += 1
+            continue
+        if row.actual_ship_date or row.source_kind == 'actual_only':
+            skipped_shipped += 1
+            continue
+        if row.plan_status != 'active':
+            skipped_removed += 1
+            continue
+
+        old_values = {'plan_month': row.plan_month or '', 'plan_batch_id': row.plan_batch_id,
+                      'plan_version': row.plan_version or 0}
+        row.plan_month = target
+        row.plan_batch_id = batch.id
+        row.plan_version = batch.version
+        row.plan_change_count = (row.plan_change_count or 0) + 1
+        flags = set(row.flags())
+        flags.add('carried_over')
+        row.set_flags(flags)
+        _audit(user, 'forecast', 'carry_over', key, batch_id=batch.id,
+               old_values=old_values,
+               new_values={'plan_month': row.plan_month, 'plan_batch_id': row.plan_batch_id,
+                           'plan_version': row.plan_version})
+        carried += 1
+
+    batch.status = 'committed'
+    batch.committed_by = user.id
+    batch.committed_by_name = user.real_name or user.username
+    batch.committed_at = dt.datetime.now()
+    _audit(user, 'import', 'commit_carryover', batch_id=batch.id,
+           new_values={'source_month': source, 'plan_month': target,
+                       'carried_count': carried, 'skipped_shipped': skipped_shipped,
+                       'skipped_removed': skipped_removed, 'skipped_missing': skipped_missing,
+                       'skipped_existing': skipped_existing})
+    db.session.commit()
+    return {
+        'batch_id': batch.id,
+        'source_month': source,
+        'target_month': target,
+        'carried_count': carried,
+        'skipped_shipped': skipped_shipped,
+        'skipped_removed': skipped_removed,
+        'skipped_missing': skipped_missing,
+        'skipped_existing': skipped_existing,
     }
 
 

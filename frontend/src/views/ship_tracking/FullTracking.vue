@@ -390,6 +390,24 @@
           </div>
 
           <div class="st-import-card">
+            <div class="st-import-title">结转上月未发货</div>
+            <p class="st-import-desc">
+              把源月份<strong>有效、未发货</strong>的明细整体转到目标月份。预计日期、备注、订舱、承诺、实发和来源保持不变；已移除、已实发、计划外实发和目标月已有梯号会跳过。建议先完成“从单月填报生成计划”，再执行结转。
+            </p>
+            <div class="st-import-form">
+              <el-date-picker v-model="carryoverSourceMonth" size="small" type="month" value-format="YYYY-MM" placeholder="源月份" style="width: 130px" />
+              <span class="st-file-name">→</span>
+              <el-date-picker v-model="carryoverTargetMonth" size="small" type="month" value-format="YYYY-MM" placeholder="目标月份" style="width: 130px" />
+              <el-button size="small" type="warning" plain :loading="carryoverPreviewLoading || carryoverCommitLoading" :disabled="!carryoverSourceMonth || !carryoverTargetMonth" @click="previewCarryoverData">
+                预览结转
+              </el-button>
+            </div>
+            <div class="st-import-foot">
+              <span>结转后源月份不再显示这些行；不会自动执行。</span>
+            </div>
+          </div>
+
+          <div class="st-import-card">
             <div class="st-import-title">订舱申请流程报表</div>
             <p class="st-import-desc">按 AG 列完整梯号匹配计划；主状态分为已订舱/未订舱，C 列审核状态单独展示。未出现在报表中的梯号按“未订舱”处理，导出时保留这一口径。</p>
             <div class="st-import-form">
@@ -667,10 +685,12 @@
             <el-descriptions-item label="有效梯号">{{ planPreview.data.unique_count }}</el-descriptions-item>
             <el-descriptions-item label="新增">{{ forecastSummary.added_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="转入本月">{{ forecastSummary.moved_count ?? 0 }}</el-descriptions-item>
-            <el-descriptions-item label="已存在跳过">{{ forecastSummary.existing_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="已有明细">{{ forecastSummary.existing_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="恢复已移除">{{ forecastSummary.restored_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="补预计日期">{{ forecastSummary.date_fill_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已实发跳过">{{ forecastSummary.skipped_shipped_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="台账未命中">{{ forecastSummary.ledger_missing_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="带预计日期">{{ forecastSummary.expected_date_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="跨模块重复">{{ forecastSummary.duplicate_submission_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="模块不一致">{{ forecastSummary.module_mismatch_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="警告">{{ planPreview.data.warning_count }}</el-descriptions-item>
@@ -683,6 +703,7 @@
             <el-table-column prop="moved" label="转入" width="66" align="right" />
             <el-table-column prop="existing" label="已存在" width="72" align="right" />
             <el-table-column prop="restored" label="恢复" width="66" align="right" />
+            <el-table-column prop="date_fill" label="补日期" width="66" align="right" />
           </el-table>
           <el-alert
             v-if="forecastSummary.ledger_missing_count || forecastSummary.duplicate_submission_count || forecastSummary.module_mismatch_count"
@@ -697,7 +718,7 @@
             :closable="false"
             show-icon
             style="margin-top: 10px"
-            title="本次补缺失/已移除梯号，并把其他月份的有效计划转入本月；原预计日期、备注、实际发货、订舱和承诺保持不变。新增行需要业务在周填报里填写预计发货日期。"
+            title="本次补缺失/已移除梯号，并把其他月份的有效计划转入本月；原预计日期、备注、实际发货、订舱和承诺保持不变。新增行会带入单月填报里填写的预计发货日期；已有明细只补空的预计日期，不覆盖其他字段。"
           />
         </template>
         <template v-else>
@@ -842,12 +863,13 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   calculatePayment,
   cleanupPreviewBatches,
   commitBookingImport,
+  commitCarryover,
   commitForecastImport,
   commitPlanImport,
   deleteDailyShipments,
@@ -862,6 +884,7 @@ import {
   getTrackingHistory,
   getTrackingItems,
   previewBookingImport,
+  previewCarryover,
   previewExternalLadders,
   previewPlanFromForecast,
   previewPlanImport,
@@ -925,6 +948,7 @@ const REMARK_COLUMN_MIGRATION_KEY = 'ship-tracking-remark-column-v1'
 const DEFAULT_OPTIONAL_COLUMNS = ['remark']
 const optionalColumnOptions = [
   { key: 'amount', label: '金额(万元)' },
+  { key: 'source', label: '数据来源' },
   { key: 'schedule', label: '排产完工日期' },
   { key: 'whole', label: '整梯发货日期' },
   { key: 'remark', label: '备注' },
@@ -979,6 +1003,10 @@ const planPreview = reactive({
 const planPreviewLoading = ref(false)
 const planCommitLoading = ref(false)
 const forecastPreviewLoading = ref(false)
+const carryoverPreviewLoading = ref(false)
+const carryoverCommitLoading = ref(false)
+const carryoverTargetMonth = ref(props.context.fill_month || nextMonthText(props.context.default_month))
+const carryoverSourceMonth = ref(previousMonthText(carryoverTargetMonth.value))
 const forecastSummary = computed(() => planPreview.data?.summary || {})
 const forecastBreakdown = computed(() => {
   const entries = forecastSummary.value.module_breakdown || {}
@@ -1001,6 +1029,30 @@ const bookingCommitLoading = ref(false)
 const imports = ref([])
 const showPreviewBatches = ref(false)
 const issuesDialog = reactive({ visible: false, batch: null, rows: [] })
+
+function nextMonthText(value) {
+  const text = String(value || '')
+  if (!/^\d{4}-\d{2}$/.test(text)) return ''
+  let year = Number(text.slice(0, 4))
+  let month = Number(text.slice(5, 7)) + 1
+  if (month > 12) {
+    year += 1
+    month = 1
+  }
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+
+function previousMonthText(value) {
+  const text = String(value || '')
+  if (!/^\d{4}-\d{2}$/.test(text)) return ''
+  let year = Number(text.slice(0, 4))
+  let month = Number(text.slice(5, 7)) - 1
+  if (month < 1) {
+    year -= 1
+    month = 12
+  }
+  return `${year}-${String(month).padStart(2, '0')}`
+}
 
 const exportFilename = computed(() => `${filters.month || '全部'}_发货梯号明细.xlsx`)
 
@@ -1722,6 +1774,47 @@ async function previewForecast() {
   }
 }
 
+async function previewCarryoverData() {
+  if (!carryoverSourceMonth.value || !carryoverTargetMonth.value) {
+    ElMessage.warning('请选择源月份和目标月份')
+    return
+  }
+  carryoverPreviewLoading.value = true
+  try {
+    const res = await previewCarryover(carryoverSourceMonth.value, carryoverTargetMonth.value)
+    const batch = res.data || {}
+    const summary = batch.summary || {}
+    try {
+      await ElMessageBox.confirm(
+        `源月份 ${summary.source_month || carryoverSourceMonth.value}，目标月份 ${summary.plan_month || carryoverTargetMonth.value}。` +
+          `可结转 ${summary.carry_count ?? 0} 条；已实发跳过 ${summary.shipped_count ?? 0} 条；` +
+          `已移除跳过 ${summary.removed_count ?? 0} 条；目标月已有跳过 ${summary.target_existing_count ?? 0} 条。` +
+          '结转后源月份不再显示这些行，预计日期、备注、订舱、承诺和实发信息保持不变。',
+        '确认结转上月未发货',
+        { type: 'warning', confirmButtonText: '确认结转', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+    carryoverCommitLoading.value = true
+    const commit = await commitCarryover(batch.id)
+    const data = commit.data || {}
+    ElMessage.success(
+      `已结转 ${data.carried_count || 0} 条；实发跳过 ${data.skipped_shipped || 0} 条；` +
+        `移除跳过 ${data.skipped_removed || 0} 条；目标月已有 ${data.skipped_existing || 0} 条`
+    )
+    filters.month = data.target_month || filters.month
+    emit('refresh-context')
+    await loadData()
+    await loadImports()
+  } catch (error) {
+    // 拦截器已提示
+  } finally {
+    carryoverPreviewLoading.value = false
+    carryoverCommitLoading.value = false
+  }
+}
+
 async function commitPlan() {
   planCommitLoading.value = true
   try {
@@ -1729,7 +1822,8 @@ async function commitPlan() {
       const res = await commitForecastImport(planPreview.data.id)
       const data = res.data || {}
       ElMessage.success(
-        `已新增 ${data.added_count || 0} 条，转入 ${data.moved_count || 0} 条，恢复 ${data.restored_count || 0} 条，已存在跳过 ${data.skipped_existing || 0} 条`
+        `已新增 ${data.added_count || 0} 条，转入 ${data.moved_count || 0} 条，恢复 ${data.restored_count || 0} 条，` +
+          `补预计日期 ${data.date_filled_count || 0} 条，其余已存在跳过 ${data.skipped_existing || 0} 条`
       )
     } else {
       const res = await commitPlanImport(
@@ -1851,6 +1945,7 @@ async function openIssues(batch) {
 
 function sourceKindLabel(row) {
   if (!row) return '—'
+  if (row.source_label) return row.source_label
   if (row.source_kind === 'actual_only') return '计划外实发'
   if (row.source_kind === 'manual') return '业务手工新增'
   if ((row.data_flags || []).includes('from_monthly_forecast')) return '单月填报生成'
@@ -1860,6 +1955,7 @@ function sourceKindLabel(row) {
 function batchTypeLabel(dataType) {
   if (dataType === 'plan') return '月度计划'
   if (dataType === 'plan_forecast') return '单月填报'
+  if (dataType === 'plan_carryover') return '上月结转'
   if (dataType === 'booking') return '订舱报表'
   return dataType || '—'
 }
@@ -1885,6 +1981,10 @@ onMounted(async () => {
     await loadImports()
     await loadSyncStatus()
   }
+})
+
+watch(() => props.context.months, (value) => {
+  months.value = value || []
 })
 
 onUnmounted(() => {

@@ -84,6 +84,17 @@ export function commitForecastImport(batchId) {
   return request.post('/api/ship-tracking/import/plan/from-forecast/commit', { batch_id: batchId })
 }
 
+export function previewCarryover(sourceMonth, targetMonth) {
+  return request.post('/api/ship-tracking/import/plan/carryover/preview', {
+    source_month: sourceMonth,
+    target_month: targetMonth,
+  })
+}
+
+export function commitCarryover(batchId) {
+  return request.post('/api/ship-tracking/import/plan/carryover/commit', { batch_id: batchId })
+}
+
 export function previewBookingImport(file) {
   const data = new FormData()
   data.append('file', file)

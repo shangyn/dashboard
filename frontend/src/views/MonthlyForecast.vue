@@ -115,7 +115,7 @@
 
       <div class="mf-panel">
         <div class="mf-panel-head">
-          <span class="mf-panel-title">发货候选（组A日期为空；已排产，或 2026 年签订未排产）</span>
+          <span class="mf-panel-title">发货候选（组A日期为空；已排产，或 2026 年签订未排产；已排除上月发货明细已有梯号）</span>
           <span class="mf-panel-count">
             共 {{ filteredCandidates.length }} 条
             <span class="mf-hint">全量：已排产 {{ scheduledCount }} / 未排产 {{ unplannedCount }}</span>
@@ -176,10 +176,27 @@
             </template>
           </el-table-column>
           <el-table-column prop="schedule_finish_date" label="排产完工日期" width="110" align="center" />
+          <el-table-column label="预计发货日期" width="140" align="center">
+            <template #default="{ row }">
+              <el-date-picker
+                :model-value="selectionDate(row.ladder_no)"
+                :disabled="!isSelected(row.ladder_no)"
+                type="date"
+                size="small"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 126px"
+                @update:model-value="(value) => updateSelectionDate(row.ladder_no, value)"
+              />
+            </template>
+          </el-table-column>
           <el-table-column label="来源" width="90" align="center">
             <template #default="{ row }">
               <span v-if="selections[row.ladder_no] && selections[row.ladder_no].is_manual" class="mf-tag-manual">
                 手工
+              </span>
+              <span v-else-if="isSelected(row.ladder_no) && row.outside_candidate_pool" class="mf-tag-manual">
+                已选（池外）
               </span>
               <span v-else-if="isSelected(row.ladder_no)" class="mf-tag-picked">已选</span>
               <span v-else class="mf-tag-none">-</span>
@@ -213,6 +230,19 @@
           <el-table-column prop="project_name" label="项目名称" min-width="220" show-overflow-tooltip />
           <el-table-column prop="unit_count" label="台数" width="70" align="right" />
           <el-table-column prop="amount_wan" label="金额(万元)" width="110" align="right" />
+          <el-table-column label="预计发货日期" width="140" align="center">
+            <template #default="{ row }">
+              <el-date-picker
+                :model-value="selectionDate(row.ladder_no)"
+                type="date"
+                size="small"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 126px"
+                @update:model-value="(value) => updateSelectionDate(row.ladder_no, value)"
+              />
+            </template>
+          </el-table-column>
           <el-table-column prop="schedule_date" label="排产日期" width="110" align="center" />
           <el-table-column prop="schedule_finish_date" label="排产完工日期" width="110" align="center" />
         </el-table>
@@ -339,14 +369,19 @@ const unplannedCount = computed(() => candidates.value.length - scheduledCount.v
 
 const filteredCandidates = computed(() => {
   const text = (keyword.value || '').trim().toLowerCase()
-  return candidates.value.filter((row) => {
-    if (scheduleFilter.value === 'scheduled' && !row.schedule_date) return false
-    if (scheduleFilter.value === 'unplanned' && row.schedule_date) return false
-    if (!text) return true
-    return `${row.contract_no || ''} ${row.ladder_no || ''} ${row.project_name || ''}`
+  const rows = candidates.value.filter((row) => {
+    const matched = !text || `${row.contract_no || ''} ${row.ladder_no || ''} ${row.project_name || ''}`
       .toLowerCase()
       .includes(text)
+    if (!matched) return false
+    // 已报过的梯号始终显示，避免被“已排产/未排产”筛选隐藏而无法补日期。
+    if (isSelected(row.ladder_no)) return true
+    if (scheduleFilter.value === 'scheduled' && !row.schedule_date) return false
+    if (scheduleFilter.value === 'unplanned' && row.schedule_date) return false
+    return true
   })
+  // 已报梯号排在最前，确保打开页面就能补/改日期，而不是藏在后面的分页里。
+  return rows.sort((left, right) => Number(isSelected(right.ladder_no)) - Number(isSelected(left.ladder_no)))
 })
 const pagedCandidates = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -377,6 +412,16 @@ function summaryRowClass({ row }) {
 
 function isSelected(ladderNo) {
   return !!selections.value[ladderNo]
+}
+
+function selectionDate(ladderNo) {
+  return selections.value[ladderNo]?.expected_ship_date || ''
+}
+
+function updateSelectionDate(ladderNo, value) {
+  if (selections.value[ladderNo]) {
+    selections.value[ladderNo].expected_ship_date = value || ''
+  }
 }
 
 function toggleSelect(row, checked) {
@@ -521,6 +566,7 @@ function buildPayload() {
     ship_selections: Object.values(selections.value).map((row) => ({
       ladder_no: row.ladder_no,
       is_manual: !!row.is_manual,
+      expected_ship_date: row.expected_ship_date || '',
     })),
   }
 }

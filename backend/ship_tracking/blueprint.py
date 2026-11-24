@@ -445,6 +445,46 @@ def api_plan_from_forecast_commit():
         return _fail('单月填报提交失败: %s' % exc, 500)
 
 
+@st_bp.route('/api/ship-tracking/import/plan/carryover/preview', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_carryover_preview():
+    try:
+        payload = _payload()
+        return _ok(
+            imp.preview_carryover(
+                payload.get('source_month') or '',
+                payload.get('target_month') or '',
+                get_current_user(),
+            ),
+            '结转预览已生成，请核对后提交',
+        )
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except ValueError as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('结转预览失败: %s' % exc, 500)
+
+
+@st_bp.route('/api/ship-tracking/import/plan/carryover/commit', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_carryover_commit():
+    try:
+        payload = _payload()
+        return _ok(
+            imp.commit_carryover(int(payload.get('batch_id')), get_current_user()),
+            '上月未发货明细已结转',
+        )
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except (TypeError, ValueError) as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('结转提交失败: %s' % exc, 500)
+
+
 @st_bp.route('/api/ship-tracking/import/booking/preview', methods=['POST'])
 @jwt_required()
 @permission_required(PERMISSION)

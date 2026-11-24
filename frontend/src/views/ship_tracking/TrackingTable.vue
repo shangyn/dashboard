@@ -16,6 +16,9 @@
       <template #default="{ row }">{{ row.region || '—' }}</template>
     </el-table-column>
     <el-table-column prop="ladder_no" label="梯号" width="165" />
+    <el-table-column v-if="optionalColumns.includes('source')" label="数据来源" width="140" align="center">
+      <template #default="{ row }">{{ row.source_label || row.source || '—' }}</template>
+    </el-table-column>
     <el-table-column label="合同 / 项目" min-width="220">
       <template #default="{ row }">
         <div class="st-contract" :title="`${row.contract_no || '—'}\n${row.project_name || '—'}`">

@@ -76,6 +76,7 @@ class ShipSelection(db.Model):
     ladder_no = db.Column(db.String(100), default='')
     unit_count = db.Column(db.Float, default=0.0)                           # 快照：台数
     amount_rmb = db.Column(db.Float, default=0.0)                           # 快照：合同额（人民币，元）
+    expected_ship_date = db.Column(db.Date, nullable=True)                  # 业务填写的预计发货日期
     is_manual = db.Column(db.Boolean, default=False)                        # True = 手工输入梯号
     created_by = db.Column(db.Integer, nullable=True)
     created_by_name = db.Column(db.String(50), default='')
@@ -87,6 +88,8 @@ class ShipSelection(db.Model):
             'ladder_no': self.ladder_no or '',
             'unit_count': self.unit_count or 0.0,
             'amount_wan': round((self.amount_rmb or 0.0) / 10000.0, 2),
+            'expected_ship_date': self.expected_ship_date.strftime('%Y-%m-%d')
+            if self.expected_ship_date else '',
             'is_manual': bool(self.is_manual),
             'created_by_name': self.created_by_name or '',
         }
