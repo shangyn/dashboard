@@ -341,6 +341,7 @@ def _plan_diff(items, overwrite_expected=False):
     booked_absent = []
     remark_imported = []
     remark_conflicts = []
+    admin_removed_skipped = []
     unchanged = 0
     for key, item in new_by_key.items():
         file_remark = normalize_text(item.get('remark'))
@@ -349,6 +350,9 @@ def _plan_diff(items, overwrite_expected=False):
             added.append(key)
             if file_remark:
                 remark_imported.append(key)
+            continue
+        if getattr(row, 'admin_removed', False):
+            admin_removed_skipped.append(key)
             continue
         current_remark = normalize_text(row.business_remark)
         remark_imported_this = bool(file_remark and not current_remark)
@@ -434,6 +438,7 @@ def _plan_diff(items, overwrite_expected=False):
         'booked_absent_count': len(booked_absent),
         'remark_imported_count': len(remark_imported),
         'remark_conflict_count': len(remark_conflicts),
+        'admin_removed_skipped_count': len(admin_removed_skipped),
         # 兼容旧前端字段：默认保留后不会再有「已实发/已订舱后移除」。
         'shipped_removed_count': 0,
         'booked_removed_count': 0,
@@ -450,6 +455,7 @@ def _plan_diff(items, overwrite_expected=False):
         'booked_absent_sample': booked_absent[:80],
         'remark_imported_sample': remark_imported[:80],
         'remark_conflict_sample': remark_conflicts[:80],
+        'admin_removed_skipped_sample': admin_removed_skipped[:80],
         'shipped_removed_sample': [],
         'booked_removed_sample': [],
     }
@@ -592,6 +598,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
     changed_keys = []
     remark_overwritten_count = 0
     expected_overwritten_count = 0
+    skipped_admin_removed = 0
     for key, item in new_by_key.items():
         expected = _parse_iso_date(item.get('original_expected_ship_date'))
         row = current_rows.get(key)
@@ -629,6 +636,10 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
             changed_keys.append(key)
             _audit(user, 'plan', 'add', key, batch_id=batch.id,
                    new_values={'expected_ship_date': iso(expected)})
+            continue
+
+        if getattr(row, 'admin_removed', False):
+            skipped_admin_removed += 1
             continue
 
         old = {
@@ -774,6 +785,8 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
     for key, row in current_rows.items():
         if key in new_by_key or row.plan_status != 'active':
             continue
+        if getattr(row, 'admin_removed', False):
+            continue
         if _has_activity(row):
             # 有预计/草稿/承诺/实发/订舱，或手工/单月填报痕迹的行，
             # 即使本次文件没包含，也保留原状态，不静默移除。
@@ -810,6 +823,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
                'expected_overwritten_count': expected_overwritten_count,
                'overwrite_remark': overwrite_remark,
                'remark_overwritten_count': remark_overwritten_count,
+               'skipped_admin_removed': skipped_admin_removed,
            })
     db.session.commit()
     try:
@@ -826,6 +840,7 @@ def commit_plan_import(batch_id, user, force=False, overwrite_expected=False,
         'changed_count': len(set(changed_keys)),
         'expected_overwritten_count': expected_overwritten_count,
         'remark_overwritten_count': remark_overwritten_count,
+        'skipped_admin_removed': skipped_admin_removed,
         'preserved_absent_count': len(preserved_absent),
         'sync': sync_result,
     }
@@ -1038,6 +1053,7 @@ def preview_plan_from_forecast(month, user):
 
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
     added = existing = moved = restored = skipped_shipped = date_fill = date_update = 0
+    skipped_admin_removed = 0
     breakdown = stats.get('module_breakdown') or {}
     for item in items:
         entry = breakdown.setdefault(
@@ -1051,10 +1067,15 @@ def preview_plan_from_forecast(month, user):
         entry.setdefault('restored', 0)
         entry.setdefault('date_fill', 0)
         entry.setdefault('date_update', 0)
+        entry.setdefault('admin_removed', 0)
         row = current_rows.get(item['ladder_key'])
         if row is None:
             added += 1
             entry['added'] += 1
+        elif getattr(row, 'admin_removed', False):
+            skipped_admin_removed += 1
+            entry['admin_removed'] += 1
+            continue
         elif row.actual_ship_date or row.source_kind == 'actual_only':
             skipped_shipped += 1
         elif row.plan_status == 'active':
@@ -1103,6 +1124,7 @@ def preview_plan_from_forecast(month, user):
         'date_fill_count': date_fill,
         'date_update_count': date_update,
         'skipped_shipped_count': skipped_shipped,
+        'skipped_admin_removed_count': skipped_admin_removed,
         'module_breakdown': breakdown,
         'warning_count': len(warnings),
         'error_count': len(errors),
@@ -1165,11 +1187,15 @@ def commit_forecast_import(batch_id, user):
     current_rows = {row.ladder_key: row for row in TrackingItem.query.all()}
     now = dt.datetime.now()
     added = moved = restored = skipped_existing = skipped_shipped = 0
+    skipped_admin_removed = 0
     date_filled = date_updated = 0
     for item in items:
         key = item['ladder_key']
         row = current_rows.get(key)
         if row is not None:
+            if getattr(row, 'admin_removed', False):
+                skipped_admin_removed += 1
+                continue
             if row.actual_ship_date or row.source_kind == 'actual_only':
                 skipped_shipped += 1
                 continue
@@ -1287,6 +1313,7 @@ def commit_forecast_import(batch_id, user):
                'restored_count': restored,
                'date_filled_count': date_filled,
                'date_updated_count': date_updated,
+               'skipped_admin_removed': skipped_admin_removed,
            })
     db.session.commit()
     try:
@@ -1305,6 +1332,7 @@ def commit_forecast_import(batch_id, user):
         'date_updated_count': date_updated,
         'skipped_existing': skipped_existing,
         'skipped_shipped': skipped_shipped,
+        'skipped_admin_removed': skipped_admin_removed,
         'sync': sync_result,
     }
 
@@ -1328,9 +1356,11 @@ def preview_carryover(source_month, target_month, user):
     active_rows = [row for row in source_rows if row.plan_status == 'active']
     shipped_rows = [row for row in active_rows if row.actual_ship_date]
     removed_rows = [row for row in source_rows if row.plan_status != 'active']
+    admin_removed_rows = [row for row in source_rows if getattr(row, 'admin_removed', False)]
     carry_rows = [
         row for row in active_rows
-        if not row.actual_ship_date and row.source_kind != 'actual_only'
+        if not getattr(row, 'admin_removed', False)
+        and not row.actual_ship_date and row.source_kind != 'actual_only'
     ]
     target_keys = {
         row.ladder_key for row in TrackingItem.query.filter(
@@ -1359,6 +1389,7 @@ def preview_carryover(source_month, target_month, user):
         'carry_count': len(carry_rows),
         'shipped_count': len(shipped_rows),
         'removed_count': len(removed_rows),
+        'admin_removed_count': len(admin_removed_rows),
         'target_existing_count': len(target_existing),
     }
     version = (db.session.query(func.max(ImportBatch.version)).filter(
@@ -1414,6 +1445,7 @@ def commit_carryover(batch_id, user):
         for row in TrackingItem.query.filter(TrackingItem.ladder_key.in_(chunk)).all():
             current_rows[row.ladder_key] = row
     carried = skipped_shipped = skipped_removed = skipped_missing = skipped_existing = 0
+    skipped_admin_removed = 0
     for item in items:
         key = item.get('ladder_key') or ''
         if not key:
@@ -1427,6 +1459,9 @@ def commit_carryover(batch_id, user):
             continue
         if row.plan_month != source:
             skipped_missing += 1
+            continue
+        if getattr(row, 'admin_removed', False):
+            skipped_admin_removed += 1
             continue
         if row.actual_ship_date or row.source_kind == 'actual_only':
             skipped_shipped += 1
@@ -1458,7 +1493,8 @@ def commit_carryover(batch_id, user):
            new_values={'source_month': source, 'plan_month': target,
                        'carried_count': carried, 'skipped_shipped': skipped_shipped,
                        'skipped_removed': skipped_removed, 'skipped_missing': skipped_missing,
-                       'skipped_existing': skipped_existing})
+                       'skipped_existing': skipped_existing,
+                       'skipped_admin_removed': skipped_admin_removed})
     db.session.commit()
     return {
         'batch_id': batch.id,
@@ -1469,6 +1505,7 @@ def commit_carryover(batch_id, user):
         'skipped_removed': skipped_removed,
         'skipped_missing': skipped_missing,
         'skipped_existing': skipped_existing,
+        'skipped_admin_removed': skipped_admin_removed,
     }
 
 
@@ -1581,7 +1618,11 @@ def preview_booking_import(path, filename, user):
     if not rows:
         raise ValueError('未读取到订舱数据，请确认 AG 列存在完整梯号')
     aggregates = _booking_aggregates(rows)
-    tracking = {row.ladder_key: row for row in TrackingItem.query.all()}
+    tracking = {
+        row.ladder_key: row for row in TrackingItem.query.filter(
+            TrackingItem.admin_removed.is_(False)
+        ).all()
+    }
     matched = [key for key in aggregates if key in tracking]
     unmatched = [key for key in aggregates if key not in tracking]
     current_booked = sum(1 for row in tracking.values() if row.booking_status == '已订舱')
@@ -1677,7 +1718,7 @@ def commit_booking_import(batch_id, user, force=False):
         ))
     matched = 0
     reset_count = 0
-    for row in TrackingItem.query.all():
+    for row in TrackingItem.query.filter(TrackingItem.admin_removed.is_(False)).all():
         aggregate = aggregates.get(row.ladder_key)
         if aggregate:
             row.booking_status = aggregate['booking_status']

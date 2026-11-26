@@ -30,6 +30,7 @@ NEXT_MONTH_OPEN_DAYS = 15
 
 STATUS_LABELS = {
     'shipped': '已发货',
+    'admin_removed': '管理员已移除',
     'overdue': '已逾期',
     'committed': '已提交待发货',
     'pending': '未提交待发货',
@@ -55,6 +56,10 @@ FLAG_LABELS = {
     'restored_from_forecast': '单月填报恢复',
     'forecast_module_mismatch': '台账模块与填报模块不一致',
     'carried_over': '上月结转',
+    'admin_removed': '管理员移除计划',
+    'admin_removed_shipped': '移除前已发货',
+    'admin_removed_booked': '移除前已订舱',
+    'admin_removed_committed': '移除前已提交',
 }
 
 
@@ -343,6 +348,11 @@ def _weekly_action_state(user, item):
     }
     if not user:
         return state
+    if getattr(item, 'admin_removed', False):
+        reason = '管理员已移除'
+        state['adjust_block_reason'] = reason
+        state['withdraw_block_reason'] = reason
+        return state
     if item.actual_ship_date:
         reason = '已发货，只读'
         state['adjust_block_reason'] = reason
@@ -385,7 +395,9 @@ def _tracking_dict(item, region='', region_source='', user=None):
         source_label = 'Excel计划导入'
     if 'carried_over' in flags:
         source_label += '（上月结转）'
-    if item.actual_ship_date:
+    if getattr(item, 'admin_removed', False):
+        status = 'admin_removed'
+    elif item.actual_ship_date:
         status = 'shipped'
     elif item.plan_status == 'removed':
         status = 'removed'
@@ -437,6 +449,11 @@ def _tracking_dict(item, region='', region_source='', user=None):
         'plan_month': item.plan_month or '',
         'plan_version': item.plan_version or 0,
         'plan_status': item.plan_status or '',
+        'admin_removed': bool(getattr(item, 'admin_removed', False)),
+        'admin_removed_at': iso(getattr(item, 'admin_removed_at', None)),
+        'admin_removed_by_name': getattr(item, 'admin_removed_by_name', '') or '',
+        'admin_remove_reason': getattr(item, 'admin_remove_reason', '') or '',
+        'admin_removed_prev_plan_status': getattr(item, 'admin_removed_prev_plan_status', '') or '',
         'plan_change_count': item.plan_change_count or 0,
         'commit_status': item.commit_status or 'unplanned',
         'committed_at': iso(item.committed_at),
@@ -547,6 +564,8 @@ def add_weekly_ladder(user, payload):
     key = canonical_ladder(contract.ladder_no) or key
     row = TrackingItem.query.filter_by(ladder_key=key).first()
     if row is not None:
+        if getattr(row, 'admin_removed', False):
+            raise ValueError('该梯号已被管理员移除，请联系管理员恢复')
         if row.actual_ship_date:
             raise ValueError('该梯号已实发，不能重复加入')
         if row.plan_status == 'active':
@@ -653,6 +672,8 @@ def get_weekly(user, module_name=None, include_future=None, keyword=''):
 
     for item in rows:
         visible = item.module_name in visible_modules
+        if getattr(item, 'admin_removed', False):
+            continue
         if item.actual_ship_date:
             if visible:
                 submitted.append(item)
@@ -1091,6 +1112,174 @@ def unlock(user, unlock_type, ladder_keys, reason=''):
     return {'unlocked': count, 'skipped': skipped}
 
 
+def _unique_tracking_keys(ladder_keys):
+    keys = []
+    seen = set()
+    for value in ladder_keys or []:
+        key = canonical_ladder(value)
+        if key and key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
+def _admin_remove_snapshot(row):
+    return {
+        'plan_status': row.plan_status or '',
+        'expected_ship_date': iso(row.expected_ship_date),
+        'actual_ship_date': iso(row.actual_ship_date),
+        'booking_status': row.booking_status or '',
+        'commit_status': row.commit_status or '',
+        'admin_removed': bool(getattr(row, 'admin_removed', False)),
+    }
+
+
+def remove_plans(user, ladder_keys, reason=''):
+    "管理员将任意梯号从发货明细中软移除，保留业务事实与审计。"
+    if not can_admin(user):
+        raise PermissionError('无管理员移除计划权限')
+    reason_text = str(reason or '').strip()
+    if not reason_text:
+        raise ValueError('请填写移除原因')
+    if len(reason_text) > 500:
+        raise ValueError('移除原因不能超过 500 个字符')
+    keys = _unique_tracking_keys(ladder_keys)
+    if not keys:
+        raise ValueError('请选择梯号')
+
+    rows = _load_tracking_items_by_keys(keys)
+    now = dt.datetime.now()
+    removed = skipped = not_found = 0
+    counts = {'shipped': 0, 'booked': 0, 'committed': 0, 'other': 0}
+    try:
+        for key in keys:
+            row = rows.get(key)
+            if row is None:
+                not_found += 1
+                continue
+            if getattr(row, 'admin_removed', False):
+                skipped += 1
+                continue
+
+            old = _admin_remove_snapshot(row)
+            booked = (
+                (row.booking_status or '') == '已订舱'
+                or (row.booking_record_count or 0) > 0
+            )
+            if row.actual_ship_date:
+                counts['shipped'] += 1
+            elif booked:
+                counts['booked'] += 1
+            elif row.commit_status == 'committed':
+                counts['committed'] += 1
+            else:
+                counts['other'] += 1
+
+            row.admin_removed_prev_plan_status = row.plan_status or 'active'
+            row.admin_removed = True
+            row.admin_removed_at = now
+            row.admin_removed_by = user.id
+            row.admin_removed_by_name = user.real_name or user.username or ''
+            row.admin_remove_reason = reason_text
+            row.plan_status = 'removed'
+            row.plan_removed_at = now
+            flags = set(row.flags())
+            flags.add('admin_removed')
+            if row.actual_ship_date:
+                flags.add('admin_removed_shipped')
+            if booked:
+                flags.add('admin_removed_booked')
+            if row.commit_status == 'committed':
+                flags.add('admin_removed_committed')
+            row.set_flags(flags)
+            _audit(
+                user, 'plan', 'admin_remove_plan', key, reason=reason_text,
+                old_values=old,
+                new_values={
+                    'admin_removed': True,
+                    'plan_status': 'removed',
+                    'admin_removed_prev_plan_status': row.admin_removed_prev_plan_status,
+                },
+            )
+            removed += 1
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return {
+        'removed': removed,
+        'skipped': skipped,
+        'not_found': not_found,
+        'counts': counts,
+    }
+
+
+def restore_plans(user, ladder_keys, reason=''):
+    "管理员恢复已软移除的梯号，保留原业务事实。"
+    if not can_admin(user):
+        raise PermissionError('无管理员恢复计划权限')
+    reason_text = str(reason or '').strip()
+    if not reason_text:
+        raise ValueError('请填写恢复原因')
+    if len(reason_text) > 500:
+        raise ValueError('恢复原因不能超过 500 个字符')
+    keys = _unique_tracking_keys(ladder_keys)
+    if not keys:
+        raise ValueError('请选择梯号')
+
+    rows = _load_tracking_items_by_keys(keys)
+    restored = skipped = not_found = 0
+    try:
+        for key in keys:
+            row = rows.get(key)
+            if row is None:
+                not_found += 1
+                continue
+            if not getattr(row, 'admin_removed', False):
+                skipped += 1
+                continue
+
+            old = _admin_remove_snapshot(row)
+            previous_status = getattr(row, 'admin_removed_prev_plan_status', '') or 'active'
+            if previous_status not in ('active', 'removed'):
+                previous_status = 'active'
+            row.admin_removed = False
+            row.admin_removed_at = None
+            row.admin_removed_by = None
+            row.admin_removed_by_name = ''
+            row.admin_remove_reason = ''
+            row.admin_removed_prev_plan_status = ''
+            row.plan_status = previous_status
+            if previous_status == 'active':
+                row.plan_removed_at = None
+            flags = {
+                flag for flag in row.flags()
+                if flag not in (
+                    'admin_removed', 'admin_removed_shipped',
+                    'admin_removed_booked', 'admin_removed_committed',
+                )
+            }
+            row.set_flags(flags)
+            _audit(
+                user, 'plan', 'admin_restore_plan', key, reason=reason_text,
+                old_values=old,
+                new_values={
+                    'admin_removed': False,
+                    'plan_status': row.plan_status,
+                },
+            )
+            restored += 1
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return {
+        'restored': restored,
+        'skipped': skipped,
+        'not_found': not_found,
+    }
+
+
 def record_daily_shipments(user, items, reason=''):
     """批量录入实发；仅允许每日实发角色写入。"""
     if not can_daily_edit(user):
@@ -1322,6 +1511,8 @@ def query_tracking(user, filters=None):
             continue
         if region and data['region'] != region:
             continue
+        if not include_removed and data['admin_removed']:
+            continue
         if not include_removed and data['plan_status'] == 'removed' and not data['actual_ship_date']:
             continue
         if keyword:
@@ -1377,7 +1568,8 @@ def query_tracking(user, filters=None):
         'committed': sum(1 for row in result if row['status'] == 'committed'),
         'overdue': sum(1 for row in result if row['status'] == 'overdue'),
         'pending': sum(1 for row in result if row['status'] == 'pending'),
-        'removed': sum(1 for row in result if row['status'] == 'removed'),
+        'removed': sum(1 for row in result if row['status'] in ('removed', 'admin_removed')),
+        'admin_removed': sum(1 for row in result if row['status'] == 'admin_removed'),
         'booked': sum(1 for row in result if row['booking_status'] == '已订舱'),
         'unbooked': sum(1 for row in result if row['booking_status'] != '已订舱'),
         'missing_expected': sum(

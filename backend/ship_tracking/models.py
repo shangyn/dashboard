@@ -165,6 +165,12 @@ class TrackingItem(db.Model):
     committed_by_name = db.Column(db.String(50), default='')
     plan_change_count = db.Column(db.Integer, default=0)
     plan_removed_at = db.Column(db.DateTime, nullable=True)
+    admin_removed = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    admin_removed_at = db.Column(db.DateTime, nullable=True)
+    admin_removed_by = db.Column(db.Integer, nullable=True)
+    admin_removed_by_name = db.Column(db.String(50), default='')
+    admin_remove_reason = db.Column(db.String(500), default='')
+    admin_removed_prev_plan_status = db.Column(db.String(20), default='')
 
     actual_ship_date = db.Column(db.Date, index=True, nullable=True)
     actual_ship_source = db.Column(db.String(20), nullable=True)

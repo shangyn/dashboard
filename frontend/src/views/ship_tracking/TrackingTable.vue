@@ -142,6 +142,7 @@ function statusType(status) {
   if (status === 'overdue') return 'danger'
   if (status === 'committed') return 'primary'
   if (status === 'removed') return 'info'
+  if (status === 'admin_removed') return 'info'
   return 'warning'
 }
 

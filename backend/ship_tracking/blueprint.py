@@ -355,6 +355,50 @@ def api_unlock():
         return _fail('解锁失败: %s' % exc, 500)
 
 
+@st_bp.route('/api/ship-tracking/admin/remove-plans', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_admin_remove_plans():
+    try:
+        payload = _payload()
+        return _ok(
+            svc.remove_plans(
+                get_current_user(),
+                payload.get('ladder_keys') or [],
+                payload.get('reason') or '',
+            ),
+            '计划已移除',
+        )
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except ValueError as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('移除计划失败: %s' % exc, 500)
+
+
+@st_bp.route('/api/ship-tracking/admin/restore-plans', methods=['POST'])
+@jwt_required()
+@permission_required(PERMISSION)
+def api_admin_restore_plans():
+    try:
+        payload = _payload()
+        return _ok(
+            svc.restore_plans(
+                get_current_user(),
+                payload.get('ladder_keys') or [],
+                payload.get('reason') or '',
+            ),
+            '计划已恢复',
+        )
+    except PermissionError as exc:
+        return _fail(str(exc), 403)
+    except ValueError as exc:
+        return _fail(str(exc), 400)
+    except Exception as exc:
+        return _fail('恢复计划失败: %s' % exc, 500)
+
+
 @st_bp.route('/api/ship-tracking/import/plan/preview', methods=['POST'])
 @jwt_required()
 @permission_required(PERMISSION)

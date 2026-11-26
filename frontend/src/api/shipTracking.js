@@ -60,6 +60,14 @@ export function unlockShipTracking(payload) {
   return request.post('/api/ship-tracking/unlock', payload)
 }
 
+export function removeTrackingPlans(payload) {
+  return request.post('/api/ship-tracking/admin/remove-plans', payload)
+}
+
+export function restoreTrackingPlans(payload) {
+  return request.post('/api/ship-tracking/admin/restore-plans', payload)
+}
+
 export function previewPlanImport(file, planMonth) {
   const data = new FormData()
   data.append('file', file)

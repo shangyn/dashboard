@@ -97,6 +97,24 @@
               <el-button v-if="context.can_admin && selectedRows.length" size="small" type="warning" plain @click="openUnlockDialog">
                 管理员解锁选中项
               </el-button>
+              <el-button
+                v-if="context.can_admin && removableSelectedRows.length"
+                size="small"
+                type="danger"
+                plain
+                @click="openPlanActionDialog('remove')"
+              >
+                移除选中计划
+              </el-button>
+              <el-button
+                v-if="context.can_admin && restorableSelectedRows.length"
+                size="small"
+                type="success"
+                plain
+                @click="openPlanActionDialog('restore')"
+              >
+                恢复选中计划
+              </el-button>
               <el-popover placement="bottom-end" :width="210" trigger="click">
                 <template #reference>
                   <el-button size="small" plain>列设置</el-button>
@@ -601,6 +619,51 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="planActionDialog.visible"
+      :title="planActionDialog.mode === 'restore' ? '恢复计划' : '移除计划'"
+      width="560px"
+    >
+      <template v-if="planActionDialog.mode === 'remove'">
+        <div class="st-dialog-summary">
+          将移除 {{ planActionStats.removable }} 条梯号；其中已发货 {{ planActionStats.shipped }} 条、
+          已订舱 {{ planActionStats.booked }} 条、已提交 {{ planActionStats.committed }} 条。
+        </div>
+        <el-alert
+          class="st-plan-action-alert"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="移除后默认明细、业务整体发货明细、汇总和导出都不再显示；实际发货、订舱、承诺和审计记录仍会保留。"
+        />
+      </template>
+      <div v-else class="st-dialog-summary">
+        将恢复 {{ planActionStats.restorable }} 条管理员已移除梯号，恢复后按移除前状态重新进入明细。
+      </div>
+      <el-form label-width="72px" class="st-dialog-form st-plan-action-form">
+        <el-form-item :label="planActionDialog.mode === 'restore' ? '恢复原因' : '移除原因'">
+          <el-input
+            v-model="planActionDialog.reason"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            placeholder="必填，会写入操作历史"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="planActionDialog.visible = false">取消</el-button>
+        <el-button
+          :type="planActionDialog.mode === 'restore' ? 'success' : 'danger'"
+          :loading="planActionSaving"
+          @click="confirmPlanAction"
+        >
+          {{ planActionDialog.mode === 'restore' ? '确认恢复' : '确认移除' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="detailDrawer.visible" title="梯号详情" size="720px" class="st-detail-drawer">
       <template v-if="detailDrawer.row">
         <div class="st-detail-head">
@@ -633,6 +696,10 @@
           <el-descriptions-item label="计划变更">{{ detailDrawer.row.plan_change_count || 0 }} 次</el-descriptions-item>
           <el-descriptions-item label="数据标记">{{ detailDrawer.row.flag_labels?.length ? detailDrawer.row.flag_labels.join('；') : '—' }}</el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{ detailDrawer.row.business_remark || '—' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailDrawer.row.admin_removed" label="移除原因" :span="2">{{ detailDrawer.row.admin_remove_reason || '—' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailDrawer.row.admin_removed" label="移除人">{{ detailDrawer.row.admin_removed_by_name || '—' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailDrawer.row.admin_removed" label="移除时间">{{ detailDrawer.row.admin_removed_at || '—' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailDrawer.row.admin_removed" label="移除前状态" :span="2">{{ detailDrawer.row.admin_removed_prev_plan_status || '—' }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ sourceKindLabel(detailDrawer.row) }}</el-descriptions-item>
           <el-descriptions-item label="计划月份">{{ detailDrawer.row.plan_month || '—' }}</el-descriptions-item>
         </el-descriptions>
@@ -690,6 +757,7 @@
             <el-descriptions-item label="补预计日期">{{ forecastSummary.date_fill_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="覆盖预计日期">{{ forecastSummary.date_update_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="已实发跳过">{{ forecastSummary.skipped_shipped_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="管理员已移除跳过">{{ forecastSummary.skipped_admin_removed_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="台账未命中">{{ forecastSummary.ledger_missing_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="带预计日期">{{ forecastSummary.expected_date_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="跨模块重复">{{ forecastSummary.duplicate_submission_count ?? 0 }}</el-descriptions-item>
@@ -733,6 +801,7 @@
             <el-descriptions-item label="新增">{{ planPreview.data.summary.added_count }}</el-descriptions-item>
             <el-descriptions-item label="将移除（纯计划行）">{{ planPreview.data.summary.removed_count }}</el-descriptions-item>
             <el-descriptions-item label="文件未含但保留">{{ planPreview.data.summary.preserved_absent_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="管理员已移除跳过">{{ planPreview.data.summary.admin_removed_skipped_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item :label="planPreview.overwriteExpected ? '预计日期将覆盖' : '预计日期冲突（保留原值）'">{{ planPreview.data.summary.expected_changed_count }}</el-descriptions-item>
             <el-descriptions-item label="补空日期">{{ planPreview.data.summary.expected_filled_count ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="导入备注">{{ planPreview.data.summary.remark_imported_count ?? 0 }}</el-descriptions-item>
@@ -908,6 +977,8 @@ import {
   previewPlanFromForecast,
   previewPlanImport,
   recordDailyShipments,
+  removeTrackingPlans,
+  restoreTrackingPlans,
   syncTrackingDates,
   unlockShipTracking,
   uploadPaymentFile,
@@ -935,6 +1006,7 @@ const statusOptions = [
   { value: 'committed', label: '已提交待发货' },
   { value: 'pending', label: '未提交待发货' },
   { value: 'removed', label: '计划已移除' },
+  { value: 'admin_removed', label: '管理员已移除' },
 ]
 const filters = reactive({
   month: props.context.default_month || '',
@@ -952,6 +1024,7 @@ const dailyDate = ref(props.context.today)
 const dailyReason = ref('')
 const dailySaving = ref(false)
 const shipmentDeleting = ref(false)
+const planActionSaving = ref(false)
 const externalParsing = ref(false)
 const dailyDialog = reactive({ visible: false, date: props.context.today, reason: '' })
 const externalDialog = reactive({
@@ -959,8 +1032,19 @@ const externalDialog = reactive({
   ship_date: props.context.today, reason: '', ladders: [], parse_errors: [], parse_warnings: [],
 })
 const unlockDialog = reactive({ visible: false, type: 'weekly', reason: '' })
+const planActionDialog = reactive({ visible: false, mode: 'remove', reason: '' })
 const unlockSaving = ref(false)
 const detailDrawer = reactive({ visible: false, loading: false, row: null, history: [] })
+const removableSelectedRows = computed(() => selectedRows.value.filter((row) => !row.admin_removed))
+const restorableSelectedRows = computed(() => selectedRows.value.filter((row) => row.admin_removed))
+const planActionStats = computed(() => ({
+  total: removableSelectedRows.value.length + restorableSelectedRows.value.length,
+  removable: removableSelectedRows.value.length,
+  restorable: restorableSelectedRows.value.length,
+  shipped: removableSelectedRows.value.filter((row) => row.status === 'shipped').length,
+  booked: removableSelectedRows.value.filter((row) => row.booking_status === '已订舱').length,
+  committed: removableSelectedRows.value.filter((row) => row.commit_status === 'committed').length,
+}))
 
 const COLUMN_SETTINGS_KEY = 'ship-tracking-optional-columns'
 const REMARK_COLUMN_MIGRATION_KEY = 'ship-tracking-remark-column-v1'
@@ -1634,6 +1718,59 @@ async function confirmUnlock() {
   }
 }
 
+function openPlanActionDialog(mode) {
+  const targets = mode === 'restore' ? restorableSelectedRows.value : removableSelectedRows.value
+  if (!targets.length) {
+    ElMessage.warning(mode === 'restore' ? '请选择管理员已移除的梯号' : '请选择要移除的梯号')
+    return
+  }
+  planActionDialog.mode = mode
+  planActionDialog.reason = ''
+  planActionDialog.visible = true
+}
+
+async function confirmPlanAction() {
+  const targets = planActionDialog.mode === 'restore'
+    ? restorableSelectedRows.value
+    : removableSelectedRows.value
+  if (!targets.length) {
+    ElMessage.warning('没有可处理的梯号')
+    return
+  }
+  if (!planActionDialog.reason.trim()) {
+    ElMessage.warning(planActionDialog.mode === 'restore' ? '请填写恢复原因' : '请填写移除原因')
+    return
+  }
+  planActionSaving.value = true
+  try {
+    const payload = {
+      ladder_keys: targets.map((row) => row.ladder_key),
+      reason: planActionDialog.reason.trim(),
+    }
+    const res = planActionDialog.mode === 'restore'
+      ? await restoreTrackingPlans(payload)
+      : await removeTrackingPlans(payload)
+    const data = res.data || {}
+    const skipped = data.skipped || 0
+    const notFound = data.not_found || 0
+    const skippedText = skipped || notFound
+      ? `，跳过 ${skipped} 条，未找到 ${notFound} 条`
+      : ''
+    if (planActionDialog.mode === 'restore') {
+      ElMessage.success(`已恢复 ${data.restored || 0} 条计划${skippedText}`)
+    } else {
+      ElMessage.success(`已移除 ${data.removed || 0} 条计划${skippedText}`)
+    }
+    planActionDialog.visible = false
+    await loadData()
+    emit('refresh-context')
+  } catch (error) {
+    // 拦截器已提示
+  } finally {
+    planActionSaving.value = false
+  }
+}
+
 async function openDetail(row) {
   detailDrawer.row = row
   detailDrawer.history = []
@@ -1670,6 +1807,8 @@ const ACTION_LABELS = {
   delete_shipment: '删除实发',
   admin_void_shipment: '作废实发',
   admin_unlock: '管理员解锁',
+  admin_remove_plan: '管理员移除计划',
+  admin_restore_plan: '管理员恢复计划',
   commit_plan: '生效计划版本',
   commit_booking: '更新订舱状态',
   commit_forecast: '并入单月填报',
@@ -1696,6 +1835,10 @@ const FIELD_LABELS = {
   plan_status: '计划状态',
   ship_date: '实发日期',
   plan_month: '计划月份',
+  admin_removed: '管理员已移除',
+  admin_remove_reason: '移除原因',
+  admin_removed_by_name: '移除人',
+  admin_removed_at: '移除时间',
   version: '版本',
   unique_count: '唯一梯号',
   changed_count: '变更条数',
@@ -1744,6 +1887,7 @@ function statusType(status) {
   if (status === 'overdue') return 'danger'
   if (status === 'committed') return 'primary'
   if (status === 'removed') return 'info'
+  if (status === 'admin_removed') return 'info'
   return 'warning'
 }
 
@@ -1843,7 +1987,7 @@ async function commitPlan() {
       ElMessage.success(
         `已新增 ${data.added_count || 0} 条，转入 ${data.moved_count || 0} 条，恢复 ${data.restored_count || 0} 条，` +
           `补预计日期 ${data.date_filled_count || 0} 条，覆盖预计日期 ${data.date_updated_count || 0} 条，` +
-          `其余已存在跳过 ${data.skipped_existing || 0} 条`
+          `管理员已移除跳过 ${data.skipped_admin_removed || 0} 条，其余已存在跳过 ${data.skipped_existing || 0} 条`
       )
     } else {
       const res = await commitPlanImport(
@@ -1855,10 +1999,12 @@ async function commitPlan() {
       const preserved = res.data.preserved_absent_count || 0
       const remarkOverwritten = res.data.remark_overwritten_count || 0
       const expectedOverwritten = res.data.expected_overwritten_count || 0
+      const adminRemovedSkipped = res.data.skipped_admin_removed || 0
       ElMessage.success(
         `计划版本 ${res.data.version} 已生效，变更 ${res.data.changed_count} 条` +
           (expectedOverwritten ? `，覆盖预计日期 ${expectedOverwritten} 条` : '') +
           (remarkOverwritten ? `，覆盖备注 ${remarkOverwritten} 条` : '') +
+          (adminRemovedSkipped ? `，管理员已移除跳过 ${adminRemovedSkipped} 条` : '') +
           (preserved ? `，文件未含但保留 ${preserved} 条` : '')
       )
       planFile.value = null
@@ -2068,6 +2214,8 @@ onUnmounted(() => {
 .st-sync-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 12px; color: #64748b; }
 .st-dialog-form { margin-top: 16px; }
 .st-dialog-summary { padding: 10px 12px; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 13px; }
+.st-plan-action-alert { margin-top: 12px; }
+.st-plan-action-form { margin-top: 14px; }
 .st-history-head { margin-bottom: 12px; color: #1d4ed8; font-size: 15px; font-weight: 700; }
 .st-preview-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: #64748b; }
 .st-column-map { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }

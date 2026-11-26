@@ -114,6 +114,41 @@ def _ensure_tracking_columns():
             'ALTER TABLE st_tracking_item ADD COLUMN business_remark TEXT'
         ))
         db.session.commit()
+    if 'admin_removed' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN admin_removed BOOLEAN NOT NULL DEFAULT 0'
+        ))
+        db.session.commit()
+    if 'admin_removed_at' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN admin_removed_at DATETIME'
+        ))
+        db.session.commit()
+    if 'admin_removed_by' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN admin_removed_by INTEGER'
+        ))
+        db.session.commit()
+    if 'admin_removed_by_name' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN admin_removed_by_name VARCHAR(50)'
+        ))
+        db.session.commit()
+    if 'admin_remove_reason' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN admin_remove_reason VARCHAR(500)'
+        ))
+        db.session.commit()
+    if 'admin_removed_prev_plan_status' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE st_tracking_item ADD COLUMN admin_removed_prev_plan_status VARCHAR(20)'
+        ))
+        db.session.commit()
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_st_tracking_item_admin_removed '
+        'ON st_tracking_item(admin_removed)'
+    ))
+    db.session.commit()
     if 'st_plan_item' in inspector.get_table_names():
         plan_columns = {
             column['name'] for column in inspector.get_columns('st_plan_item')
