@@ -1471,6 +1471,29 @@ def _status_filter(item, statuses):
     return item['status'] in statuses or item.get('status_label') in statuses
 
 
+def _load_gaizao_ladder_keys(ladder_keys):
+    """返回结果中产品型号含“改造”的梯号，仅用于顶部统计排除。"""
+    from dashboards.contract_completion.models import LedgerContract
+
+    keys = sorted({
+        key for key in (canonical_ladder(value) for value in ladder_keys) if key
+    })
+    if not keys:
+        return set()
+    result = set()
+    for start in range(0, len(keys), 500):
+        chunk = keys[start:start + 500]
+        rows = db.session.query(LedgerContract.ladder_no).filter(
+            LedgerContract.source == 'ledger',
+            LedgerContract.ladder_no.in_(chunk),
+            LedgerContract.product_type.like('%改造%'),
+        ).distinct().all()
+        result.update(
+            key for key in (canonical_ladder(row[0]) for row in rows) if key
+        )
+    return result
+
+
 def query_tracking(user, filters=None):
     if not can_full_view(user):
         raise PermissionError('当前账号无全量明细权限')
@@ -1558,19 +1581,23 @@ def query_tracking(user, filters=None):
         )
 
     result.sort(key=sort_key)
-    shipped_rows = [row for row in result if row['status'] == 'shipped']
+    gaizao_keys = _load_gaizao_ladder_keys(
+        row['ladder_key'] for row in result
+    )
+    stat_rows = [row for row in result if row['ladder_key'] not in gaizao_keys]
+    shipped_rows = [row for row in stat_rows if row['status'] == 'shipped']
     target_end = fill_window()['end']
     summary = {
-        'total': len(result),
-        'units': round(sum(row['unit_count'] or 0 for row in result), 2),
+        'total': len(stat_rows),
+        'units': round(sum(row['unit_count'] or 0 for row in stat_rows), 2),
         'shipped': len(shipped_rows),
         'shipped_units': round(sum(row['unit_count'] or 0 for row in shipped_rows), 2),
-        'committed': sum(1 for row in result if row['status'] == 'committed'),
-        'overdue': sum(1 for row in result if row['status'] == 'overdue'),
-        'pending': sum(1 for row in result if row['status'] == 'pending'),
+        'committed': sum(1 for row in stat_rows if row['status'] == 'committed'),
+        'overdue': sum(1 for row in stat_rows if row['status'] == 'overdue'),
+        'pending': sum(1 for row in stat_rows if row['status'] == 'pending'),
         'removed': sum(1 for row in result if row['status'] in ('removed', 'admin_removed')),
         'admin_removed': sum(1 for row in result if row['status'] == 'admin_removed'),
-        'booked': sum(1 for row in result if row['booking_status'] == '已订舱'),
+        'booked': sum(1 for row in stat_rows if row['booking_status'] == '已订舱'),
         'unbooked': sum(1 for row in result if row['booking_status'] != '已订舱'),
         'missing_expected': sum(
             1 for row in result
